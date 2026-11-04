@@ -1,0 +1,13 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="85.9375" height="18.2621" viewBox="0 0 85.9375 18.2621" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="plume-halo">
+<path id="Vector" d="M0 9.45247C15.9375 8.20247 30.9375 9.45247 41.875 5.70247C34.0625 6.32747 27.8125 5.07747 23.4375 3.51497C41.5625 6.63997 50 2.57747 58.75 2.88997C55 1.63997 51.875 0.702472 48.4375 0.0774718C59.0625 -0.547528 66.25 2.88997 72.1875 0.389972C77.8125 -0.547528 83.4375 3.51497 85.9375 9.13997C84.6875 14.4525 79.0625 18.8275 73.125 18.2025C65.9375 16.3275 61.5625 18.515 54.0625 18.2025C58.4375 16.64 60 15.7025 60.625 14.765C51.25 15.7025 41.875 13.2025 32.5 15.7025C36.25 13.515 39.6875 12.265 43.75 11.64C29.0625 12.89 15 9.76497 0 9.45247Z" fill="url(#paint0_linear_0_61)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_61" x1="2.8125" y1="9.13997" x2="85.625" y2="9.13997" gradientUnits="userSpaceOnUse">
+<stop stop-color="#792BFF" stop-opacity="0"/>
+<stop offset="0.45" stop-color="#952EFF" stop-opacity="0.2"/>
+<stop offset="0.8" stop-color="#B65CFF" stop-opacity="0.48"/>
+<stop offset="1" stop-color="#E8CCFF" stop-opacity="0.08"/>
+</linearGradient>
+</defs>
+</svg>

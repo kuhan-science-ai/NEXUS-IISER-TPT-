@@ -1,0 +1,60 @@
+.qotd-create-main { gap: 10px; }
+.qotd-create-main > .daily-question-page-heading { margin-bottom: 0; }
+.qotd-create-form { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
+.qotd-create-columns { display: grid; min-width: 0; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1.35fr) minmax(270px, .8fr); gap: 20px; overflow: hidden; }
+.qotd-create-editor, .qotd-create-notes { display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 10px; overflow: auto; overscroll-behavior: contain; padding: 2px 4px 9px 1px; }
+.qotd-create-notes { padding-left: 18px; border-left: 1px solid var(--border); }
+.qotd-create-field { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
+.qotd-create-field > label, .qotd-create-field > label:first-child, .qotd-create-options legend { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--text-primary); font-size: 11px; font-weight: 700; }
+.qotd-create-field > label span, .qotd-create-options legend span { color: var(--text-subtle); font-size: 8px; font-weight: 500; }
+.qotd-create-field > textarea, .qotd-create-field > select { width: 100%; min-height: 66px; box-sizing: border-box; resize: vertical; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; outline: 0; background: var(--bg-surface); color: var(--text-primary); font: inherit; font-size: 10px; line-height: 1.45; }
+.qotd-create-field > select { min-height: 34px; resize: none; }
+.qotd-create-field > textarea:focus, .qotd-create-field > select:focus { border-color: var(--primary); }
+.qotd-create-field > small { color: var(--text-subtle); font-size: 8px; line-height: 1.4; }
+.qotd-create-field code { color: var(--primary); }
+.qotd-create-preview { max-height: 105px; overflow: auto; padding: 7px 9px; border-left: 2px solid var(--primary); background: color-mix(in srgb, var(--primary) 6%, var(--bg-surface)); color: var(--text-muted); font-size: 10px; line-height: 1.4; }
+.qotd-create-preview > small { display: block; margin-bottom: 4px; color: var(--text-subtle); font-size: 8px; }
+.qotd-create-preview .math-renderer { margin: 0; }
+.qotd-create-category { max-width: 320px; }
+.qotd-create-options { min-width: 0; margin: 0; padding: 0; border: 0; }
+.qotd-create-options legend { width: 100%; margin-bottom: 6px; padding: 0; }
+.qotd-create-option-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.qotd-create-option-grid .qotd-create-field > textarea { min-height: 48px; }
+.qotd-create-option-label { color: var(--text-primary); font-size: 9px; font-weight: 700; }
+.qotd-create-option-label input { accent-color: var(--primary); }
+.qotd-create-option-label small { color: var(--primary); font-size: 8px; font-weight: 650; }
+.qotd-create-option-grid .qotd-create-field.is-correct-option { padding: 6px; border: 1px solid color-mix(in srgb, var(--primary) 55%, var(--border)); border-radius: 6px; background: color-mix(in srgb, var(--primary) 5%, var(--bg-canvas)); }
+.qotd-create-option-preview { max-height: 56px; padding: 5px 7px; font-size: 9px; }
+.qotd-create-notes .qotd-create-field > textarea { min-height: 115px; }
+.qotd-create-review-note { display: flex; flex: none; align-items: flex-start; gap: 8px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-surface); }
+.qotd-create-review-note svg { flex: none; color: var(--primary); }
+.qotd-create-review-note p { margin: 0; color: var(--text-muted); font-size: 9px; line-height: 1.45; }
+.qotd-create-footer { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0 0; border-top: 1px solid var(--border); }
+.qotd-create-footer > span { color: var(--text-subtle); font-size: 9px; }
+.qotd-create-footer > button, .qotd-create-success a { display: inline-flex; flex: none; align-items: center; gap: 7px; padding: 8px 12px; border: 0; border-radius: 6px; background: var(--primary); color: #fff; font-size: 10px; font-weight: 700; text-decoration: none; cursor: pointer; }
+.qotd-create-footer > button:disabled { opacity: .5; cursor: default; }
+.qotd-create-success-wrap { display: grid; place-items: center; }
+.qotd-create-success { display: grid; max-width: 500px; justify-items: center; gap: 10px; padding: 28px; text-align: center; }
+.qotd-create-success > svg { color: #39c991; }
+.qotd-create-success h1 { margin: 0; color: var(--text-primary); font-size: 22px; }
+.qotd-create-success p { margin: 0 0 6px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.qotd-review-main { gap: 10px; }
+.qotd-review-list { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 12px; overflow: auto; overscroll-behavior: contain; padding-right: 4px; }
+.qotd-review-card { flex: none; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); }
+.qotd-review-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.qotd-review-card h2 { margin: 4px 0 0; color: var(--text-primary); font-size: 13px; }
+.qotd-review-card time { color: var(--text-subtle); font-size: 8px; }
+.qotd-review-card section { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 10px; line-height: 1.5; }
+.qotd-review-card section h3 { margin: 0 0 5px; color: var(--text-primary); font-size: 10px; }
+.qotd-review-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.qotd-review-options h3 { grid-column: 1 / -1; }
+.qotd-review-options > div { display: flex; align-items: center; gap: 7px; padding: 6px; border: 1px solid var(--border); border-radius: 5px; }
+.qotd-review-options > div b { color: var(--primary); }
+.qotd-review-options > div.is-correct-option { border-color: color-mix(in srgb, var(--primary) 55%, var(--border)); background: color-mix(in srgb, var(--primary) 7%, var(--bg-surface)); }
+.qotd-review-options > div small { margin-left: auto; color: var(--primary); font-size: 8px; font-weight: 700; }
+.qotd-review-options .math-renderer { margin: 0; }
+.qotd-review-notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.qotd-review-notes h3 { display: flex; align-items: center; gap: 5px; }
+.qotd-review-notes p { margin: 0; white-space: pre-wrap; }
+@media (max-width: 800px) { .qotd-create-columns { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }.qotd-create-notes { display: grid; grid-template-columns: 1fr 1fr; padding: 10px 0 0; border-top: 1px solid var(--border); border-left: 0; }.qotd-create-notes .qotd-create-review-note { grid-column: 1 / -1; }.qotd-create-notes .qotd-create-field > textarea { min-height: 58px; }.qotd-create-review-note { display: none; } }
+@media (max-height: 760px) { .qotd-create-main { padding-top: 8px; }.qotd-create-columns { gap: 12px; }.qotd-create-editor, .qotd-create-notes { gap: 7px; }.qotd-create-field > textarea { min-height: 48px; }.qotd-create-notes .qotd-create-field > textarea { min-height: 70px; }.qotd-create-footer { padding-top: 7px; } }

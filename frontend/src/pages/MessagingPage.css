@@ -1,0 +1,83 @@
+.messenger-discord-layout { position:relative; min-width:0; }
+.messenger-chat-panel { overflow:hidden; }
+.messenger-chat-header > div:first-child { min-width:0;flex:1; }
+.messenger-chat-header > div:first-child > div:last-child { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.messenger-chat-actions { display:flex;flex:none;align-items:center;gap:6px; }
+.messenger-chat-actions button { position:relative;display:grid;width:34px;height:34px;flex:none;place-items:center;border:0;border-radius:50%;background:transparent;color:var(--text-muted);cursor:pointer;transition:background .15s ease,color .15s ease; }
+.messenger-chat-actions button:hover,.messenger-chat-actions .messenger-profile-toggle.is-open { background:var(--bg-elevated);color:var(--primary); }
+.messenger-chat-actions .messenger-profile-toggle.is-open { background:color-mix(in srgb,var(--primary) 14%,var(--bg-surface)); }
+.messenger-profile-toggle i { position:absolute;top:5px;right:5px;width:8px;height:8px;border:2px solid var(--bg-surface);border-radius:50%;background:var(--primary); }
+.messenger-call-notice { position:absolute;top:64px;right:12px;z-index:6;display:flex;align-items:center;gap:12px;max-width:min(360px,calc(100% - 24px));padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg-surface);color:var(--text-muted);font-size:12px;box-shadow:var(--shadow-card); }
+.messenger-call-notice button { display:grid;width:24px;height:24px;flex:none;place-items:center;border:0;border-radius:50%;background:transparent;color:var(--text-subtle);cursor:pointer; }
+.messenger-call-notice button:hover { background:var(--bg-elevated);color:var(--text-primary); }
+.messenger-chat-messages { min-width:0;align-items:stretch;gap:18px!important; }
+.messenger-chat-messages > div { max-width:100%; }
+.messenger-chat-messages > div > div[style*="borderRadius"] { max-width:min(480px,88%)!important;overflow-wrap:anywhere; }
+.messenger-message-row { display:flex!important;width:100%!important;min-width:0!important;max-width:none!important;align-self:stretch!important;flex:0 0 auto!important;box-sizing:border-box; }
+.messenger-message-row.is-incoming { align-items:flex-start!important; }
+.messenger-message-row.is-outgoing { align-items:flex-end!important; }
+.messenger-message-row .messenger-bubble { width:fit-content;max-width:min(760px,82%)!important;padding:14px 18px!important;line-height:1.5!important;overflow-wrap:anywhere;box-sizing:border-box; }
+.messenger-message-row .messenger-attachment-bubble { width:min(520px,82%)!important;min-width:min(320px,82%);max-width:min(620px,82%)!important; }
+.messenger-message-row .messenger-attachment-bubble > div:nth-child(2) { min-width:0;overflow-wrap:anywhere; }
+.messenger-typing-indicator { align-self:flex-start; }
+.messenger-chat-composer > div { min-width:0; }
+.messenger-chat-composer input { min-width:0; }
+.messenger-chat-composer button[type="submit"] { display:grid;min-width:44px;width:44px;height:40px;place-items:center;padding:8px 12px!important; }
+.messenger-profile-panel { position:relative;min-width:0;overflow-y:auto; }
+.messenger-profile-close { position:absolute;top:10px;right:10px;z-index:2;display:grid;width:30px;height:30px;place-items:center;border:0;border-radius:50%;background:transparent;color:var(--text-subtle);cursor:pointer; }
+.messenger-profile-close:hover { background:var(--bg-elevated);color:var(--text-primary); }
+
+@media (max-width:1100px) {
+  .messenger-discord-layout { grid-template-columns:240px minmax(0,1fr)!important; }
+  .messenger-discord-layout .messenger-profile-panel { position:absolute;top:0;right:0;bottom:0;width:280px;z-index:8;box-shadow:var(--shadow-card); }
+  .messenger-chat-messages { padding:20px 18px!important; }
+  .messenger-chat-composer { padding:12px!important; }
+}
+@media (max-width:760px) {
+  .messenger-discord-layout { grid-template-columns:minmax(0,1fr)!important; }
+  .messenger-discord-layout .messenger-dm-sidebar { display:none; }
+  .messenger-discord-layout .messenger-profile-panel { width:min(280px,calc(100vw - 72px)); }
+  .messenger-chat-header { padding:0 12px!important; }
+  .messenger-chat-actions { gap:2px; }
+  .messenger-chat-actions button { width:32px;height:32px; }
+  .messenger-chat-messages { padding:16px 12px!important; }
+  .messenger-message-row .messenger-bubble { max-width:90%!important;padding:11px 14px!important; }
+  .messenger-chat-composer > div { gap:6px!important; }
+}
+
+/* Opera GX needs a grid-based message lane to avoid flex intrinsic-width collapse. */
+.messenger-route.is-opera-gx .messenger-chat-messages {
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  align-content:start;
+  align-items:stretch!important;
+  width:100%;
+  min-width:0;
+  gap:18px!important;
+}
+.messenger-route.is-opera-gx .messenger-message-row {
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  min-height:0;
+  flex:0 0 auto!important;
+  align-self:stretch!important;
+  box-sizing:border-box;
+}
+.messenger-route.is-opera-gx .messenger-message-row.is-incoming { justify-items:start!important; }
+.messenger-route.is-opera-gx .messenger-message-row.is-outgoing { justify-items:end!important; }
+.messenger-route.is-opera-gx .messenger-message-row .messenger-bubble {
+  width:fit-content;
+  max-width:min(760px,82%)!important;
+  min-width:0;
+  overflow-wrap:anywhere;
+  box-sizing:border-box;
+}
+.messenger-route.is-opera-gx .messenger-message-row .messenger-attachment-bubble {
+  width:min(520px,82%)!important;
+  min-width:min(320px,82%);
+  max-width:min(620px,82%)!important;
+}
+.messenger-route.is-opera-gx .messenger-message-row .messenger-attachment-bubble > div:nth-child(2) { min-width:0;overflow-wrap:anywhere; }

@@ -1,0 +1,96 @@
+# NEXUS Architecture Documentation
+
+## System Architecture
+
+NEXUS is designed following a clean, modular, layered architecture to ensure separation of concerns, testability, and seamless future integration of Figma UI designs.
+
+```
++-------------------------------------------------------------------------+
+|                              FRONTEND                                   |
+|  React 18 + TypeScript + Vite + React Router + TanStack Query           |
+|  - Minimal Functional Components (Unstyled, ready for Figma)            |
+|  - Locally Bundled KaTeX (Offline Math Renderer)                        |
+|  - Centralized WebSocket Client & State Synchronization                 |
++-------------------------------------------------------------------------+
+                                    |
+                         HTTP REST / WebSockets
+                                    |
++-------------------------------------------------------------------------+
+|                               BACKEND                                   |
+|  FastAPI (Python 3.10+)                                                 |
+|  +-------------------------------------------------------------------+  |
+|  | Routers / API Endpoints (Auth, Users, Messages, AI, Academics)    |  |
+|  +-------------------------------------------------------------------+  |
+|  | Service Layer (Business Logic, Auth, Orchestration, Storage)      |  |
+|  +-------------------------------------------------------------------+  |
+|  | Repository & Data Access Layer (SQLAlchemy ORM 2.0)               |  |
+|  +-------------------------------------------------------------------+  |
+|  | Real-Time WebSocket Infrastructure (Connection Manager, Hub)      |  |
+|  +-------------------------------------------------------------------+  |
++-------------------------------------------------------------------------+
+                   |                                   |
++-------------------------------------+  +--------------------------------+
+|          DATABASE (PostgreSQL)      |  |         LOCAL STORAGE          |
+|  - 30+ Relational Tables            |  |  - Profile Pics, Banners       |
+|  - Indexes, Foreign Keys, Cascades  |  |  - Academic PDFs, Attachments  |
+|  - Alembic Versioned Migrations     |  |  - File Metadata in DB         |
++-------------------------------------+  +--------------------------------+
+```
+
+## Backend Layer Responsibilities
+1. **API Routers (`backend/app/api/`)**: Defines HTTP routes and WebSocket endpoints, schema validation via Pydantic v2.
+2. **Services (`backend/app/services/`)**: Implements business rules, file storage abstraction, auth hashing/tokens, AI orchestration loop, notification dispatch.
+3. **Models (`backend/app/models/`)**: Declarative SQLAlchemy ORM models with strong foreign keys, unique constraints, and indexes.
+4. **Schemas (`backend/app/schemas/`)**: Pydantic models for strict request validation and response serialization.
+5. **Core (`backend/app/core/`)**: Configuration settings, security utilities (bcrypt, JWT), dependency injection.
+6. **WebSockets (`backend/app/ws/`)**: Connection lifecycle, channel subscriptions, room routing, authentication on handshake.
+
+## Frontend Layer Responsibilities
+1. **Pages (`frontend/src/pages/`)**: Unstyled/minimally styled functional test screens for each subsystem (Auth, Messaging, Profiles, AI Studio, LaTeX preview, Academic Repository).
+2. **Components (`frontend/src/components/`)**:
+   - `MathRenderer`: Bundled local KaTeX renderer for scientific mathematical notation.
+   - `ChatWindow`, `AIConsole`, `DocumentEditor`: Functional wrappers that consume TanStack Query & WebSocket state.
+3. **Services (`frontend/src/services/`)**: API client (Fetch/Axios), token storage, WebSocket listener with auto-reconnect.
+
+## Workspace Appearance Preferences
+
+`frontend/src/App.tsx` owns the browser-local workspace palette selection and passes it through `RouteShell` to every interior route. `frontend/src/services/appearance.ts` defines the palette choices and localStorage key. `frontend/src/discord-interior.css` maps the selected palette and light/dark mode to shared UI tokens. The profile theme remains a separate per-user browser preference managed by the profile editor and is not changed when the workspace palette changes.
+
+Custom workspace palettes are stored as a separate localStorage collection. Saved custom palettes can be edited in place from Settings; edits use the same transient live preview state in `App.tsx` and update the existing record only on Save. Discarding clears preview state and restores the last saved selection. The route shell derives CSS custom properties from the selected or preview palette and theme mode; optional color drift is a CSS animation disabled when reduced motion is requested. Profile theme state remains stored under its own user-specific key.
+
+The beta image palette builder is implemented in `frontend/src/services/paletteImage.ts` and `frontend/src/pages/SettingsPage.tsx`. It validates JPEG, PNG, and WebP uploads (8 MB maximum), samples a 64×64 canvas locally to derive background, surface, and accent colors, and compresses the selected image for browser storage. Its confirmation flow previews the wallpaper and generated colors through the shared route-shell palette preview; saving attaches the image data URL to the named custom palette in localStorage and selects that palette. CSS in `frontend/src/discord-interior.css` layers the image beneath palette-tinted overlays on workspace surfaces while keeping the profile main surface excluded. No AI provider or backend upload is involved, and browser storage is not synchronized across devices.
+
+## Daily question and answer flow
+
+The daily question endpoints live under `/api/v1/campus`. `DailyQuestion` records include four answer choices and the participation point value; `DailyQuestionAnswer` stores a user's immutable choice, explanation, optional PDF attachment metadata, and awarded points, with a unique constraint on `(question_id, user_id)`. `DailyQuestionAnswerComment` stores discussion comments and nested replies. The API checks the viewer's submission before returning other students' answers or allowing comments, omits the viewer's own answer from the community list, validates that any attached PDF belongs to the submitting user, and serves answer PDFs only after the viewer has submitted. The AOTD interface keeps locked responses as blurred placeholders until submission, then paginates community answers inside a fixed-height rail.
+
+`DailyQuestionProposal` stores pending QOTD submissions with category, question LaTeX, four LaTeX options, the correct-option index, worked solution, template notes, and animation notes. The submission endpoint creates notifications for moderator and administrator accounts; a role-protected listing endpoint powers the review inbox. The frontend renders LaTeX and `mhchem` previews for mathematics, physics, and chemistry. The QOTD page provides plain-language rules and a moving rainbow contributor invitation. QOTD, AOTD, the prior-question archive, and dashboard share `DailyQuestionTemplate`; dedicated pages disable its hover animation while the dashboard keeps its interactive card behavior.
+
+## Dashboard, preferences, and activity history
+
+`frontend/src/pages/DashboardPage.tsx` lays out core data-driven cards in two responsive columns with a divider: institute/academic items, QOTD, and visit history occupy the dominant column; followed club activity and continue-studying occupy the second column. Cards share a fixed 270px height, and optional widgets use the same card height in a separate My Extras tab. It reads campus events, the signed-in user's calendar, daily question, notifications, and optional tasks through the existing `/api/v1/campus` API. `frontend/src/services/dashboard.ts` stores per-user widget visibility and club names, plus a personal timetable upload in localStorage. The timetable is browser-local and limited to PDF, PNG, and JPEG files up to 1.5 MB. Dashboard settings group card controls, club interests, and timetable management in tabs.
+
+Appearance settings separate saved User Interface palette presets from the custom palette/image builder with a secondary tab, keeping each workflow in its own compact view.
+
+## LaTeX Studio
+
+`frontend/src/pages/LaTeXEditorPage.tsx` provides `/latex` with two selectable engines. Fast KaTeX renders math, physics, and chemistry expressions in-browser; `frontend/src/components/MathRenderer.tsx` loads KaTeX's mhchem extension for `\\ce` and `\\pu`. The page includes ready-to-use maths, physics, and chemistry starters/snippets. Full Tectonic compiles complete TeX documents; `frontend/src/services/latex.ts` sends them to the authenticated `/api/v1/latex/compile` endpoint and renders the returned PDF. Fast-mode PDF export wraps its supported text/math input in a minimal article document and uses the same Tectonic endpoint. `backend/app/api/v1/latex.py` invokes the configured Tectonic executable in a temporary directory, with untrusted mode, source/output limits, a compilation timeout, and a two-job process-local concurrency cap. The PDF review dialog keeps source editable beside the compiled PDF and downloads the PDF blob directly. Each user's Fast and Full source drafts persist separately in browser localStorage across refreshes and page navigation; switching engines does not overwrite the other draft. Light/dark output is selected per compile; dark mode adds page/text colors to the TeX source only in the isolated compiler input. The selected engine is stored in browser localStorage. Install the pinned local Windows compiler with `scripts/install_tectonic.ps1`, or configure `TECTONIC_PATH` for an existing Tectonic binary. TeX packages may be fetched into Tectonic's bundle cache on first use.
+The live/compiled editor viewer has an independent visibility toggle. PDF review keeps the compiled document visible and loads the local PDF.js renderer on demand, with a separate page-thumbnail rail; its Pages control hides or reopens only that rail, and selecting a thumbnail scrolls to the page.
+
+`RouteShell` in `frontend/src/App.tsx` records route visits in a user-scoped localStorage history and a sessionStorage history for the current tab session. `UploadResourceModal` emits successful upload metadata; history stores its repository resource ID so the History page can return to that resource. `/history` provides session and all-history views. Session history lasts through reloads and resets with the browser tab session; all-history is limited to the current browser profile and is not a server audit log. Continue studying routes to the last study-related page and does not preserve reader position.
+
+The self-profile editor is mounted by `RouteShell` as a global overlay. Profile triggers dispatch `nexus-open-profile-editor`, so opening or closing it does not navigate away from the current route. The account footer passes its element as the animation origin: a temporary clone flies and rotates to the viewport center, then plays a selected burst over a dimmed backdrop before opening the editor. Settings → Appearance → Effects saves the browser-local choice under `nexus-profile-launch-effect`: `classic` uses the cleaned VP9-alpha `frontend/public/profile-launch-explosion.webm` at 1.45× speed; `fireball` uses the supplied transparent WebM copied to `frontend/public/profile-launch-fireball.webm` at 1.7× speed. Both use the same display size, retain their clip colors, and remain independent of profile-specific colors. Closing reverses the flight with a short recoil, and reduced-motion preference bypasses the flight. The standalone `/profile` page was removed; legacy URLs redirect to `/dashboard`.
+
+There is no backend source for a complete institute announcement feed, club subscription feed, or editor-managed Critical Problems feature. Current dashboard notices use account notifications, clubs filter the existing event/notification data by the student's entered club names, and no editor question/vote/recognition workflow is claimed as implemented.
+
+The dashboard Institute & academic area renders existing campus calendar records and selected official/academic account notifications as clickable sticky-note cards. Institute filters academic event categories and official notice types; All events uses upcoming campus/calendar events. Note content comes from the available event description/title or notification content/title. Opening a note displays the full message in a scrollable dialog. Settings → Appearance → Sticky notes stores a user-scoped browser preference for workspace-matched or preset colors, straight/tilted layout, and gentle sway; reduced-motion preferences disable motion. This is a presentation layer over existing feeds, not a new announcement publishing or upload API.
+
+The floating Ask AI launcher is fixed to the viewport until the user drags it. Its optional dock and coordinates are stored in browser localStorage under `nexus-ai-launcher-position-v1` and `nexus-ai-launcher-dock-v1`, then clamped when the viewport resizes. Settings uses a minmax grid track and border-box sizing to avoid horizontal overflow in its main content.
+
+## AI Chat and Inference
+
+The floating Ask AI panel (`frontend/src/components/AIQuickPanel.tsx`) and the AI Study Companion page (`frontend/src/pages/AILoopPage.tsx`) both submit to the authenticated `POST /api/v1/ai/conversations/{id}/chat` endpoint. FastAPI streams orchestration and model output as Server-Sent Events. Both surfaces show the user's turn immediately and stream assistant text; the AI Study Companion renders its transient stream in the conversation history, then replaces it with the persisted assistant turn so one response is displayed. The shared `MathRenderer` compiles `$...$`, `$$...$$`, `\\(...\\)`, and `\\[...\\]` math locally with KaTeX. The provider prompt requests ordinary prose by default and delimited math when useful, and raw TeX source only when explicitly requested.
+
+`AI_PROVIDER` selects the Ollama provider (default, `OLLAMA_BASE_URL` and `OLLAMA_MODEL`) or deterministic mock provider. Ollama uses a reused bounded HTTP connection pool. The orchestrator applies an in-process semaphore and bounded wait queue; defaults are 8 active requests, 512 queued requests, and a 180-second queue timeout (`AI_MAX_CONCURRENT_REQUESTS`, `AI_MAX_QUEUED_REQUESTS`, `AI_QUEUE_TIMEOUT_SECONDS`). The model receives at most 16 recent messages, page context is capped at 8,000 characters, and message-history reads page through 100 records at a time. SQLite connections wait up to 30 seconds on a write lock.
+
+The gate is local to one application process. It prevents unbounded inference fan-out and absorbs bursts, but a single Ollama model and SQLite do not guarantee low latency for 500 simultaneous users. That target requires shared admission/queue infrastructure, a production database such as PostgreSQL, and model-serving capacity sized for the intended concurrency; these are not implemented here.

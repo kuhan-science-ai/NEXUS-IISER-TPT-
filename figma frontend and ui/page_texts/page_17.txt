@@ -1,0 +1,59 @@
+N NEXUS
+IISER Tirupati · Students only
+WORKSPACE
+Dashboard
+Academic Repository
+My Courses
+Study Groups
+Productivity
+COMMUNITY
+Friends
+Messenger 3
+Discussion Forums
+Question of the Day
+Answer of the Day
+CAMPUS
+Campus Pulse
+Events
+Lost & Found
+Opportunities
+Student Profile
+Notifications
+Settings
+AR
+A good explanation stays with you.
+Thoughtful student answers, brought into the spotlight.
+W hy this answer ?A NSWE R OF  THE  D A Y  ·  QUESTION  #041
+Why is the sky blue, but a sunset red ?
+A N C o mmu nity p ic k
+The short answer :  sunlight takes a different j ourney through the atmosphere at sunset.
+Air molecules scatter shorter wavelengths more strongly than longer ones. In the Rayleigh regime, the scattering intensity
+scales roughly as 1 / λ⁴ . Blue light is scattered across the sky far more effectively than red light.
+I ∝ 1 / λ⁴
+Shorter wavelength →  stronger scattering
+When the Sun is low, its light travels through a much longer atmospheric path. Much of the blue light is scattered away before
+the direct beam reaches us. What remains is richer in reds and oranges.
+The sky isn ’ t blue because air is blue. It ’ s blue because of what air does to light —  and where we happen to be looking.
+Ray l ei g h scatterin g Op tics PHY  201
+↑  86  helpful 1 2 comments Bookmark ♧  · Share ↗
+Workspace / Answer of the Day Search resources, people, conversations… ⌘ K AR
+Browse the archive
+Clear reasoning, an intuitive connection, and
+j ust enough math to make the idea stick.
+Selected by the student moderation team
+Ar ju n N air
+BS–MS 2023 · Featured 2 Nov · 4  min read
+K ee p  the c u riosity g oin g
+Why do soap bubbles shimmer?
+Optics · Answer #038
+Can you hear a star?
+Astrophysics · Answer #036
+The shape of a snowflake
+Chemistry · Answer #034
+T o d ay ’ s q u estion awaits
+Position,  momentum  and  the  limits  of
+certainty.
+Bring your own explanation to Question # 0 4 2.
+T ry to d ay ' s q u estion
+Ananya Rao
+BS–MS · Batch 2023

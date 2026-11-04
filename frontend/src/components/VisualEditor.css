@@ -1,0 +1,196 @@
+.nexus-visual-editor {
+  position: fixed;
+  z-index: 2147483000;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  color: #dcddde;
+  font: 13px/1.4 Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.nexus-visual-editor.is-ai-page:not([style*="left:"]) {
+  bottom: 76px;
+}
+
+.nexus-editor-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid #4f545c;
+  border-radius: 8px;
+  background: #202225;
+  color: #f2f3f5;
+  font: inherit;
+  font-weight: 650;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, .32);
+  cursor: pointer;
+}
+
+.nexus-editor-toggle:hover,
+.nexus-editor-toggle.active {
+  border-color: #7480ff;
+  background: #5865f2;
+  color: #fff;
+}
+
+.nexus-editor-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  width: min(286px, calc(100vw - 24px));
+  padding: 14px;
+  border: 1px solid #4f545c;
+  border-radius: 9px;
+  background: #18191c;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.nexus-visual-editor.is-panel-below .nexus-editor-panel {
+  top: calc(100% + 10px);
+  bottom: auto;
+}
+
+.nexus-visual-editor.is-panel-align-left .nexus-editor-panel {
+  right: auto;
+  left: 0;
+}
+
+.nexus-editor-panel-title,
+.nexus-editor-node,
+.nexus-editor-hint,
+.nexus-editor-style {
+  display: flex;
+  align-items: center;
+}
+
+.nexus-editor-panel-title {
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #f2f3f5;
+  font-weight: 700;
+}
+
+.nexus-editor-node {
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 9px;
+  border-radius: 5px;
+  background: #202225;
+}
+
+.nexus-editor-node span {
+  color: #b9bbbe;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.nexus-editor-node code,
+.nexus-editor-style code {
+  color: #fff;
+  font: 11px 'JetBrains Mono', monospace;
+}
+
+.nexus-editor-hint {
+  gap: 7px;
+  margin: 10px 0;
+  color: #b9bbbe;
+  font-size: 11px;
+}
+
+.nexus-editor-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.nexus-editor-fields label {
+  display: grid;
+  gap: 4px;
+  color: #8e9297;
+  font-size: 11px;
+}
+
+.nexus-editor-fields input {
+  width: 100%;
+  height: 32px;
+  padding: 4px 8px;
+  border: 1px solid #4f545c;
+  border-radius: 4px;
+  outline: none;
+  background: #202225;
+  color: #f2f3f5;
+  font: 12px 'JetBrains Mono', monospace;
+}
+
+.nexus-editor-style {
+  justify-content: space-between;
+  gap: 7px;
+  margin-top: 10px;
+  color: #8e9297;
+  font-size: 10px;
+}
+
+.nexus-editor-style code {
+  max-width: 115px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nexus-editor-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #b9bbbe;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.nexus-editor-reset:hover { background: #2f3136; color: #fff; }
+
+.nexus-editor-reset-page {
+  width: 100%;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #2f3136;
+  border-radius: 0;
+}
+
+.nexus-editor-outline {
+  position: fixed;
+  z-index: 2147482998;
+  border: 2px solid #5865f2;
+  background: rgba(88, 101, 242, .06);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .28);
+  pointer-events: none;
+}
+
+.nexus-editor-outline:not(.is-selected) {
+  border-style: dashed;
+  border-color: #8ea1ff;
+  background: rgba(88, 101, 242, .025);
+}
+
+.nexus-editor-resize-grip {
+  position: fixed;
+  z-index: 2147482999;
+  width: 18px;
+  height: 18px;
+  border-right: 4px solid #fff;
+  border-bottom: 4px solid #fff;
+  filter: drop-shadow(0 1px 3px #202225);
+  cursor: nwse-resize;
+  pointer-events: none;
+}

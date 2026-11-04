@@ -1,0 +1,16 @@
+.daily-question-pdf-uploader { position: relative; flex: none; }
+.daily-question-pdf-picker { display: flex; width: 100%; min-width: 0; align-items: center; gap: 10px; padding: 8px 10px; border: 1px dashed color-mix(in srgb, var(--primary) 55%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--primary) 7%, var(--bg-canvas)); color: var(--text-primary); text-align: left; cursor: pointer; }
+.daily-question-pdf-picker:disabled { opacity: .65; cursor: default; }
+.daily-question-pdf-icon { display: grid; width: 32px; height: 32px; flex: none; place-items: center; border-radius: 7px; background: color-mix(in srgb, var(--primary) 16%, var(--bg-raised)); color: var(--primary); }
+.daily-question-pdf-copy { display: grid; min-width: 0; flex: 1; gap: 3px; }
+.daily-question-pdf-copy strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.daily-question-pdf-copy small { color: var(--text-subtle); font-size: 8px; }
+.daily-question-pdf-choose { display: inline-flex; flex: none; align-items: center; gap: 5px; color: var(--primary); font-size: 9px; font-weight: 750; }
+.daily-question-pdf-remove { position: absolute; top: -6px; right: -6px; display: grid; width: 20px; height: 20px; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: var(--bg-surface); color: var(--text-muted); cursor: pointer; }
+.daily-question-basket-stage { position: absolute; right: 52px; bottom: 5px; width: 78px; height: 44px; overflow: hidden; pointer-events: none; opacity: .82; }
+.daily-question-basket-net { position: absolute; right: 0; bottom: 0; width: 40px; height: 32px; object-fit: contain; }
+.daily-question-basket-rim { position: absolute; right: 0; bottom: 27px; width: 40px; height: 9px; object-fit: fill; }
+.daily-question-basket-ball { position: absolute; left: 0; bottom: -1px; width: 31px; height: 38px; object-fit: contain; filter: drop-shadow(0 2px 4px #0005); }
+.daily-question-pdf-sr-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+.daily-question-pdf-error { display: block; padding: 3px 2px 0; color: #ff9999; font-size: 9px; }
+@media (prefers-reduced-motion: reduce) { .daily-question-basket-stage { display: none; } }

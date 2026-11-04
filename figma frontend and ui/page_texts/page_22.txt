@@ -1,0 +1,60 @@
+N NEXUS DESIGN LANGUAGE / 01
+Campus-native. Clear by nature.
+NEXUS visual foundations · Editable visual examples, not native components or variables.
+01 / Color roles
+Canvas
+#0C0D10
+Navigation
+#101115
+Surface
+#15171D
+Raised
+#1C1E26
+Border
+#2A2C36
+Primary
+#956AFF
+Secondary Warning Danger Text Muted Subtle
+#51D5A0 #E9BD73 #F08D98 #F3F2F7 #9699AA #666B7D
+Purple = primary action & selection · Emerald = belonging, success & presence · Use color with labels, not alone.
+Optional light-theme sample
+Same campus. A lighter view.
+L ight canvas #F5F 4 F8 · W hite surface · I n k  #20202B · Primary
+#75 44 CF
+Qu ant u m M e c hani c s I
+P HY  301 · T oday, 10 : 00 · LH  20 4
+Up ne x t
+Open c o u rse
+0 2  / Ty pograph y
+Curiosity connects.
+M anrope · Display 4 8 / 52 · 700 · − 1.5 trac k ing
+Y our campus at a glance
+I nter · Page title 30 /4 5 · 650
+A share d  a c a d emi c  memor y
+I nter · Section 20 / 30 · 600
+Body 1 4/ 21 · G ood k nowledge deserves to be passed on.
+Supporting 12 / 18 · M eera I yer · BS –M S 2023
+M etadata 10 / 15 · 2 N OV  2026 · 4 2 PA G ES
+0 3  / Spa c e ,  shape &  ele v ation
+An 8px rhythm, with 4 px precision for dense academic interfaces.
+4 px 8px 12px 16px 2 4 px 32px 4 8px
+8px · controls 12px · cards 16px · panels
+1px separators · 16 – 2 4 px card padding · 28px wor k space gutters · 4 0 –44 px controls
+Elevation is reserved for menus and dialogs. Flat surfaces stay q uiet ;  a subtle border does the wor k .
+0 4  / Na v igation &  c ontent
+Discover Saved  · 12 My  u p loads
+V eri f ie d  st ud ent PHY  3 01 D u e tomorro w P D F
+Quantum Mechanics — Complete Notes
+PHY 301 · Meera Iyer · 42 pages
+P D F
+Meera Iyer
+Onlin e · P h ys ic s · B a tch  2023
+MI
+0 5  / F orms &  a c tions
+I nstitute  email Course
+ananya23 @ students.iisertirupati.ac.in P HY  301  ⌄
+Searc h  resources
+Q uantum mechanics
+T ext action →
+P rimar y  a c tion Se c on d ar y  a c tion
+K eyboard focus is visible. T ouch controls maintain a minimum 44 px target in mobile layouts.

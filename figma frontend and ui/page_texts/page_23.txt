@@ -1,0 +1,46 @@
+N NEXUS VISUAL STATES / 02
+Feels thoughtful, down to the last state.
+Static interaction references · No prototype links, triggers or animations.
+01 / Button behavior
+DEFAUL T HOVER PRESSED DISABLED FOCUS LOADING
+Upload resource Upload resource Upload resource Upload resource Upload resource Uploading…
+Save for later Save for later Save for later Save for later Save for later Save for later
+Primary actions stay purple. Hover brightens, pressed deepens, focus uses an outer ring. Disabled never relies on opacity alone.
+02 / Form feedback
+Default input
+Search your campus…
+Focused input
+Quantum mechanics
+Validation error
+ananya@gmail.com
+Use your IISER Tirupati student email.
+Remember me Dark
+0 3  / D ropdo w n &  active filters
+PH Y  301  · Quantum M echanics I
+✓  PH Y  301  · Quantum M echanics I
+CH M  301  · Organic Spectroscopy
+M AT 201  · Linear Algebra
+BIO 303  · Ecology &  Evolution
+Clear allPHY  3 01 × PD F ×
+0 4  / C ard hover &  selection
+PD F ·  4 2 P A G ES
+Q uantum M echanics —  C omplete N otes
+M eera Iyer · PH Y  301  · ★  4 . 9
+D o w nload Save
+N otes P apers T utorials
+Hover reveals useful actions without moving the content. Selection stays
+persistent.
+0 5  / E x pandable card
+Spectroscopy lab report C ollapsed
+P roblem set 0 4  ·  P erturbation theor y
+PH Y  301  · Due tomorrow, 23 :5 9  · 3  of 5  q uestions complete
+✓  First - order correctio n
+✓  Degenerate state s
+□  Second - order energy shift
+O pen assignment
+0 6  / Feedback ,  success &  toast
+Saved to your resources Undo
+Inline errors e x plain the fi x . Success confirms the result. Toasts offer a reversible action.
+M otion is intentionally absent from these static visual references.
+R esource s h ared w it h  y our ca m pus
+Perturbation _ theory.pdf is now in PH Y  301 .

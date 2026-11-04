@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transparent Web Explosion Animation</title>
+  <style>
+    :root {
+      --bg-color: #0b0f19;
+      --card-bg: rgba(255, 255, 255, 0.05);
+      --border-color: rgba(255, 255, 255, 0.12);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #f97316;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      color: var(--text-main);
+      background-color: var(--bg-color);
+      transition: background 0.3s ease;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Background Modes for Testing Transparency */
+    body.bg-checker {
+      background-color: #e2e8f0;
+      background-image: 
+        linear-gradient(45deg, #cbd5e1 25%, transparent 25%), 
+        linear-gradient(-45deg, #cbd5e1 25%, transparent 25%), 
+        linear-gradient(45deg, transparent 75%, #cbd5e1 75%), 
+        linear-gradient(-45deg, transparent 75%, #cbd5e1 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
+      color: #0f172a;
+      --card-bg: rgba(255, 255, 255, 0.85);
+      --border-color: rgba(0, 0, 0, 0.15);
+      --text-main: #0f172a;
+      --text-muted: #475569;
+    }
+
+    body.bg-light {
+      background: #f8fafc;
+      color: #0f172a;
+      --card-bg: rgba(255, 255, 255, 0.9);
+      --border-color: #e2e8f0;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+    }
+
+    body.bg-gradient {
+      background: linear-gradient(135deg, #1e1b4b 0%, #311042 50%, #0369a1 100%);
+      color: #ffffff;
+    }
+
+    body.bg-mockup {
+      background: #0f172a;
+      color: #f8fafc;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1050px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      position: relative;
+      z-index: 10;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 9999px;
+      background: rgba(249, 115, 22, 0.15);
+      border: 1px solid rgba(249, 115, 22, 0.4);
+      color: #fb923c;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+
+    h1 {
+      font-size: 2.6rem;
+      font-weight: 800;
+      margin-bottom: 10px;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      max-width: 600px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    /* Controls Panel */
+    .control-panel {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 20px 40px -15px rgba(0,0,0,0.4);
+      margin-bottom: 32px;
+    }
+
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-group label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .style-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .pill-btn {
+      padding: 8px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-main);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+
+    .pill-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateY(-1px);
+    }
+
+    .pill-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 16px rgba(249, 115, 22, 0.4);
+    }
+
+    .range-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .range-val {
+      font-size: 14px;
+      font-weight: 600;
+      min-width: 32px;
+    }
+
+    /* Actions */
+    .actions-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--border-color);
+      padding-top: 20px;
+    }
+
+    .trigger-btn {
+      background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      font-size: 15px;
+      font-weight: 700;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 10px 25px -5px rgba(249, 115, 22, 0.5);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .trigger-btn:hover {
+      transform: scale(1.03);
+      box-shadow: 0 12px 30px -5px rgba(249, 115, 22, 0.7);
+    }
+
+    .trigger-btn:active {
+      transform: scale(0.97);
+    }
+
+    .secondary-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 10px 18px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .secondary-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Interactive Click Area Banner */
+    .click-target-zone {
+      border: 2px dashed var(--border-color);
+      border-radius: 18px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: crosshair;
+      margin-bottom: 32px;
+      background: rgba(255, 255, 255, 0.02);
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .click-target-zone:hover {
+      border-color: var(--accent);
+      background: rgba(249, 115, 22, 0.05);
+    }
+
+    /* Webpage Mockup Preview */
+    .mockup-preview {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+
+    .mockup-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      padding: 24px;
+      border-radius: 16px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .mockup-card:hover {
+      transform: translateY(-4px);
+    }
+
+    .mockup-card h3 {
+      margin-bottom: 8px;
+      font-size: 1.2rem;
+    }
+
+    .mockup-card p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+
+    /* Code Snippet Box */
+    .code-box {
+      background: #090d16;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 20px;
+      overflow-x: auto;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 13.5px;
+      color: #38bdf8;
+      line-height: 1.6;
+      user-select: text;
+    }
+
+    .code-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #94a3b8;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .hint {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body class="bg-dark">
+
+  <div class="container">
+    <header>
+      <div class="badge">100% TRANSPARENT CANVAS EFFECT</div>
+      <h1>Explosive Web Animation</h1>
+      <p class="subtitle">
+        Zero background color, zero dependencies, full 60fps particle physics. Click anywhere on the screen to detonate!
+      </p>
+    </header>
+
+    <!-- Controls -->
+    <div class="control-panel">
+      <div class="controls-grid">
+        <!-- Style Selector -->
+        <div class="control-group">
+          <label>Visual Style</label>
+          <div class="style-pills">
+            <button class="pill-btn active" data-style="fire">🔥 Fire</button>
+            <button class="pill-btn" data-style="plasma">⚡ Plasma</button>
+            <button class="pill-btn" data-style="electric">💎 Electric</button>
+            <button class="pill-btn" data-style="magic">✨ Magic</button>
+            <button class="pill-btn" data-style="confetti">🎉 Confetti</button>
+          </div>
+        </div>
+
+        <!-- Scale & Particles -->
+        <div class="control-group">
+          <label>Explosion Size (<span id="scale-val">1.2</span>x)</label>
+          <div class="range-wrap">
+            <input type="range" id="scale-range" min="0.5" max="2.5" step="0.1" value="1.2">
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Particle Count (<span id="count-val">65</span>)</label>
+          <div class="range-wrap">
+            <input type="range" id="count-range" min="20" max="150" step="5" value="65">
+          </div>
+        </div>
+
+        <!-- Background Tester -->
+        <div class="control-group">
+          <label>Test Transparency Against:</label>
+          <div class="style-pills">
+            <button class="pill-btn active" data-bg="bg-dark">Dark</button>
+            <button class="pill-btn" data-bg="bg-checker">Checkerboard</button>
+            <button class="pill-btn" data-bg="bg-light">Light</button>
+            <button class="pill-btn" data-bg="bg-gradient">Gradient</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions-bar">
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button class="trigger-btn" id="blast-center-btn">💥 Detonate Center</button>
+          <button class="secondary-btn" id="rapid-btn">⚡ Rapid Fireworks</button>
+        </div>
+
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+          <input type="checkbox" id="sound-toggle" checked style="accent-color: var(--accent); width: 16px; height: 16px;">
+          <span>Sound Effects (Synthesized Web Audio)</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Clickable Playground Zone -->
+    <div class="click-target-zone" id="click-zone">
+      <h2 style="font-size: 1.4rem; margin-bottom: 6px;">🎯 Click Anywhere in this Box or on the Screen</h2>
+      <p style="color: var(--text-muted); font-size: 0.95rem;">
+        Notice how particles fly seamlessly across buttons and text without any square black or white background box!
+      </p>
+    </div>
+
+    <!-- Webpage Mockup Cards to prove overlay transparency -->
+    <h3 style="margin-bottom: 16px; font-size: 1.1rem; color: var(--text-muted);">
+      Test On Realistic Webpage Components (Click any card to explode it):
+    </h3>
+    <div class="mockup-preview">
+      <div class="mockup-card explode-trigger">
+        <h3>🚀 Feature Launch</h3>
+        <p>Trigger celebratory shockwaves on buy buttons or checkout confirmation screens.</p>
+        <button class="secondary-btn" style="pointer-events: none;">Click Card</button>
+      </div>
+      <div class="mockup-card explode-trigger">
+        <h3>👾 Game Over & Hits</h3>
+        <p>Dynamic impact particles on collisions, health depletion, or boss destruction.</p>
+        <button class="secondary-btn" style="pointer-events: none;">Click Card</button>
+      </div>
+      <div class="mockup-card explode-trigger">
+        <h3>🏆 Achievement Unlocked</h3>
+        <p>Bright golden burst when your user levels up, solves a puzzle, or claims rewards.</p>
+        <button class="secondary-btn" style="pointer-events: none;">Click Card</button>
+      </div>
+    </div>
+
+    <!-- Quick How to Add to Your Page -->
+    <div class="code-title">How to Add It To Your Own Webpage (3 Simple Steps)</div>
+    <div class="code-box">
+&lt;!-- 1. Include the transparent explosion script --&gt;
+&lt;script src="explosion.js"&gt;&lt;/script&gt;
+
+&lt;!-- 2. Trigger anywhere on click or event --&gt;
+&lt;script&gt;
+  // Initialize the explosion system (creates a transparent fixed overlay)
+  const boom = new ExplosionSystem({ sound: true });
+
+  // Example A: Detonate on mouse click anywhere
+  window.addEventListener('click', (e) => {
+    boom.explode(e.clientX, e.clientY, {
+      style: 'fire',       // 'fire' | 'plasma' | 'electric' | 'magic' | 'confetti'
+      scale: 1.2,          // size multiplier
+      particleCount: 60    // number of particles
+    });
+  });
+
+  // Example B: Attach to a specific button
+  // boom.attachToElement('#my-submit-button', { style: 'magic', scale: 1.5 });
+&lt;/script&gt;
+    </div>
+
+    <p class="hint">Made for modern web development • 0 external dependencies • 100% Alpha Channel Transparency</p>
+  </div>
+
+  <!-- Load Explosion Engine -->
+  <script src="explosion.js"></script>
+
+  <script>
+    // Initialize system
+    const boom = new ExplosionSystem({ sound: true });
+
+    let currentStyle = 'fire';
+    let currentScale = 1.2;
+    let currentCount = 65;
+
+    // Sound Toggle
+    const soundToggle = document.getElementById('sound-toggle');
+    soundToggle.addEventListener('change', (e) => {
+      boom.enableSound = e.target.checked;
+    });
+
+    // Style Pills
+    document.querySelectorAll('[data-style]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-style]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentStyle = btn.dataset.style;
+      });
+    });
+
+    // Background Mode Buttons
+    document.querySelectorAll('[data-bg]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-bg]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.body.className = btn.dataset.bg;
+      });
+    });
+
+    // Sliders
+    const scaleRange = document.getElementById('scale-range');
+    const scaleVal = document.getElementById('scale-val');
+    scaleRange.addEventListener('input', (e) => {
+      currentScale = parseFloat(e.target.value);
+      scaleVal.textContent = currentScale.toFixed(1);
+    });
+
+    const countRange = document.getElementById('count-range');
+    const countVal = document.getElementById('count-val');
+    countRange.addEventListener('input', (e) => {
+      currentCount = parseInt(e.target.value, 10);
+      countVal.textContent = currentCount;
+    });
+
+    // Detonate Center Button
+    document.getElementById('blast-center-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const x = window.innerWidth / 2;
+      const y = window.innerHeight / 2;
+      boom.explode(x, y, {
+        style: currentStyle,
+        scale: currentScale * 1.3,
+        particleCount: currentCount * 1.3
+      });
+    });
+
+    // Rapid Fireworks mode
+    let rapidInterval = null;
+    document.getElementById('rapid-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (rapidInterval) {
+        clearInterval(rapidInterval);
+        rapidInterval = null;
+        e.target.textContent = '⚡ Rapid Fireworks';
+        return;
+      }
+
+      e.target.textContent = '⏹ Stop Rapid';
+      let blasts = 0;
+      rapidInterval = setInterval(() => {
+        const x = window.innerWidth * 0.2 + Math.random() * (window.innerWidth * 0.6);
+        const y = window.innerHeight * 0.2 + Math.random() * (window.innerHeight * 0.6);
+        const styles = ['fire', 'plasma', 'electric', 'magic', 'confetti'];
+        const randomStyle = styles[Math.floor(Math.random() * styles.length)];
+
+        boom.explode(x, y, {
+          style: randomStyle,
+          scale: 0.8 + Math.random() * 0.8,
+          particleCount: 40 + Math.random() * 40
+        });
+
+        blasts++;
+        if (blasts > 15) {
+          clearInterval(rapidInterval);
+          rapidInterval = null;
+          document.getElementById('rapid-btn').textContent = '⚡ Rapid Fireworks';
+        }
+      }, 160);
+    });
+
+    // Interactive Card Explosion Click triggers
+    document.querySelectorAll('.explode-trigger').forEach(card => {
+      card.addEventListener('click', (e) => {
+        boom.explode(e.clientX, e.clientY, {
+          style: currentStyle,
+          scale: currentScale,
+          particleCount: currentCount
+        });
+      });
+    });
+
+    // Screen-wide click listener (ignoring clicks on buttons & inputs)
+    window.addEventListener('click', (e) => {
+      // Don't trigger if clicked on controls
+      if (e.target.closest('.control-panel') || e.target.closest('.trigger-btn') || e.target.closest('.secondary-btn')) {
+        return;
+      }
+      boom.explode(e.clientX, e.clientY, {
+        style: currentStyle,
+        scale: currentScale,
+        particleCount: currentCount
+      });
+    });
+
+    // Initial greeting blast
+    setTimeout(() => {
+      boom.explode(window.innerWidth / 2, window.innerHeight * 0.4, {
+        style: 'fire',
+        scale: 1.2,
+        particleCount: 60
+      });
+    }, 400);
+  </script>
+</body>
+</html>
