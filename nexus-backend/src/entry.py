@@ -1,0 +1,750 @@
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import secrets
+import time
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, EmailStr, Field
+from js import Object, Uint8Array, crypto
+from pyodide.ffi import to_js
+from workers import WorkerEntrypoint, asgi
+
+app = FastAPI(title="NEXUS API", version="1.0.0")
+
+
+class AIConversationCreate(BaseModel):
+    title: str | None = Field(default="New AI Conversation", max_length=150)
+
+
+class DailyQuestionAnswerCreate(BaseModel):
+    answer_latex: str = Field(min_length=1, max_length=2000)
+    selected_option: int = Field(ge=0, le=3)
+    attachment_file_id: str | None = Field(default=None, max_length=36)
+
+
+class DailyQuestionAnswerCommentCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+    parent_comment_id: str | None = None
+
+
+class DailyQuestionProposalCreate(BaseModel):
+    category: str = Field(min_length=3, max_length=50)
+    question_latex: str = Field(min_length=10, max_length=5000)
+    options: list[str] = Field(min_length=4, max_length=4)
+    correct_option: int = Field(ge=0, le=3)
+    explanation_latex: str = Field(min_length=10, max_length=5000)
+    template_notes: str = Field(default="", max_length=1500)
+    animation_notes: str = Field(default="", max_length=1500)
+
+
+def make_ai_conversation(row: dict[str, Any]) -> dict[str, Any]:
+    return {key: row[key] for key in ("id", "title", "parent_id", "created_at", "updated_at")}
+
+
+async def make_daily_question(db: Any, question: dict[str, Any], user_id: str) -> dict[str, Any]:
+    options = json.loads(question["options_json"] or "[]")
+    answers_count = await first(db, "SELECT COUNT(*) AS total FROM daily_question_answers WHERE question_id=?", question["id"])
+    user_answer = await first(db, "SELECT id,answer_latex,selected_option,attachment_file_id,points_awarded,submitted_at FROM daily_question_answers WHERE question_id=? AND user_id=?", question["id"], user_id)
+    total_points = await first(db, "SELECT COALESCE(SUM(points_awarded),0) AS total FROM daily_question_answers WHERE user_id=?", user_id)
+    return {
+        "id": question["id"], "date": question["date"], "category": question["category"],
+        "question_latex": question["question_latex"], "explanation_latex": question["explanation_latex"],
+        "options": options, "points": question["points"],
+        "answered_count": int((answers_count or {}).get("total") or 0),
+        "user_answer": user_answer,
+        "total_points": int((total_points or {}).get("total") or 0),
+    }
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def new_id() -> str:
+    return str(uuid.uuid4())
+
+
+def b64url(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+def get_db(request: Request) -> Any:
+    env = request.scope.get("env")
+    database = getattr(env, "nexus_database", None) if env is not None else None
+    if database is None:
+        raise HTTPException(status_code=503, detail="D1 database binding is unavailable")
+    return database
+
+
+async def query(db: Any, sql: str, *params: Any) -> list[dict[str, Any]]:
+    statement = db.prepare(sql)
+    if params:
+        statement = statement.bind(*params)
+    result = await statement.all()
+    rows = result.results
+    if hasattr(rows, "to_py"):
+        rows = rows.to_py()
+    return [dict(row) for row in (rows or [])]
+
+
+async def first(db: Any, sql: str, *params: Any) -> dict[str, Any] | None:
+    rows = await query(db, sql, *params)
+    return rows[0] if rows else None
+
+
+async def execute(db: Any, sql: str, *params: Any) -> Any:
+    statement = db.prepare(sql)
+    if params:
+        statement = statement.bind(*params)
+    return await statement.run()
+
+
+def get_secret(request: Request) -> str:
+    env = request.scope.get("env")
+    value = getattr(env, "JWT_SECRET", None) if env is not None else None
+    if not value:
+        raise HTTPException(status_code=503, detail="JWT_SECRET Worker secret is not configured")
+    return str(value)
+
+
+def get_password_pepper(request: Request) -> str:
+    env = request.scope.get("env")
+    value = getattr(env, "PASSWORD_PEPPER", None) if env is not None else None
+    if not value:
+        raise HTTPException(status_code=503, detail="PASSWORD_PEPPER Worker secret is not configured")
+    return str(value)
+
+
+async def derive_password_key(password: str, salt: bytes, rounds: int, pepper: str = "") -> bytes:
+    if rounds < 1 or rounds > 100_000:
+        raise ValueError("PBKDF2 iteration count is outside Cloudflare Workers' supported range")
+    key = await crypto.subtle.importKey(
+        "raw", Uint8Array.new(password.encode() + (b"\0" + pepper.encode() if pepper else b"")).buffer,
+        to_js({"name": "PBKDF2"}, dict_converter=Object.fromEntries), False, to_js(["deriveBits"]),
+    )
+    derived = await crypto.subtle.deriveBits(
+        to_js({"name": "PBKDF2", "salt": Uint8Array.new(salt).buffer, "iterations": rounds, "hash": "SHA-256"}, dict_converter=Object.fromEntries),
+        key, 256,
+    )
+    return bytes(Uint8Array.new(derived).to_py())
+
+
+async def hash_password(password: str, pepper: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = await derive_password_key(password, salt, 100_000, pepper)
+    return f"pbkdf2_sha256_peppered$100000${b64url(salt)}${b64url(digest)}"
+
+
+async def verify_password(password: str, encoded: str, pepper: str) -> tuple[bool, bool]:
+    try:
+        algorithm, rounds, salt_text, expected = encoded.split("$", 3)
+        if algorithm not in {"pbkdf2_sha256", "pbkdf2_sha256_peppered"}:
+            return False, False
+        if int(rounds) > 100_000:
+            return False, False
+        salt = base64.urlsafe_b64decode(salt_text + "=" * (-len(salt_text) % 4))
+        is_peppered = algorithm == "pbkdf2_sha256_peppered"
+        calculated = b64url(await derive_password_key(password, salt, int(rounds), pepper if is_peppered else ""))
+        return hmac.compare_digest(calculated, expected), is_peppered
+    except (ValueError, TypeError):
+        return False, False
+
+
+def create_token(user: dict[str, Any], secret: str, token_type: str = "access", lifetime: int = 86400) -> str:
+    issued = int(time.time())
+    header = b64url(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
+    payload = b64url(json.dumps({
+        "sub": user["id"], "role": user["role"], "token_type": token_type,
+        "iat": issued, "exp": issued + lifetime,
+    }, separators=(",", ":")).encode())
+    signature = b64url(hmac.new(secret.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
+    return f"{header}.{payload}.{signature}"
+
+
+def decode_token(token: str, secret: str) -> dict[str, Any] | None:
+    try:
+        header, payload, signature = token.split(".", 2)
+        expected = b64url(hmac.new(secret.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
+        if not hmac.compare_digest(signature, expected):
+            return None
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        if int(claims.get("exp", 0)) <= int(time.time()) or claims.get("token_type") != "access":
+            return None
+        return claims
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
+def get_current_user(request: Request, authorization: str | None = Header(default=None), db: Any = Depends(get_db)) -> dict[str, Any]:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    claims = decode_token(authorization[7:].strip(), get_secret(request))
+    if not claims:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    request.state.user_id = claims["sub"]
+    return claims
+
+
+async def require_member(db: Any, conversation_id: str, user_id: str) -> None:
+    member = await first(db, "SELECT 1 AS ok FROM conversation_members WHERE conversation_id=? AND user_id=?", conversation_id, user_id)
+    if not member:
+        raise HTTPException(status_code=403, detail="Not a member of this conversation")
+
+
+def user_summary(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row["id"], "username": row["username"], "email": row["email"],
+        "role": row.get("role", "student"), "is_active": bool(row.get("is_active", 1)),
+        "is_verified": bool(row.get("is_verified", 1)), "full_name": row.get("full_name") or row["username"],
+        "display_name": row.get("display_name"), "bio": row.get("bio") or "",
+        "program": row.get("program"), "academic_year": row.get("academic_year"),
+        "department": row.get("department"), "status_text": row.get("status_text"),
+        "avatar_file_id": None, "banner_file_id": None, "avatar_url": row.get("avatar_url"),
+        "banner_url": row.get("banner_url"), "accent_color": row.get("accent_color"),
+    }
+
+
+async def load_user(db: Any, user_id: str) -> dict[str, Any] | None:
+    return await first(db, """SELECT u.id,u.username,u.email,u.role,u.is_active,u.is_verified,
+        p.full_name,p.display_name,p.bio,p.program,p.academic_year,p.department,p.status_text,
+        p.avatar_url,p.banner_url,p.accent_color
+        FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?""", user_id)
+
+
+class LoginRequest(BaseModel):
+    username_or_email: str = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=30, pattern=r"^[a-zA-Z0-9_]+$")
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=2, max_length=120)
+    program: str | None = "BS-MS"
+    academic_year: str | None = "1st Year"
+    department: str | None = "General Sciences"
+
+
+class FriendRequestBody(BaseModel):
+    pass
+
+
+class ConversationBody(BaseModel):
+    type: str = "direct"
+    title: str | None = Field(default=None, max_length=150)
+    description: str | None = Field(default=None, max_length=2000)
+    participant_user_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+class MessageBody(BaseModel):
+    content: str = Field(max_length=10000)
+    message_type: str = "text"
+    reply_to_id: str | None = None
+    attachment_file_ids: list[str] | None = None
+
+
+class MessageUpdate(BaseModel):
+    content: str = Field(max_length=10000)
+
+
+class ReactionBody(BaseModel):
+    emoji: str = Field(min_length=1, max_length=32)
+
+
+@app.get("/api/v1/health")
+async def health(db: Any = Depends(get_db)):
+    await first(db, "SELECT 1 AS ok")
+    return {"status": "ok", "database": "connected"}
+
+
+@app.post("/api/v1/auth/register", status_code=status.HTTP_201_CREATED)
+async def register(req: RegisterRequest, request: Request, db: Any = Depends(get_db)):
+    username, email = req.username.lower(), str(req.email).lower()
+    if await first(db, "SELECT 1 AS ok FROM users WHERE username=? OR email=?", username, email):
+        raise HTTPException(status_code=400, detail="Username or email is already registered")
+    user_id, stamp = new_id(), now()
+    try:
+        await execute(db, "INSERT INTO users(id,username,email,hashed_password,role,is_active,is_verified,created_at) VALUES(?,?,?,?,?,1,1,?)", user_id, username, email, await hash_password(req.password, get_password_pepper(request)), "student", stamp)
+        await execute(db, "INSERT INTO user_profiles(user_id,full_name,display_name,program,academic_year,department) VALUES(?,?,?,?,?,?)", user_id, req.full_name, req.full_name, req.program, req.academic_year, req.department)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Unable to create account") from exc
+    user = {"id": user_id, "username": username, "role": "student"}
+    return {"access_token": create_token(user, get_secret(request)), "refresh_token": create_token(user, get_secret(request), "refresh", 604800), "token_type": "bearer", "user_id": user_id, "username": username, "role": "student"}
+
+
+@app.post("/api/v1/auth/login")
+async def login(req: LoginRequest, request: Request, db: Any = Depends(get_db)):
+    key = req.username_or_email.strip().lower()
+    user = await first(db, "SELECT id,username,email,role,hashed_password,is_active FROM users WHERE username=? OR email=?", key, key)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    valid_password, is_peppered = await verify_password(req.password, user["hashed_password"], get_password_pepper(request))
+    if not valid_password:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    if not user["is_active"]:
+        raise HTTPException(status_code=403, detail="Account is disabled")
+    if not is_peppered:
+        await execute(db, "UPDATE users SET hashed_password=? WHERE id=?", await hash_password(req.password, get_password_pepper(request)), user["id"])
+    await execute(db, "UPDATE users SET last_login_at=? WHERE id=?", now(), user["id"])
+    return {"access_token": create_token(user, get_secret(request)), "refresh_token": create_token(user, get_secret(request), "refresh", 604800), "token_type": "bearer", "user_id": user["id"], "username": user["username"], "role": user["role"]}
+
+
+@app.get("/api/v1/auth/me")
+async def me(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    row = await load_user(db, user["sub"])
+    if not row:
+        raise HTTPException(status_code=401, detail="Account no longer exists")
+    return user_summary(row)
+
+
+@app.post("/api/v1/auth/logout")
+async def logout(_: dict[str, Any] = Depends(get_current_user)):
+    return {"message": "Successfully logged out"}
+
+
+@app.get("/api/v1/auth/demo-accounts")
+async def demo_accounts():
+    return [{"role": "student", "username": f"student{i}", "email": f"student{i}@iisertirupati.ac.in"} for i in range(1, 5)]
+
+
+@app.get("/api/v1/friends/search")
+async def search_users(q: str = Query(min_length=1, max_length=100), user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    needle = f"%{q.strip()}%"
+    rows = await query(db, """SELECT u.id,u.username,p.full_name,p.department,p.status_text,p.avatar_url,p.program
+        FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id
+        WHERE u.is_active=1 AND u.id<>? AND (u.username LIKE ? OR p.full_name LIKE ?)
+        ORDER BY u.username LIMIT 25""", user["sub"], needle, needle)
+    return [{"id": r["id"], "username": r["username"], "full_name": r.get("full_name") or r["username"], "avatar_url": r.get("avatar_url"), "department": r.get("department"), "program": r.get("program"), "status_text": r.get("status_text")} for r in rows]
+
+
+@app.get("/api/v1/friends")
+async def friends(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    rows = await query(db, """SELECT u.id,u.username,p.full_name,p.department,p.status_text,p.avatar_url,p.program
+        FROM friendships f JOIN users u ON u.id=CASE WHEN f.user_id_1=? THEN f.user_id_2 ELSE f.user_id_1 END
+        LEFT JOIN user_profiles p ON p.user_id=u.id WHERE f.user_id_1=? OR f.user_id_2=? ORDER BY u.username""", user["sub"], user["sub"], user["sub"])
+    return [{"id": r["id"], "username": r["username"], "full_name": r.get("full_name") or r["username"], "avatar_url": r.get("avatar_url"), "department": r.get("department"), "status_text": r.get("status_text"), "program": r.get("program")} for r in rows]
+
+
+@app.get("/api/v1/friends/requests")
+async def friend_requests(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    rows = await query(db, """SELECT fr.*,s.username sender_username,sp.full_name sender_name,r.username receiver_username
+        FROM friend_requests fr JOIN users s ON s.id=fr.sender_id LEFT JOIN user_profiles sp ON sp.user_id=s.id
+        JOIN users r ON r.id=fr.receiver_id WHERE fr.receiver_id=? AND fr.status='pending' ORDER BY fr.created_at""", user["sub"])
+    return [{"id": r["id"], "sender_id": r["sender_id"], "sender_username": r["sender_username"], "sender_name": r.get("sender_name") or r["sender_username"], "receiver_id": r["receiver_id"], "receiver_username": r["receiver_username"], "status": r["status"], "created_at": r["created_at"]} for r in rows]
+
+
+@app.post("/api/v1/friends/request/{target_user_id}")
+async def send_friend_request(target_user_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    current_id, stamp = user["sub"], now()
+    if target_user_id == current_id:
+        raise HTTPException(status_code=400, detail="Cannot send friend request to yourself")
+    if not await first(db, "SELECT 1 AS ok FROM users WHERE id=? AND is_active=1", target_user_id):
+        raise HTTPException(status_code=404, detail="User not found")
+    if await first(db, "SELECT 1 AS ok FROM blocked_users WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)", current_id, target_user_id, target_user_id, current_id):
+        raise HTTPException(status_code=400, detail="Cannot interact with blocked user")
+    low, high = sorted([current_id, target_user_id])
+    if await first(db, "SELECT 1 AS ok FROM friendships WHERE user_id_1=? AND user_id_2=?", low, high):
+        raise HTTPException(status_code=400, detail="Already friends")
+    existing = await first(db, "SELECT * FROM friend_requests WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?)", current_id, target_user_id, target_user_id, current_id)
+    if existing and existing["status"] == "pending":
+        raise HTTPException(status_code=400, detail="Friend request already pending")
+    if existing:
+        await execute(db, "UPDATE friend_requests SET sender_id=?,receiver_id=?,status='pending',created_at=?,updated_at=? WHERE id=?", current_id, target_user_id, stamp, stamp, existing["id"])
+    else:
+        await execute(db, "INSERT INTO friend_requests(id,sender_id,receiver_id,status,created_at,updated_at) VALUES(?,?,?,'pending',?,?)", new_id(), current_id, target_user_id, stamp, stamp)
+    return {"message": "Friend request sent"}
+
+
+@app.post("/api/v1/friends/accept/{request_id}")
+async def accept_friend_request(request_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    req = await first(db, "SELECT * FROM friend_requests WHERE id=? AND receiver_id=? AND status='pending'", request_id, user["sub"])
+    if not req:
+        raise HTTPException(status_code=404, detail="Pending request not found")
+    low, high = sorted([req["sender_id"], req["receiver_id"]])
+    stamp = now()
+    await execute(db, "UPDATE friend_requests SET status='accepted',updated_at=? WHERE id=?", stamp, request_id)
+    await execute(db, "INSERT OR IGNORE INTO friendships(id,user_id_1,user_id_2,created_at) VALUES(?,?,?,?)", new_id(), low, high, stamp)
+    return {"message": "Friend request accepted"}
+
+
+@app.post("/api/v1/friends/reject/{request_id}")
+async def reject_friend_request(request_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    req = await first(db, "SELECT id FROM friend_requests WHERE id=? AND receiver_id=? AND status='pending'", request_id, user["sub"])
+    if not req:
+        raise HTTPException(status_code=404, detail="Pending request not found")
+    await execute(db, "UPDATE friend_requests SET status='rejected',updated_at=? WHERE id=?", now(), request_id)
+    return {"message": "Friend request rejected"}
+
+
+@app.delete("/api/v1/friends/{target_user_id}")
+async def remove_friend(target_user_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    low, high = sorted([user["sub"], target_user_id])
+    result = await execute(db, "DELETE FROM friendships WHERE user_id_1=? AND user_id_2=?", low, high)
+    if not getattr(result, "meta", {}).get("changes", 0):
+        raise HTTPException(status_code=404, detail="Friendship not found")
+    return {"message": "Friend removed"}
+
+
+def profile_url(row: dict[str, Any]) -> str | None:
+    return row.get("avatar_url")
+
+
+async def format_message(db: Any, message: dict[str, Any]) -> dict[str, Any]:
+    sender = await first(db, "SELECT u.username,p.full_name FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?", message["sender_id"]) if message.get("sender_id") else None
+    reactions = await query(db, "SELECT emoji,user_id FROM message_reactions WHERE message_id=? ORDER BY created_at", message["id"])
+    grouped: dict[str, list[str]] = {}
+    for reaction in reactions:
+        grouped.setdefault(reaction["emoji"], []).append(reaction["user_id"])
+    reply = await first(db, "SELECT content FROM messages WHERE id=?", message["reply_to_id"]) if message.get("reply_to_id") else None
+    return {
+        "id": message["id"], "conversation_id": message["conversation_id"], "sender_id": message["sender_id"],
+        "sender_username": sender["username"] if sender else "Deleted User",
+        "sender_name": (sender.get("full_name") or sender["username"]) if sender else "Deleted User",
+        "content": "This message was deleted." if message["is_deleted"] else message["content"],
+        "message_type": message["message_type"], "reply_to_id": message.get("reply_to_id"),
+        "reply_preview": ((reply["content"][:50] + "..." if len(reply["content"]) > 50 else reply["content"]) if reply else None),
+        "is_pinned": bool(message["is_pinned"]), "is_edited": bool(message["is_edited"]), "is_deleted": bool(message["is_deleted"]),
+        "created_at": message["created_at"], "updated_at": message["updated_at"], "attachments": [],
+        "reactions": [{"emoji": emoji, "count": len(ids), "user_ids": ids} for emoji, ids in grouped.items()],
+    }
+
+
+async def conversation_summary(db: Any, conversation: dict[str, Any], current_user_id: str) -> dict[str, Any]:
+    members = await query(db, """SELECT u.id user_id,u.username,COALESCE(p.full_name,u.username) full_name,cm.role,p.avatar_url
+        FROM conversation_members cm JOIN users u ON u.id=cm.user_id LEFT JOIN user_profiles p ON p.user_id=u.id
+        WHERE cm.conversation_id=? ORDER BY cm.joined_at""", conversation["id"])
+    last = await first(db, "SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at DESC LIMIT 1", conversation["id"])
+    title = conversation.get("title")
+    if conversation["type"] == "direct" and not title:
+        title = next((m["full_name"] for m in members if m["user_id"] != current_user_id), "Direct Conversation")
+    return {
+        "id": conversation["id"], "type": conversation["type"], "title": title,
+        "description": conversation.get("description"), "creator_id": conversation.get("creator_id"),
+        "avatar_url": None, "banner_url": None, "last_message": await format_message(db, last) if last else None,
+        "unread_count": 0,
+        "members": [{"user_id": m["user_id"], "username": m["username"], "full_name": m["full_name"], "role": m["role"], "avatar_url": profile_url(m)} for m in members],
+        "created_at": conversation["created_at"],
+    }
+
+
+@app.get("/api/v1/messages/conversations")
+async def list_conversations(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    rows = await query(db, """SELECT c.* FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id
+        WHERE cm.user_id=? ORDER BY c.updated_at DESC""", user["sub"])
+    return [await conversation_summary(db, row, user["sub"]) for row in rows]
+
+
+@app.post("/api/v1/messages/conversations", status_code=status.HTTP_201_CREATED)
+async def create_conversation(req: ConversationBody, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if req.type not in {"direct", "group"}:
+        raise HTTPException(status_code=422, detail="Conversation type must be direct or group")
+    participant_ids = set(req.participant_user_ids) | {user["sub"]}
+    if req.type == "direct" and len(participant_ids) != 2:
+        raise HTTPException(status_code=422, detail="Direct conversations require exactly two participants")
+    users = await query(db, f"SELECT id FROM users WHERE is_active=1 AND id IN ({','.join('?' for _ in participant_ids)})", *participant_ids)
+    if len(users) != len(participant_ids):
+        raise HTTPException(status_code=404, detail="One or more participants were not found")
+    if req.type == "direct":
+        other = next(uid for uid in participant_ids if uid != user["sub"])
+        if await first(db, "SELECT 1 AS ok FROM blocked_users WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)", user["sub"], other, other, user["sub"]):
+            raise HTTPException(status_code=400, detail="Cannot message a blocked user")
+        matches = await query(db, """SELECT c.id FROM conversations c JOIN conversation_members a ON a.conversation_id=c.id AND a.user_id=?
+            JOIN conversation_members b ON b.conversation_id=c.id AND b.user_id=? WHERE c.type='direct'""", user["sub"], other)
+        if matches:
+            existing = await first(db, "SELECT * FROM conversations WHERE id=?", matches[0]["id"])
+            return await conversation_summary(db, existing, user["sub"])
+    conv_id, stamp = new_id(), now()
+    await execute(db, "INSERT INTO conversations(id,type,title,description,creator_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", conv_id, req.type, req.title, req.description, user["sub"], stamp, stamp)
+    for uid in participant_ids:
+        await execute(db, "INSERT INTO conversation_members(conversation_id,user_id,role,joined_at) VALUES(?,?,?,?)", conv_id, uid, "admin" if req.type == "group" and uid == user["sub"] else "member", stamp)
+    conversation = await first(db, "SELECT * FROM conversations WHERE id=?", conv_id)
+    return await conversation_summary(db, conversation, user["sub"])
+
+
+@app.get("/api/v1/messages/conversations/{conv_id}/messages")
+async def get_messages(conv_id: str, before_id: str | None = None, limit: int = Query(default=50, ge=1, le=100), user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_member(db, conv_id, user["sub"])
+    before = await first(db, "SELECT created_at FROM messages WHERE id=? AND conversation_id=?", before_id, conv_id) if before_id else None
+    if before_id and not before:
+        raise HTTPException(status_code=404, detail="Reference message not found")
+    if before:
+        rows = await query(db, "SELECT * FROM messages WHERE conversation_id=? AND created_at<? ORDER BY created_at DESC LIMIT ?", conv_id, before["created_at"], limit)
+    else:
+        rows = await query(db, "SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at DESC LIMIT ?", conv_id, limit)
+    return [await format_message(db, message) for message in reversed(rows)]
+
+
+@app.post("/api/v1/messages/conversations/{conv_id}/messages", status_code=status.HTTP_201_CREATED)
+async def send_message(conv_id: str, req: MessageBody, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_member(db, conv_id, user["sub"])
+    if req.message_type not in {"text", "image", "document", "voice", "system"}:
+        raise HTTPException(status_code=422, detail="Unsupported message type")
+    if req.reply_to_id and not await first(db, "SELECT 1 AS ok FROM messages WHERE id=? AND conversation_id=?", req.reply_to_id, conv_id):
+        raise HTTPException(status_code=400, detail="Reply target must belong to this conversation")
+    msg_id, stamp = new_id(), now()
+    await execute(db, "INSERT INTO messages(id,conversation_id,sender_id,content,message_type,reply_to_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", msg_id, conv_id, user["sub"], req.content, req.message_type, req.reply_to_id, stamp, stamp)
+    await execute(db, "UPDATE conversations SET updated_at=? WHERE id=?", stamp, conv_id)
+    message = await first(db, "SELECT * FROM messages WHERE id=?", msg_id)
+    return await format_message(db, message)
+
+
+@app.put("/api/v1/messages/messages/{message_id}")
+async def edit_message(message_id: str, req: MessageUpdate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    message = await first(db, "SELECT * FROM messages WHERE id=?", message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    await require_member(db, message["conversation_id"], user["sub"])
+    if message["sender_id"] != user["sub"]:
+        raise HTTPException(status_code=403, detail="You can only edit your own messages")
+    if message["is_deleted"]:
+        raise HTTPException(status_code=400, detail="Cannot edit a deleted message")
+    await execute(db, "UPDATE messages SET content=?,is_edited=1,updated_at=? WHERE id=?", req.content, now(), message_id)
+    updated = await first(db, "SELECT * FROM messages WHERE id=?", message_id)
+    return await format_message(db, updated)
+
+
+@app.delete("/api/v1/messages/messages/{message_id}")
+async def delete_message(message_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    message = await first(db, "SELECT * FROM messages WHERE id=?", message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    await require_member(db, message["conversation_id"], user["sub"])
+    if message["sender_id"] != user["sub"]:
+        raise HTTPException(status_code=403, detail="You can only delete your own messages")
+    await execute(db, "UPDATE messages SET content='',is_deleted=1,updated_at=? WHERE id=?", now(), message_id)
+    await execute(db, "DELETE FROM message_reactions WHERE message_id=?", message_id)
+    updated = await first(db, "SELECT * FROM messages WHERE id=?", message_id)
+    return await format_message(db, updated)
+
+
+@app.delete("/api/v1/messages/conversations/{conv_id}/messages")
+async def clear_conversation(conv_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_member(db, conv_id, user["sub"])
+    result = await execute(db, "DELETE FROM messages WHERE conversation_id=?", conv_id)
+    changes = getattr(result, "meta", {}).get("changes", 0)
+    return {"message": "Conversation history cleared", "cleared_count": changes}
+
+
+@app.post("/api/v1/messages/messages/{message_id}/reactions")
+async def toggle_reaction(message_id: str, req: ReactionBody, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    message = await first(db, "SELECT conversation_id,is_deleted FROM messages WHERE id=?", message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    await require_member(db, message["conversation_id"], user["sub"])
+    if message["is_deleted"]:
+        raise HTTPException(status_code=400, detail="Cannot react to a deleted message")
+    exists = await first(db, "SELECT 1 AS ok FROM message_reactions WHERE message_id=? AND user_id=? AND emoji=?", message_id, user["sub"], req.emoji)
+    if exists:
+        await execute(db, "DELETE FROM message_reactions WHERE message_id=? AND user_id=? AND emoji=?", message_id, user["sub"], req.emoji)
+    else:
+        await execute(db, "INSERT INTO message_reactions(message_id,user_id,emoji,created_at) VALUES(?,?,?,?)", message_id, user["sub"], req.emoji, now())
+    return await format_message(db, await first(db, "SELECT * FROM messages WHERE id=?", message_id))
+
+
+@app.post("/api/v1/messages/messages/{message_id}/pin")
+async def toggle_pin(message_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    message = await first(db, "SELECT * FROM messages WHERE id=?", message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    await require_member(db, message["conversation_id"], user["sub"])
+    pinned = not bool(message["is_pinned"])
+    await execute(db, "UPDATE messages SET is_pinned=?,updated_at=? WHERE id=?", int(pinned), now(), message_id)
+    return {"message": "Message pinned" if pinned else "Message unpinned", "is_pinned": pinned}
+
+
+@app.get("/api/v1/users/profile/{username}")
+async def public_profile(username: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    row = await first(db, "SELECT u.id,u.username,p.* FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.username=?", username.lower())
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    is_friend = bool(await first(db, "SELECT 1 AS ok FROM friendships WHERE (user_id_1=? AND user_id_2=?) OR (user_id_1=? AND user_id_2=?)", min(user["sub"], row["id"]), max(user["sub"], row["id"]), min(user["sub"], row["id"]), max(user["sub"], row["id"])))
+    return {"id": row["id"], "username": row["username"], "full_name": row.get("full_name") or row["username"], "display_name": row.get("display_name"), "bio": row.get("bio") or "", "program": row.get("program"), "academic_year": row.get("academic_year"), "department": row.get("department"), "status_text": row.get("status_text"), "avatar_url": row.get("avatar_url"), "banner_url": row.get("banner_url"), "accent_color": row.get("accent_color"), "is_friend": is_friend, "is_blocked": False, "mutual_friends_count": 0}
+
+
+@app.put("/api/v1/users/profile")
+async def update_profile(payload: dict[str, Any], user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    allowed = {"full_name", "display_name", "bio", "program", "academic_year", "department", "status_text", "accent_color"}
+    values = {key: value for key, value in payload.items() if key in allowed}
+    if "full_name" in values and (not isinstance(values["full_name"], str) or len(values["full_name"]) > 120):
+        raise HTTPException(status_code=422, detail="Invalid full name")
+    if "bio" in values and (not isinstance(values["bio"], str) or len(values["bio"]) > 1000):
+        raise HTTPException(status_code=422, detail="Invalid bio")
+    if values:
+        columns = ",".join(f"{key}=?" for key in values)
+        await execute(db, f"UPDATE user_profiles SET {columns} WHERE user_id=?", *values.values(), user["sub"])
+    row = await load_user(db, user["sub"])
+    return user_summary(row)
+
+
+@app.get("/api/v1/ai/tools")
+async def list_ai_tools():
+    return []
+
+
+@app.get("/api/v1/ai/conversations")
+async def list_ai_conversations(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    rows = await query(db, "SELECT id,title,parent_id,created_at,updated_at FROM ai_conversations WHERE user_id=? ORDER BY updated_at DESC", user["sub"])
+    return [make_ai_conversation(row) for row in rows]
+
+
+@app.post("/api/v1/ai/conversations", status_code=status.HTTP_201_CREATED)
+async def create_ai_conversation(req: AIConversationCreate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    stamp, conv_id = now(), new_id()
+    title = (req.title or "New AI Conversation").strip()[:150] or "New AI Conversation"
+    await execute(db, "INSERT INTO ai_conversations(id,user_id,title,parent_id,created_at,updated_at) VALUES(?,?,?,NULL,?,?)", conv_id, user["sub"], title, stamp, stamp)
+    return {"id": conv_id, "title": title, "parent_id": None, "created_at": stamp, "updated_at": stamp}
+
+
+@app.post("/api/v1/ai/conversations/{conv_id}/threads", status_code=status.HTTP_201_CREATED)
+async def create_ai_thread(conv_id: str, req: AIConversationCreate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if not await first(db, "SELECT 1 AS ok FROM ai_conversations WHERE id=? AND user_id=?", conv_id, user["sub"]):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    stamp, thread_id = now(), new_id()
+    title = (req.title or "New thread").strip()[:150] or "New thread"
+    await execute(db, "INSERT INTO ai_conversations(id,user_id,title,parent_id,created_at,updated_at) VALUES(?,?,?,?,?,?)", thread_id, user["sub"], title, conv_id, stamp, stamp)
+    return {"id": thread_id, "title": title, "parent_id": conv_id, "created_at": stamp, "updated_at": stamp}
+
+
+@app.delete("/api/v1/ai/conversations/{conv_id}")
+async def delete_ai_conversation(conv_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if not await first(db, "SELECT 1 AS ok FROM ai_conversations WHERE id=? AND user_id=?", conv_id, user["sub"]):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    deleted_ids, frontier = [conv_id], [conv_id]
+    while frontier:
+        children = []
+        for parent_id in frontier:
+            children.extend(row["id"] for row in await query(db, "SELECT id FROM ai_conversations WHERE parent_id=? AND user_id=?", parent_id, user["sub"]))
+        frontier = [child_id for child_id in children if child_id not in deleted_ids]
+        deleted_ids.extend(frontier)
+    await execute(db, "DELETE FROM ai_conversations WHERE id=? AND user_id=?", conv_id, user["sub"])
+    return {"status": "deleted", "deleted_ids": deleted_ids}
+
+
+@app.get("/api/v1/ai/conversations/{conv_id}/messages")
+async def get_ai_messages(conv_id: str, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200), user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if not await first(db, "SELECT 1 AS ok FROM ai_conversations WHERE id=? AND user_id=?", conv_id, user["sub"]):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    rows = await query(db, "SELECT id,role,content,created_at FROM ai_messages WHERE conversation_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?", conv_id, limit + 1, offset)
+    has_more = len(rows) > limit
+    messages = list(reversed(rows[:limit]))
+    return {"has_more": has_more, "next_offset": offset + len(messages), "messages": messages, "tool_executions": []}
+
+
+@app.post("/api/v1/ai/conversations/{conv_id}/chat")
+async def send_ai_message(conv_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if not await first(db, "SELECT 1 AS ok FROM ai_conversations WHERE id=? AND user_id=?", conv_id, user["sub"]):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    raise HTTPException(status_code=503, detail="AI responses are not configured on this Cloudflare deployment yet. Your message was not sent.")
+
+
+@app.get("/api/v1/campus/daily-question")
+async def get_daily_question(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    question = await first(db, "SELECT * FROM daily_questions ORDER BY date DESC,created_at DESC LIMIT 1")
+    if not question:
+        return {"id": None, "date": "Today", "category": "Physics", "question_latex": "A daily question will appear here once one is published.", "explanation_latex": "", "options": [], "points": 10, "answered_count": 0, "user_answer": None, "total_points": 0}
+    return await make_daily_question(db, question, user["sub"])
+
+
+@app.get("/api/v1/campus/daily-questions")
+async def list_daily_questions(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    questions = await query(db, "SELECT * FROM daily_questions ORDER BY date DESC,created_at DESC")
+    items = []
+    for question in questions:
+        count = await first(db, "SELECT COUNT(*) AS total FROM daily_question_answers WHERE question_id=?", question["id"])
+        items.append({"id": question["id"], "date": question["date"], "category": question["category"], "question_latex": question["question_latex"], "explanation_latex": question["explanation_latex"], "options": json.loads(question["options_json"] or "[]"), "points": question["points"], "answered_count": int((count or {}).get("total") or 0)})
+    return items
+
+
+@app.post("/api/v1/campus/daily-questions/{question_id}/answers", status_code=status.HTTP_201_CREATED)
+async def submit_daily_question_answer(question_id: str, req: DailyQuestionAnswerCreate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    question = await first(db, "SELECT id,points FROM daily_questions WHERE id=?", question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    if req.attachment_file_id:
+        raise HTTPException(status_code=501, detail="PDF attachments are not configured for the Cloudflare backend yet")
+    if await first(db, "SELECT 1 AS ok FROM daily_question_answers WHERE question_id=? AND user_id=?", question_id, user["sub"]):
+        raise HTTPException(status_code=409, detail="You have already submitted an answer to this question")
+    answer_id, stamp = new_id(), now()
+    try:
+        await execute(db, "INSERT INTO daily_question_answers(id,question_id,user_id,answer_latex,selected_option,attachment_file_id,points_awarded,submitted_at) VALUES(?,?,?,?,?,NULL,?,?)", answer_id, question_id, user["sub"], req.answer_latex.strip(), req.selected_option, question["points"], stamp)
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail="Your answer could not be saved. You may already have answered this question.") from exc
+    total = await first(db, "SELECT COALESCE(SUM(points_awarded),0) AS total FROM daily_question_answers WHERE user_id=?", user["sub"])
+    return {"id": answer_id, "question_id": question_id, "answer_latex": req.answer_latex.strip(), "selected_option": req.selected_option, "attachment_file_id": None, "points_awarded": question["points"], "total_points": int((total or {}).get("total") or 0), "submitted_at": stamp}
+
+
+@app.get("/api/v1/campus/daily-questions/{question_id}/answers")
+async def list_daily_question_answers(question_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if not await first(db, "SELECT 1 AS ok FROM daily_question_answers WHERE question_id=? AND user_id=?", question_id, user["sub"]):
+        raise HTTPException(status_code=403, detail="Submit your answer before viewing community answers")
+    rows = await query(db, """SELECT a.id,a.answer_latex,a.selected_option,a.attachment_file_id,a.points_awarded,a.submitted_at,u.username,p.full_name,p.display_name
+        FROM daily_question_answers a JOIN users u ON u.id=a.user_id LEFT JOIN user_profiles p ON p.user_id=u.id
+        WHERE a.question_id=? AND a.user_id<>? ORDER BY a.submitted_at DESC""", question_id, user["sub"])
+    results = []
+    for row in rows:
+        comments = await query(db, """SELECT c.id,c.parent_comment_id,c.content,c.created_at,u.username,p.full_name,p.display_name
+            FROM daily_question_answer_comments c JOIN users u ON u.id=c.user_id LEFT JOIN user_profiles p ON p.user_id=u.id
+            WHERE c.answer_id=? ORDER BY c.created_at""", row["id"])
+        results.append({"id": row["id"], "author_name": row.get("display_name") or row.get("full_name") or row["username"], "answer_latex": row["answer_latex"], "selected_option": row["selected_option"], "attachment_file_id": row["attachment_file_id"], "points_awarded": row["points_awarded"], "submitted_at": row["submitted_at"], "comments": [{"id": c["id"], "parent_comment_id": c["parent_comment_id"], "author_name": c.get("display_name") or c.get("full_name") or c["username"], "content": c["content"], "created_at": c["created_at"]} for c in comments]})
+    return results
+
+
+@app.post("/api/v1/campus/daily-questions/{question_id}/answers/{answer_id}/comments", status_code=status.HTTP_201_CREATED)
+async def comment_on_daily_question_answer(question_id: str, answer_id: str, req: DailyQuestionAnswerCommentCreate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if not await first(db, "SELECT 1 AS ok FROM daily_question_answers WHERE question_id=? AND user_id=?", question_id, user["sub"]):
+        raise HTTPException(status_code=403, detail="Submit your answer before joining the discussion")
+    if not await first(db, "SELECT 1 AS ok FROM daily_question_answers WHERE id=? AND question_id=?", answer_id, question_id):
+        raise HTTPException(status_code=404, detail="Answer not found")
+    if req.parent_comment_id and not await first(db, "SELECT 1 AS ok FROM daily_question_answer_comments WHERE id=? AND answer_id=?", req.parent_comment_id, answer_id):
+        raise HTTPException(status_code=404, detail="Parent comment not found")
+    comment_id, stamp, content = new_id(), now(), req.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="Comment cannot be blank")
+    await execute(db, "INSERT INTO daily_question_answer_comments(id,answer_id,user_id,parent_comment_id,content,created_at) VALUES(?,?,?,?,?,?)", comment_id, answer_id, user["sub"], req.parent_comment_id, content, stamp)
+    return {"id": comment_id, "answer_id": answer_id, "parent_comment_id": req.parent_comment_id, "content": content, "created_at": stamp}
+
+
+@app.post("/api/v1/campus/daily-question-proposals", status_code=status.HTTP_201_CREATED)
+async def create_daily_question_proposal(req: DailyQuestionProposalCreate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    category = req.category.strip()
+    if category not in {"Physics", "Chemistry", "Mathematics"} or any(not item.strip() for item in req.options):
+        raise HTTPException(status_code=422, detail="Choose a valid category and provide four answer options")
+    proposal_id, stamp = new_id(), now()
+    await execute(db, "INSERT INTO daily_question_proposals(id,user_id,category,question_latex,options_json,correct_option,explanation_latex,template_notes,animation_notes,status,submitted_at) VALUES(?,?,?,?,?,?,?,?,?,'pending',?)", proposal_id, user["sub"], category, req.question_latex.strip(), json.dumps([item.strip() for item in req.options]), req.correct_option, req.explanation_latex.strip(), req.template_notes, req.animation_notes, stamp)
+    return {"id": proposal_id, "status": "pending", "submitted_at": stamp}
+
+
+@app.get("/api/v1/campus/daily-question-proposals")
+async def list_daily_question_proposals(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if user.get("role") not in {"administrator", "moderator"}:
+        raise HTTPException(status_code=403, detail="Only QOTD reviewers can view creator applications")
+    rows = await query(db, """SELECT d.*,u.username,p.full_name,p.display_name FROM daily_question_proposals d
+        JOIN users u ON u.id=d.user_id LEFT JOIN user_profiles p ON p.user_id=u.id ORDER BY d.submitted_at DESC LIMIT 100""")
+    return [{"id": r["id"], "author_name": r.get("display_name") or r.get("full_name") or r["username"], "category": r["category"], "question_latex": r["question_latex"], "options": json.loads(r["options_json"]), "correct_option": r["correct_option"], "explanation_latex": r["explanation_latex"], "template_notes": r["template_notes"], "animation_notes": r["animation_notes"], "status": r["status"], "submitted_at": r["submitted_at"]} for r in rows]
+
+
+@app.get("/{path:path}")
+async def spa_fallback(path: str, request: Request):
+    assets = request.scope.get("env")
+    binding = getattr(assets, "ASSETS", None) if assets is not None else None
+    if binding is not None:
+        if path == "api" or path.startswith("api/"):
+            return JSONResponse({"detail": "Not found"}, status_code=404)
+        asset_url = f"https://assets.local/{path}"
+        asset_response = await binding.fetch(asset_url)
+        return Response(content=await asset_response.bytes(), status_code=asset_response.status, headers=asset_response.headers)
+    return JSONResponse({"detail": "Not found"}, status_code=404)
+
+
+class Default(WorkerEntrypoint):
+    async def fetch(self, request):
+        return await asgi.fetch(app, request, self.env)

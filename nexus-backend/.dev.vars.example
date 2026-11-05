@@ -1,0 +1,2 @@
+JWT_SECRET=replace-with-a-private-random-secret-before-local-use
+PASSWORD_PEPPER=replace-with-another-private-random-secret-before-local-use

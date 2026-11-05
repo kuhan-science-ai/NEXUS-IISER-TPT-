@@ -1,0 +1,21 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "nexus-backend",
+	"main": "src/entry.py",
+	"compatibility_date": "2026-11-05",
+	"compatibility_flags": ["python_workers"],
+	"observability": { "enabled": true },
+	"d1_databases": [
+		{
+			"binding": "nexus_database",
+			"database_name": "nexus-database",
+			"database_id": "2dfcfa0c-0f00-4865-a484-0e0a5e74877f"
+		}
+	],
+	"assets": {
+		"directory": "../frontend/dist",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": true
+	}
+}
