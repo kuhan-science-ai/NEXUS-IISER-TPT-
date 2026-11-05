@@ -8,6 +8,8 @@ NEXUS is a student community and academic platform for IISER Tirupati. The activ
 
 ## Current status
 
+- Cloudflare Pages proxies same-origin `/api/*` requests to the deployed `nexus-backend` Worker. The browser keeps using `/api/v1` without cross-origin requests. The Worker currently supports beta authentication, profiles, friends, and direct/group messaging; other APIs and WebSockets are not yet served by this Cloudflare backend.
+
 - Four separate beta student accounts (student1–student4) are seeded with the same beta password and can log in using their username or institute email. The login screen lists selectable account names. Fresh browser sessions now remain signed out so users can choose an account; the Courses preview stays available as an explicit action. The public demo-account endpoint lists usernames and emails only, never passwords.
 
 - Friends and Messenger no longer display seeded demo people, requests, conversations, or messages. Friends and requests load from the API, student search can send requests, and Messenger loads persisted conversations, sends stored messages, and listens for WebSocket updates. Beta history clearing soft-deletes messages for the selected conversation and broadcasts the change.
