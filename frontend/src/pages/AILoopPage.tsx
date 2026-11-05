@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api, UserSummary } from '../services/api';
 import { MathRenderer } from '../components/MathRenderer';
 import { SideNav } from '../components/SideNav';
-import { Activity, Ban, BarChart3, Bot, BrainCircuit, Circle, CircleCheck, CircleX, Database, GitFork, Radio, Save, Search, Settings2, ShieldCheck, Target, Trash2, Wrench, Zap, type LucideIcon } from 'lucide-react';
+import { Activity, Ban, BarChart3, Bot, BrainCircuit, Circle, CircleCheck, CircleX, Copy, Database, GitFork, Radio, Reply, Save, Search, Settings2, ShieldCheck, Target, Trash2, Wrench, Zap, type LucideIcon } from 'lucide-react';
 
 interface AILoopPageProps {
   currentUser: UserSummary | null;
@@ -54,6 +54,18 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
   const [loadingEarlierMessages, setLoadingEarlierMessages] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [assistantName, setAssistantName] = useState(readAssistantName);
+
+  const copyMessage = async (content: string) => { try { await navigator.clipboard.writeText(content); } catch { setRequestError('Could not copy this message in this browser.'); } };
+  const quoteMessage = (content: string) => { setPrompt(value => `${value}${value ? '\n' : ''}> ${content.split('\n').join('\n> ')}\n\n`); document.querySelector<HTMLInputElement>('[data-ai-prompt]')?.focus(); };
+  const renderChatMessage = (message: any, index: number, messages: any[], content = message.content) => {
+    const role = message.role === 'user' ? 'user' : 'assistant';
+    const grouped = index > 0 && (messages[index - 1].role === 'user' ? 'user' : 'assistant') === role;
+    const name = role === 'user' ? (currentUser.display_name || currentUser.full_name || currentUser.username) : assistantName;
+    return <article className={`nexus-ai-chat-message${grouped ? ' grouped' : ''}`} key={message.id || index}>
+      <span className="nexus-ai-chat-avatar-slot">{!grouped && (role === 'user' && currentUser.avatar_url ? <img className="nexus-ai-chat-avatar" src={currentUser.avatar_url} alt="" /> : <span className="nexus-ai-chat-avatar">{role === 'user' ? name.slice(0, 1).toUpperCase() : <Bot size={15} />}</span>)}</span>
+      <div className="nexus-ai-chat-body">{!grouped && <div className="nexus-ai-chat-meta"><strong>{name}</strong><time>{message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'now'}</time></div>}<div className="nexus-ai-chat-text">{content ? <MathRenderer content={content} /> : message.status || (isProcessing ? 'Thinking…' : '')}</div><div className="nexus-ai-chat-actions"><button type="button" title="Copy message" onClick={() => void copyMessage(content)}><Copy size={13} /></button><button type="button" title="Reply to message" onClick={() => quoteMessage(content)}><Reply size={14} /></button></div></div>
+    </article>;
+  };
 
   useEffect(() => {
     const updateAssistantName = (event?: Event) => {
@@ -238,13 +250,13 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
         }}>
           {/* Header */}
           <div style={{ padding: '20px', borderBottom: '1px solid var(--border)' }}>
-            <h2 style={{ fontWeight: '700', fontSize: '15px', marginBottom: '12px' }}>AI Orchestration</h2>
+            <h2 style={{ fontWeight: '700', fontSize: '15px', marginBottom: '12px' }}>NEXUS AI Assistant</h2>
             <button onClick={handleCreateConversation} style={{
               width: '100%', padding: '9px',
               background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
               color: 'white', border: 'none', borderRadius: 'var(--radius-sm)',
               fontWeight: '600', fontSize: '13px',
-            }}>+ New Session</button>
+            }}>+ New Chat</button>
           </div>
 
           {/* Sessions */}
@@ -295,9 +307,9 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
             display: 'flex', alignItems: 'center', gap: '12px',
           }}>
             <div>
-              <h3 style={{ fontWeight: '700', fontSize: '16px', marginBottom: '2px' }}>14-Stage AI Orchestration Loop</h3>
+              <h3 style={{ fontWeight: '700', fontSize: '16px', marginBottom: '2px' }}>AI Study Companion</h3>
               <p style={{ fontSize: '12px', color: 'var(--text-faint)' }}>
-                Cloudflare sessions · AI response provider not configured
+                Cloudflare Workers AI · Llama 3.1 8B · conversation history saved
               </p>
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
@@ -312,17 +324,10 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
           {/* Content area */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-            {conversationMessages.length > 0 && <section aria-label="Conversation history" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {(conversationMessages.length > 0 || streamedText) && <section className="nexus-ai-chat-history" aria-label="Conversation history">
               {hasMoreMessages && <button type="button" disabled={loadingEarlierMessages} onClick={() => activeConvId && void loadMessages(activeConvId, messageOffset, true)} style={{ alignSelf: 'center', padding: '7px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg-raised)', color: 'var(--text-muted)', fontSize: 12 }}>{loadingEarlierMessages ? 'Loading…' : 'Load earlier messages'}</button>}
-              {conversationMessages.map((message, index) => <div key={message.id || index} style={{
-                alignSelf: message.role === 'user' ? 'flex-end' : 'stretch', maxWidth: message.role === 'user' ? '78%' : '100%',
-                padding: '12px 16px', borderRadius: 'var(--radius-md)',
-                background: message.role === 'user' ? 'rgba(139,92,246,0.14)' : 'var(--bg-surface)',
-                border: '1px solid var(--border)', lineHeight: 1.65,
-              }}><strong style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginBottom: 4 }}>{message.role === 'user' ? 'You' : assistantName}</strong>
-                <MathRenderer content={message.content} />
-              </div>)}
-              {streamedText && <div aria-live="polite" style={{ alignSelf: 'stretch', maxWidth: '100%', padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface)', border: '1px solid var(--border)', lineHeight: 1.65 }}><strong style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginBottom: 4 }}>{assistantName}</strong><MathRenderer content={streamedText} /></div>}
+              {conversationMessages.map((message, index, messages) => renderChatMessage(message, index, messages))}
+              {streamedText && <div aria-live="polite">{renderChatMessage({ id: 'streaming-response', role: 'assistant', created_at: new Date().toISOString() }, conversationMessages.length, [...conversationMessages, { role: 'assistant' }], streamedText)}</div>}
             </section>}
 
             {/* Safety confirmation gate */}
@@ -396,8 +401,8 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
           {/* Prompt input */}
           <div style={{ padding: '12px 28px 16px', borderTop: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
             <form onSubmit={handleSendPrompt} style={{ display: 'flex', gap: '10px' }}>
-              <input type="text" maxLength={12000}
-                placeholder="Try: 'search repository for quantum notes' or 'send email to professor'…"
+              <input data-ai-prompt type="text" maxLength={4000}
+                placeholder="Ask a question or get help studying…"
                 value={prompt} onChange={e => setPrompt(e.target.value)}
                 disabled={isProcessing}
                 style={{ flex: 1, padding: '12px 16px', fontSize: '14px', borderRadius: 'var(--radius-md)', opacity: isProcessing ? 0.6 : 1 }}

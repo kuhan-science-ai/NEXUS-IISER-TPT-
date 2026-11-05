@@ -45,6 +45,10 @@ NEXUS is designed following a clean, modular, layered architecture to ensure sep
 5. **Core (`backend/app/core/`)**: Configuration settings, security utilities (bcrypt, JWT), dependency injection.
 6. **WebSockets (`backend/app/ws/`)**: Connection lifecycle, channel subscriptions, room routing, authentication on handshake.
 
+## File Storage
+
+`backend/app/services/storage.py` keeps the existing four-value upload contract and `FileMetadata` table. Local disk remains the default when the three `CLOUDINARY_*` settings are blank. When all Cloudinary settings are configured, new uploads go to Cloudinary; public avatars, banners, and academic resources use public delivery, while private uploads use authenticated delivery and short-lived signed download redirects. Cloudinary identifiers and delivery metadata are stored in the existing `file_path` column, so no migration is needed. Existing local files continue to be served from disk; this does not automatically migrate previously uploaded files. The `/files/{id}/download` and authorized daily-answer attachment routes handle both storage backends.
+
 ## Frontend Layer Responsibilities
 1. **Pages (`frontend/src/pages/`)**: Unstyled/minimally styled functional test screens for each subsystem (Auth, Messaging, Profiles, AI Studio, LaTeX preview, Academic Repository).
 2. **Components (`frontend/src/components/`)**:
@@ -95,8 +99,8 @@ The floating Ask AI panel (`frontend/src/components/AIQuickPanel.tsx`) and the A
 
 The gate is local to one application process. It prevents unbounded inference fan-out and absorbs bursts, but a single Ollama model and SQLite do not guarantee low latency for 500 simultaneous users. That target requires shared admission/queue infrastructure, a production database such as PostgreSQL, and model-serving capacity sized for the intended concurrency; these are not implemented here.
 
-## Cloudflare Backend (beta)
+## Cloudflare Worker Backend (Partial)
 
-The Pages Function at `frontend/functions/api/[[path]].ts` forwards same-origin `/api/*` requests to the deployed `nexus-backend` Python Worker. The Worker uses D1 for beta authentication, profiles, friends, direct/group messaging, AI conversation sessions/threads, and QOTD/AOTD questions, archives, answers, and comments. The D1 migrations are in `nexus-backend/migrations`; Worker secrets are configured in Cloudflare and are not committed.
+`nexus-backend/` is a separate Cloudflare deployment that keeps the `/api/v1` URL contract and serves the Vite `frontend/dist` assets on the same origin. It uses FastAPI through Cloudflare's Python Workers ASGI adapter and accesses D1 through the `nexus_database` binding with prepared statements. Its migrations define accounts/profiles, friendship requests/edges, conversations/members, messages, reactions, AI sessions/messages, and QOTD answers/proposals/comments. The Pages Function at `frontend/functions/api/[[path]].ts` forwards same-origin `/api/*` calls to this Worker. Local Wrangler D1 is the default; production applies migrations explicitly with `--remote`.
 
-AI conversation creation and history work, but AI response generation returns an explicit unavailable response until a model provider is configured. The initial QOTD is seeded in D1. PDF uploads, WebSockets, and the rest of the application APIs are not yet migrated to this Worker.
+The Worker implements authentication, basic profile reads/updates, friends/requests/search, persistent messaging, AI conversation and message persistence, and the QOTD/AOTD question, archive, submission, and discussion routes. Workers AI is bound as `AI` and the chat route calls `@cf/meta/llama-3.1-8b-instruct-fp8`; it limits prompts to 4,000 characters, recent history to ten turns, page context to 2,500 characters, output to 512 tokens, and usage to 20 user messages per UTC day. Both AI interfaces render plain chat rows with grouped sender avatars and hover copy/reply controls. Group discovery remains browser-local, but membership uses a per-user ID list so joined groups remain discoverable without presenting a second join action. PDF uploads, settings, notifications, and WebSocket delivery are not migrated. The existing FastAPI/SQLAlchemy backend remains the complete local implementation.

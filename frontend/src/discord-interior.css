@@ -1,4 +1,24 @@
 /* Discord-inspired app chrome. This stylesheet is activated only on interior routes. */
+.nexus-ai-chat-history { display:flex; flex-direction:column; gap:2px; width:100%; }
+.nexus-ai-chat-message { position:relative; display:flex; gap:9px; min-height:28px; padding:4px 30px 3px 0; border-radius:3px; background:transparent; }
+.nexus-ai-chat-message:hover { background:color-mix(in srgb,var(--text-primary) 4%,transparent); }
+.nexus-ai-chat-message.grouped { min-height:22px; padding-top:0; padding-bottom:1px; }
+.nexus-ai-chat-avatar-slot { display:flex; width:32px; flex:none; justify-content:center; }
+.nexus-ai-chat-avatar { display:grid; width:30px; height:30px; flex:none; place-items:center; overflow:hidden; border-radius:50%; background:var(--bg-elevated); color:var(--text-primary); object-fit:cover; font-size:12px; font-weight:700; }
+.nexus-ai-chat-message.grouped .nexus-ai-chat-avatar-slot { visibility:hidden; }
+.nexus-ai-chat-body { position:relative; min-width:0; flex:1; }
+.nexus-ai-chat-meta { display:flex; align-items:center; gap:8px; min-height:19px; color:#8b5cf6; font-size:11px; }
+.nexus-ai-chat-meta strong { font-weight:600; }
+.nexus-ai-chat-meta time { color:var(--text-subtle); font-size:9px; }
+.nexus-ai-chat-text { color:var(--text-primary); font-size:13px; line-height:1.5; overflow-wrap:anywhere; white-space:pre-wrap; }
+.nexus-ai-chat-actions { position:absolute; top:-5px; right:0; display:flex; gap:2px; padding:2px 4px; border:1px solid var(--border); border-radius:6px; background:var(--bg-surface); opacity:0; pointer-events:none; box-shadow:var(--shadow-card); }
+.nexus-ai-chat-message:hover .nexus-ai-chat-actions,.nexus-ai-chat-message:focus-within .nexus-ai-chat-actions { opacity:1; pointer-events:auto; }
+.nexus-ai-chat-actions button { display:grid; width:24px; height:22px; place-items:center; border:0; border-radius:4px; background:transparent; color:var(--text-muted); cursor:pointer; }
+.nexus-ai-chat-actions button:hover { background:var(--bg-elevated); color:var(--text-primary); }
+.nexus-ai-chat-quick-history .nexus-ai-chat-text { font-size:12px; }
+.nexus-ai-chat-quick-history .nexus-ai-chat-avatar-slot { width:27px; }
+.nexus-ai-chat-quick-history .nexus-ai-chat-avatar { width:26px; height:26px; }
+.nexus-ai-chat-quick-history .nexus-ai-chat-message { gap:7px; padding-right:24px; }
 .discord-interior-scope {
   --bg-canvas: #36393f;
   --bg-navigation: #2f3136;

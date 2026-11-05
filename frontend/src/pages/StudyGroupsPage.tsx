@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Compass, Forward, Hash, ImagePlus, LockKeyhole, MoreHorizontal, Plus, Search, Settings, SmilePlus, Trash2, UsersRound, X } from 'lucide-react';
 import { UserSummary } from '../services/api';
 import { SideNav } from '../components/SideNav';
@@ -8,17 +8,17 @@ import './StudyGroupsPage.css';
 
 interface StudyGroupsPageProps { currentUser: UserSummary | null; onLogout?: () => void; }
 type GroupChannel = { id: string; name: string };
-type CampusGroup = { id: string; name: string; description: string; icon: string; banner: string; joined: boolean; channels: GroupChannel[] };
+type CampusGroup = { id: string; name: string; description: string; icon: string; banner: string; joinedBy: string[]; ownerId?: string; channels: GroupChannel[]; joined?: boolean };
 type GroupMessage = { id: string; text: string; sender: string; at: string; reactions: string[]; replyToId?: string };
 const STORAGE_KEY = 'nexus-campus-groups-v1';
 const defaultChannels = (): GroupChannel[] => [{ id: crypto.randomUUID(), name: 'general' }, { id: crypto.randomUUID(), name: 'discussion' }, { id: crypto.randomUUID(), name: 'hangout' }];
-const readGroups = (): CampusGroup[] => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; } };
+const readGroups = (userId: string): CampusGroup[] => { try { const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); const groups = stored.map((group: CampusGroup) => { const { joined, ...rest } = group; return { ...rest, joinedBy: group.joinedBy || (joined ? [userId] : []) }; }); localStorage.setItem(STORAGE_KEY, JSON.stringify(groups)); return groups; } catch { return []; } };
 
 export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, onLogout }) => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [section, setSection] = useState<'joined' | 'discover'>('joined');
-  const [groups, setGroups] = useState<CampusGroup[]>(readGroups);
+  const [groups, setGroups] = useState<CampusGroup[]>(() => readGroups(currentUser?.id || ''));
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -38,14 +38,17 @@ export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, o
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   if (!currentUser) return null;
 
+  useEffect(() => { if (currentUser) setGroups(readGroups(currentUser.id)); }, [currentUser?.id]);
   const persist = (next: CampusGroup[]) => { setGroups(next); localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); };
-  const visibleGroups = useMemo(() => groups.filter(group => (section === 'joined' ? group.joined : !group.joined) && `${group.name} ${group.description}`.toLowerCase().includes(query.toLowerCase())), [groups, query, section]);
+  const isJoined = (group: CampusGroup) => group.joinedBy.includes(currentUser.id);
+  const joinGroup = (group: CampusGroup) => persist(groups.map(item => item.id === group.id ? { ...item, joinedBy: [...new Set([...item.joinedBy, currentUser.id])] } : item));
+  const visibleGroups = useMemo(() => groups.filter(group => (section === 'joined' ? group.joinedBy.includes(currentUser.id) : true) && `${group.name} ${group.description}`.toLowerCase().includes(query.toLowerCase())), [groups, query, section, currentUser.id]);
   const activeGroup = groups.find(group => group.id === activeGroupId) || null;
   const activeChannel = activeGroup?.channels.find(channel => channel.id === activeChannelId) || activeGroup?.channels[0] || null;
   const messageKey = activeGroup && activeChannel ? `${activeGroup.id}:${activeChannel.id}` : '';
   const addGroup = () => {
     if (!draftName.trim()) return;
-    const group: CampusGroup = { id: crypto.randomUUID(), name: draftName.trim(), description: draftDescription.trim(), icon: imagePreview || draftIcon, banner: draftBanner, joined: true, channels: defaultChannels() };
+    const group: CampusGroup = { id: crypto.randomUUID(), name: draftName.trim(), description: draftDescription.trim(), icon: imagePreview || draftIcon, banner: draftBanner, joinedBy: [currentUser.id], ownerId: currentUser.id, channels: defaultChannels() };
     persist([...groups, group]); setActiveGroupId(group.id); setActiveChannelId(group.channels[0].id); setCreateOpen(false); setDraftName(''); setDraftDescription(''); setDraftIcon('✦'); setImagePreview('');
   };
   const updateGroup = (updated: CampusGroup) => persist(groups.map(group => group.id === updated.id ? updated : group));
@@ -68,10 +71,10 @@ export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, o
       <main className="study-groups-main nexus-groups-main">
         <aside className="nexus-group-rail">
           <div className="nexus-group-rail-heading"><UsersRound size={17} /><strong>Groups</strong></div>
-          <button className={`nexus-group-nav ${section === 'joined' ? 'active' : ''}`} onClick={() => { setSection('joined'); setActiveGroupId(null); }}><UsersRound size={16} /> My groups <span>{groups.filter(group => group.joined).length}</span></button>
+          <button className={`nexus-group-nav ${section === 'joined' ? 'active' : ''}`} onClick={() => { setSection('joined'); setActiveGroupId(null); }}><UsersRound size={16} /> My groups <span>{groups.filter(isJoined).length}</span></button>
           <button className={`nexus-group-nav ${section === 'discover' ? 'active' : ''}`} onClick={() => { setSection('discover'); setActiveGroupId(null); }}><Compass size={16} /> All groups</button>
           <button className="nexus-group-create" onClick={() => setCreateOpen(true)}><Plus size={16} /> Create a group</button>
-          <div className="nexus-group-list-title">{section === 'joined' ? 'YOUR GROUPS' : 'AVAILABLE GROUPS'}</div>
+          <div className="nexus-group-list-title">{section === 'joined' ? 'YOUR GROUPS' : 'ALL GROUPS'}</div>
           <div className="nexus-group-list">{visibleGroups.map(group => <button key={group.id} className={`nexus-group-list-item ${activeGroupId === group.id ? 'active' : ''}`} onClick={() => { setActiveGroupId(group.id); setActiveChannelId(group.channels[0]?.id || null); }}><span className="nexus-group-mini-icon" style={{ background: group.banner }}>{group.icon.startsWith('data:') ? <img src={group.icon} alt="" /> : group.icon}</span><span>{group.name}</span></button>)}
             {!visibleGroups.length && <p className="nexus-group-rail-empty">{section === 'joined' ? 'No groups yet. Create one to get started.' : 'No groups are available to join yet.'}</p>}</div>
           <div className="friends-own-profile nexus-group-profile"><span className="friends-avatar">{(currentUser.display_name || currentUser.full_name || currentUser.username || '?').slice(0, 1).toUpperCase()}</span><span><strong>{currentUser.display_name || currentUser.full_name || currentUser.username}</strong><small>Verified student</small></span></div>
@@ -80,7 +83,7 @@ export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, o
           {!activeGroup ? <>
             <header className="nexus-group-topbar"><div className="nexus-group-tabs"><button className={section === 'discover' ? 'active' : ''} onClick={() => setSection('discover')}><Compass size={14} /> All groups</button><button className={section === 'joined' ? 'active' : ''} onClick={() => setSection('joined')}><UsersRound size={14} /> My groups</button></div><label className="study-groups-search"><Search size={15} /><input aria-label="Search groups" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search groups" /></label></header>
             <div className="nexus-group-welcome"><span>YOUR CAMPUS COMMUNITIES</span><h1>{section === 'joined' ? 'Your groups, together.' : 'Find your people.'}</h1><p>{section === 'joined' ? 'The groups you join will live here.' : 'Browse the communities available to you at NEXUS.'}</p><button onClick={() => setCreateOpen(true)}><Plus size={16} /> Create a group</button></div>
-            <div className="nexus-group-grid">{visibleGroups.map(group => <article key={group.id} className="nexus-group-card"><div className="nexus-group-card-banner" style={{ background: group.banner }}><span className="nexus-group-card-icon">{group.icon.startsWith('data:') ? <img src={group.icon} alt="" /> : group.icon}</span></div><div className="nexus-group-card-body"><h2>{group.name}</h2><p>{group.description || 'A new NEXUS campus community.'}</p><button onClick={() => { updateGroup({ ...group, joined: !group.joined }); if (group.joined) setSection('discover'); }}>{group.joined ? 'Open group' : 'Join group'}</button>{group.joined && <button className="nexus-link-button" onClick={() => { setActiveGroupId(group.id); setActiveChannelId(group.channels[0]?.id || null); }}>View channels</button>}</div></article>)}
+            <div className="nexus-group-grid">{visibleGroups.map(group => <article key={group.id} className="nexus-group-card"><div className="nexus-group-card-banner" style={{ background: group.banner }}><span className="nexus-group-card-icon">{group.icon.startsWith('data:') ? <img src={group.icon} alt="" /> : group.icon}</span></div><div className="nexus-group-card-body"><h2>{group.name}</h2><p>{group.description || 'A new NEXUS campus community.'}</p>{isJoined(group) ? <button onClick={() => { setActiveGroupId(group.id); setActiveChannelId(group.channels[0]?.id || null); }}>View group</button> : <button onClick={() => joinGroup(group)}>Join group</button>}</div></article>)}
               {!visibleGroups.length && <div className="nexus-group-empty"><UsersRound size={25} /><strong>{section === 'joined' ? 'No groups yet' : 'No groups to discover'}</strong><p>{section === 'joined' ? 'Create your first group or switch to All groups to browse.' : 'When groups are available, you’ll find them here.'}</p></div>}</div>
           </> : <div className="nexus-group-room">
             <aside className="nexus-channel-rail"><div className="nexus-channel-banner" style={{ background: activeGroup.banner }}><span>{activeGroup.icon.startsWith('data:') ? <img src={activeGroup.icon} alt="" /> : activeGroup.icon}</span></div><div className="nexus-channel-group-name"><strong>{activeGroup.name}</strong><button aria-label="Group settings" onClick={() => setSettingsOpen(true)}><Settings size={16} /></button></div><div className="nexus-channel-heading">TEXT CHANNELS <button aria-label="Add channel" onClick={() => setChannelInputOpen(value => !value)}><Plus size={15} /></button></div>{channelInputOpen && <form className="nexus-channel-add" onSubmit={event => { event.preventDefault(); addChannel(); }}><input autoFocus value={channelName} onChange={event => setChannelName(event.target.value)} placeholder="channel-name" /><button aria-label="Create channel"><Plus size={14} /></button></form>}{activeGroup.channels.map(channel => <div className={`nexus-channel-row ${activeChannel?.id === channel.id ? 'active' : ''}`} key={channel.id}><button onClick={() => setActiveChannelId(channel.id)}><Hash size={15} /> {channel.name}</button><button aria-label={`Remove ${channel.name} channel`} onClick={() => { if (activeGroup.channels.length < 2) return; const next = { ...activeGroup, channels: activeGroup.channels.filter(item => item.id !== channel.id) }; updateGroup(next); if (channel.id === activeChannel?.id) setActiveChannelId(next.channels[0].id); }}><X size={13} /></button></div>)}<button className="nexus-channel-settings" onClick={() => setSettingsOpen(true)}><Settings size={15} /> Group settings</button></aside>

@@ -8,14 +8,17 @@ NEXUS is a student community and academic platform for IISER Tirupati. The activ
 
 ## Current status
 
-- Generated JWT_SECRET and PASSWORD_PEPPER values are configured as Cloudflare Worker secrets; secret values are not stored in the repository.
+- Cloudflare Pages proxies same-origin `/api/*` requests to the deployed `nexus-backend` Worker. The browser keeps using `/api/v1` without cross-origin requests. The Worker currently supports beta authentication, profiles, friends, and direct/group messaging; other APIs and WebSockets are not yet served by this Cloudflare backend.
+- The Cloudflare Worker persists AI conversations, threads, and messages and generates replies through its Workers AI binding using Llama 3.1 8B; requests are bounded to 20 per user per UTC day and 512 generated tokens. QOTD/AOTD APIs are available, with one starter physics question seeded. PDF attachments are not supported by this Worker.
+- Generated `JWT_SECRET` and `PASSWORD_PEPPER` values are configured as Cloudflare Worker secrets; secret values are not stored in the repository.
 
-- Cloudflare Pages proxies same-origin `/api/*` requests to the deployed `nexus-backend` Worker. The browser keeps using `/api/v1` without cross-origin requests. The Worker supports beta authentication, profiles, friends, direct/group messaging, persistent AI sessions/threads, and QOTD/AOTD question, archive, answer, and discussion routes. AI model inference, PDF attachments, and WebSockets are not configured on Cloudflare yet.
+- File uploads keep working on local disk by default. Cloudinary is an optional storage backend configured with three environment variables; new remote file metadata reuses `FileMetadata.file_path`, and download routes support both local and Cloudinary assets. Existing uploads are not migrated automatically.
 
 - Four separate beta student accounts (student1–student4) are seeded with the same beta password and can log in using their username or institute email. The login screen lists selectable account names. Fresh browser sessions now remain signed out so users can choose an account; the Courses preview stays available as an explicit action. The public demo-account endpoint lists usernames and emails only, never passwords.
 
 - Friends and Messenger no longer display seeded demo people, requests, conversations, or messages. Friends and requests load from the API, student search can send requests, and Messenger loads persisted conversations, sends stored messages, and listens for WebSocket updates. Beta history clearing soft-deletes messages for the selected conversation and broadcasts the change.
-- The Groups page now has My groups and All groups views, group creation with icon/banner customization, configurable channel lists, group settings, emoji/reply/delete controls, and per-channel clear controls. Beta group profiles and messages are stored in this browser only; they are not shared across users/devices and do not yet use backend group membership.
+- The Groups page has My groups and All groups views, group creation with icon/banner customization, configurable channel lists, group settings, emoji/reply/delete controls, and per-channel clear controls. Membership is tracked per signed-in account in this browser, while group profiles and messages remain browser-local and are not shared across devices.
+- `nexus-backend/` contains the partial Cloudflare Workers + D1 implementation of the `/api/v1` auth, profiles, friends, messaging, AI chat, and QOTD/AOTD slice. Group channels, file storage, settings, notifications, WebSocket push, and remaining API modules still use FastAPI or browser-local beta data. The Worker messenger polls while visible rather than receiving push updates.
 
 - The dashboard QOTD artwork now scales to the available widget height as well as width, preserving its aspect ratio and leaving room for the action link above the fixed profile pin.
 - AOTD has a development-only sample-answer toggle to preview the blurred locked state and mock community responses; samples are local UI data and are never submitted to the API.

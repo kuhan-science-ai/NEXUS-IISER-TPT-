@@ -53,10 +53,10 @@ The current config points to the existing `nexus-database`. Migration `0003_ai_q
 - Authentication uses signed HS256 bearer access tokens and PBKDF2-SHA256 password hashes; D1 access uses prepared statements.
 - Cloudflare Workers currently caps Web Crypto PBKDF2 at 100,000 iterations. Workers Free also has a 10 ms CPU budget per request, so measure deployed sign-in CPU before treating Free-plan capacity as sufficient.
 - Friends, friend requests, profiles, conversations, messages, reactions, pin/edit/delete, and history clearing are persisted in D1.
-- AI sessions and threads can be created, listed, loaded, and deleted in D1. AI response generation is not configured on Cloudflare yet; the chat endpoint returns a clear `503` instead of pretending a response was generated.
+- AI conversations, threads, and messages are persisted in D1. Replies use the `AI` Workers AI binding with `@cf/meta/llama-3.1-8b-instruct-fp8`; the route limits each user to 20 prompts per UTC day, 4,000 prompt characters, 2,500 page-context characters, and 512 output tokens. Workers AI includes 10,000 Neurons/day in its free allocation; paid usage above that is billed per Cloudflare's current pricing. Check the Workers AI dashboard for usage.
 - QOTD/AOTD questions, archive entries, answer submissions, points, and comments use D1. The migration seeds one initial question. PDF attachments are not supported by this Worker yet.
 - The Messenger refreshes visible conversations every five seconds to receive messages across sessions. Cloudflare Durable Objects/WebSockets are not wired yet, so this is polling rather than push delivery.
-- Uploads, settings, password reset, notifications, groups UI data/channels, academic features, AI model inference, and other application APIs are not migrated.
+- Uploads, settings, password reset, notifications, group UI data/channels, academic features, and other application APIs are not migrated.
 - The four beta credentials are intentionally public testing credentials. They are unsuitable for real accounts.
 
 ## Checks
