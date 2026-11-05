@@ -94,3 +94,9 @@ The floating Ask AI panel (`frontend/src/components/AIQuickPanel.tsx`) and the A
 `AI_PROVIDER` selects the Ollama provider (default, `OLLAMA_BASE_URL` and `OLLAMA_MODEL`) or deterministic mock provider. Ollama uses a reused bounded HTTP connection pool. The orchestrator applies an in-process semaphore and bounded wait queue; defaults are 8 active requests, 512 queued requests, and a 180-second queue timeout (`AI_MAX_CONCURRENT_REQUESTS`, `AI_MAX_QUEUED_REQUESTS`, `AI_QUEUE_TIMEOUT_SECONDS`). The model receives at most 16 recent messages, page context is capped at 8,000 characters, and message-history reads page through 100 records at a time. SQLite connections wait up to 30 seconds on a write lock.
 
 The gate is local to one application process. It prevents unbounded inference fan-out and absorbs bursts, but a single Ollama model and SQLite do not guarantee low latency for 500 simultaneous users. That target requires shared admission/queue infrastructure, a production database such as PostgreSQL, and model-serving capacity sized for the intended concurrency; these are not implemented here.
+
+## Cloudflare Backend (beta)
+
+The Pages Function at `frontend/functions/api/[[path]].ts` forwards same-origin `/api/*` requests to the deployed `nexus-backend` Python Worker. The Worker uses D1 for beta authentication, profiles, friends, direct/group messaging, AI conversation sessions/threads, and QOTD/AOTD questions, archives, answers, and comments. The D1 migrations are in `nexus-backend/migrations`; Worker secrets are configured in Cloudflare and are not committed.
+
+AI conversation creation and history work, but AI response generation returns an explicit unavailable response until a model provider is configured. The initial QOTD is seeded in D1. PDF uploads, WebSockets, and the rest of the application APIs are not yet migrated to this Worker.
