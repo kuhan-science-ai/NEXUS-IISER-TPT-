@@ -175,7 +175,6 @@ async def reset_password(req: PasswordResetConfirm, db: AsyncSession = Depends(g
 @router.get("/demo-accounts", response_model=list[DemoAccountInfo])
 async def get_demo_accounts():
     return [
-        DemoAccountInfo(role="student", username="student1", email="student1@iisertirupati.ac.in", password="NexusPass123!"),
-        DemoAccountInfo(role="moderator", username="moderator1", email="moderator1@iisertirupati.ac.in", password="NexusPass123!"),
-        DemoAccountInfo(role="administrator", username="admin", email="admin@iisertirupati.ac.in", password="NexusAdmin123!"),
+        DemoAccountInfo(role="student", username=f"student{number}", email=f"student{number}@iisertirupati.ac.in")
+        for number in range(1, 5)
     ]

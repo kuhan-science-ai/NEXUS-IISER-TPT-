@@ -8,6 +8,7 @@ type Mode = 'login' | 'signup' | 'forgot';
 interface AuthPageProps { onLoginSuccess: () => void; onSkipSignIn: () => void; }
 
 const asset = (mode: Mode, name: string, ext: 'svg' | 'png' = 'svg') => `/assets/nexus-figma/${mode}_${name}.${ext}`;
+const betaAccountPassword = 'NexusPass123!';
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onSkipSignIn }) => {
   const navigate = useNavigate();
@@ -71,10 +72,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onSkipSignIn
         <form className="nexus-auth-form" onSubmit={submit}>
           {mode === 'signup' && <label>Full name<input autoComplete="name" required value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your full name" /></label>}
           {mode === 'signup' && <label>Batch<select value={batch} onChange={e => setBatch(e.target.value)}>{['2023','2024','2025','2026'].map(year => <option key={year}>{year}</option>)}</select></label>}
-          <label>Institute email<span className="nexus-auth-input-icon"><Mail size={16} /><input type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@students.iisertirupati.ac.in" /></span></label>
+          <label>{mode === 'login' ? 'Institute email or username' : 'Institute email'}<span className="nexus-auth-input-icon"><Mail size={16} /><input type={mode === 'login' ? 'text' : 'email'} autoComplete={mode === 'login' ? 'username' : 'email'} required value={email} onChange={e => setEmail(e.target.value)} placeholder={mode === 'login' ? 'student1 or you@students.iisertirupati.ac.in' : 'you@students.iisertirupati.ac.in'} /></span></label>
           {mode !== 'forgot' && <label>{mode === 'signup' ? 'Create password' : 'Password'}<span className="nexus-auth-input-icon"><LockKeyhole size={16} /><input type={showPassword ? 'text' : 'password'} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} required minLength={mode === 'signup' ? 8 : undefined} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters" /><button className="nexus-auth-eye" type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>}
           {mode === 'signup' && <p className="nexus-auth-hint">Use at least 8 characters, including a number or symbol.</p>}
           {mode === 'login' && <div className="nexus-auth-options"><label className="nexus-auth-checkbox"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />Remember me</label><button type="button" className="nexus-auth-text-button" onClick={() => setMode('forgot')}>Forgot password?</button></div>}
+          {mode === 'login' && <section className="nexus-auth-beta-accounts" aria-label="Beta test accounts"><div><strong>Try the beta accounts</strong><span>Choose a student account to sign in and test friends and messages.</span></div><div className="nexus-auth-beta-list">{[1, 2, 3, 4].map(number => <button key={number} type="button" aria-label={`Sign in as student${number}`} onClick={() => { setEmail(`student${number}`); setPassword(betaAccountPassword); setError(''); setNotice(''); }}><span className="nexus-auth-beta-avatar">{number}</span><span>student{number}</span></button>)}</div></section>}
           {mode === 'signup' && <p className="nexus-auth-consent">By creating an account, you agree to keep NEXUS a respectful, student-only space.</p>}
           {mode === 'forgot' && <p className="nexus-auth-hint">The link expires after 30 minutes. Check your spam folder too — campus mail can be unpredictable.</p>}
           <button className="nexus-auth-submit" disabled={loading}>{loading ? 'Please wait…' : mode === 'login' ? <>Log in to NEXUS <ArrowRight size={16} /></> : mode === 'signup' ? <>Create account &amp; verify email <ArrowUpRight size={16} /></> : <>Send reset link <ArrowRight size={16} /></>}</button>

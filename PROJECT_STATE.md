@@ -8,6 +8,8 @@ NEXUS is a student community and academic platform for IISER Tirupati. The activ
 
 ## Current status
 
+- Four separate beta student accounts (student1–student4) are seeded with the same beta password and can log in using their username or institute email. The login screen lists selectable account names. Fresh browser sessions now remain signed out so users can choose an account; the Courses preview stays available as an explicit action. The public demo-account endpoint lists usernames and emails only, never passwords.
+
 - Friends and Messenger no longer display seeded demo people, requests, conversations, or messages. Friends and requests load from the API, student search can send requests, and Messenger loads persisted conversations, sends stored messages, and listens for WebSocket updates. Beta history clearing soft-deletes messages for the selected conversation and broadcasts the change.
 - The Groups page now has My groups and All groups views, group creation with icon/banner customization, configurable channel lists, group settings, emoji/reply/delete controls, and per-channel clear controls. Beta group profiles and messages are stored in this browser only; they are not shared across users/devices and do not yet use backend group membership.
 

@@ -44,6 +44,21 @@ def init_db(db: Session) -> None:
             "department": "Physics",
             "status_text": "Working on quantum harmonic oscillators 🔬",
         },
+        *[
+            {
+                "username": f"student{number}",
+                "email": f"student{number}@iisertirupati.ac.in",
+                "password": "NexusPass123!",
+                "role": UserRole.STUDENT,
+                "full_name": f"Student {number}",
+                "bio": "NEXUS beta test student account.",
+                "program": "BS-MS",
+                "academic_year": "3rd Year",
+                "department": "General Sciences",
+                "status_text": "Trying NEXUS beta features",
+            }
+            for number in range(2, 5)
+        ],
         {
             "username": "moderator1",
             "email": "moderator1@iisertirupati.ac.in",

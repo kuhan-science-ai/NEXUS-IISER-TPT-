@@ -33,7 +33,7 @@ import { recordDashboardHistory } from './services/dashboard';
 
 const queryClient = new QueryClient();
 
-// Guest auto-login credentials
+// Explicit local Courses preview credentials
 const GUEST_USERNAME = 'student1';
 const GUEST_PASSWORD = 'NexusPass123!';
 const COURSE_PREVIEW_KEY = 'nexus-course-preview-session';
@@ -270,16 +270,6 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('nexus-ai-action-completed', onAIActionCompleted);
   }, []);
 
-  // Auto-login as guest on first load
-  const autoLoginGuest = async () => {
-    try {
-      await api.login({ username_or_email: GUEST_USERNAME, password: GUEST_PASSWORD });
-      await fetchUser();
-    } catch {
-      setLoading(false);
-    }
-  };
-
   const startCoursePreview = async () => {
     // Keep the quick preview path, but obtain a real demo token so API-backed
     // features such as file uploads work instead of failing as a fake profile.
@@ -302,7 +292,7 @@ export const App: React.FC = () => {
     } else if (localStorage.getItem(COURSE_PREVIEW_KEY) === 'active') {
       void startCoursePreview();
     } else {
-      autoLoginGuest();
+      setLoading(false);
     }
   }, []);
 
@@ -310,8 +300,6 @@ export const App: React.FC = () => {
     setCurrentUser(null);
     api.setToken(null);
     localStorage.removeItem(COURSE_PREVIEW_KEY);
-    // Re-login as guest automatically
-    autoLoginGuest();
   };
 
   if (loading) {

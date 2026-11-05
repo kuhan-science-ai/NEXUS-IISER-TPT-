@@ -52,4 +52,3 @@ class DemoAccountInfo(BaseModel):
     role: str
     username: str
     email: str
-    password: str
