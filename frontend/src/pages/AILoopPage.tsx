@@ -169,7 +169,10 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ prompt: submittedPrompt, page_context: getPageContext() }),
       });
-      if (!response.ok) throw new Error(`Assistant request failed (${response.status})`);
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.detail || `Assistant request failed (${response.status})`);
+      }
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       if (!reader) throw new Error('Streaming is unavailable in this browser.');
@@ -294,7 +297,7 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
             <div>
               <h3 style={{ fontWeight: '700', fontSize: '16px', marginBottom: '2px' }}>14-Stage AI Orchestration Loop</h3>
               <p style={{ fontSize: '12px', color: 'var(--text-faint)' }}>
-                Ollama · gpt-oss:20b · Local model · Full pipeline test
+                Cloudflare sessions · AI response provider not configured
               </p>
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
