@@ -172,6 +172,10 @@ class ApiService {
     return this.request(`/messages/conversations/${convId}/messages`);
   }
 
+  async clearConversationHistory(convId: string): Promise<{ message: string; cleared_count: number }> {
+    return this.request(`/messages/conversations/${convId}/messages`, { method: 'DELETE' });
+  }
+
   async sendMessage(convId: string, data: any): Promise<any> {
     return this.request(`/messages/conversations/${convId}/messages`, { method: 'POST', body: JSON.stringify(data) });
   }
@@ -186,6 +190,10 @@ class ApiService {
 
   async toggleReaction(messageId: string, emoji: string): Promise<any> {
     return this.request(`/messages/messages/${messageId}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) });
+  }
+
+  async toggleMessagePin(messageId: string): Promise<{ message: string; is_pinned: boolean }> {
+    return this.request(`/messages/messages/${messageId}/pin`, { method: 'POST' });
   }
 
   // AI Orchestration

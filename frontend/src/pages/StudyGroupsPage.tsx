@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, BookOpen, ChevronDown, Compass, Gamepad2, Music2, Plus, Search, Users, UsersRound } from 'lucide-react';
+import { Compass, Forward, Hash, ImagePlus, LockKeyhole, MoreHorizontal, Plus, Search, Settings, SmilePlus, Trash2, UsersRound, X } from 'lucide-react';
 import { UserSummary } from '../services/api';
 import { SideNav } from '../components/SideNav';
 import { TopHeader } from '../components/TopHeader';
@@ -8,100 +7,90 @@ import { GlobalSearchModal } from '../components/GlobalSearchModal';
 import './StudyGroupsPage.css';
 
 interface StudyGroupsPageProps { currentUser: UserSummary | null; onLogout?: () => void; }
-type GroupKind = 'study' | 'hangout' | 'community';
-type StudyGroup = { name: string; description: string; members: number; online: number; category: GroupKind; tag: string; initials: string; icon: string; banner: string; badge?: string };
-
-const groups: StudyGroup[] = [
-  { name: 'Quantum Collective', description: 'A friendly corner for quantum physics, problem sets, and late-night derivations.', members: 128, online: 24, category: 'study', tag: 'Physics · PHY 301', initials: 'QC', icon: '✦', banner: 'quantum', badge: 'Popular' },
-  { name: 'The Algebra Circle', description: 'Work through proofs together, compare notes, and make abstract algebra click.', members: 84, online: 13, category: 'study', tag: 'Mathematics · MAT 201', initials: 'AC', icon: '∑', banner: 'algebra' },
-  { name: 'Spectra Squad', description: 'Chemistry students sharing lab tips, spectra puzzles, and exam prep.', members: 67, online: 9, category: 'study', tag: 'Chemistry · CHM 301', initials: 'SS', icon: '⚗', banner: 'spectra' },
-  { name: 'Ecology Field Notes', description: 'Swap observations, plan field walks, and talk about life beyond the lab.', members: 93, online: 17, category: 'study', tag: 'Biology · BIO 303', initials: 'EF', icon: '❋', banner: 'ecology' },
-  { name: 'Common Room', description: 'A relaxed place to meet people, share playlists, and take a break between classes.', members: 216, online: 38, category: 'hangout', tag: 'Chill · All campuses', initials: 'CR', icon: '☕', banner: 'common' },
-  { name: 'Campus After Hours', description: 'Find people for coffee, board games, walks, and spontaneous plans.', members: 154, online: 21, category: 'hangout', tag: 'Hangout · Tirupati', initials: 'AH', icon: '☾', banner: 'afterhours' },
-  { name: 'NEXUS Creators', description: 'A community for makers, artists, builders, and curious people across campus.', members: 302, online: 46, category: 'community', tag: 'Community · Creative', initials: 'NC', icon: '✳', banner: 'creators', badge: 'Featured' },
-  { name: 'Open Source Lab', description: 'Build useful things together, learn git, and find collaborators for your next idea.', members: 187, online: 29, category: 'community', tag: 'Community · Technology', initials: 'OS', icon: '</>', banner: 'opensource' },
-  { name: 'The Reading Nook', description: 'Trade book recommendations and find company for a quiet reading hour.', members: 73, online: 11, category: 'hangout', tag: 'Chill · Reading', initials: 'RN', icon: '▤', banner: 'readers' },
-  { name: 'Data Science Forum', description: 'Discuss datasets, experiment ideas, and practical ways to learn machine learning.', members: 141, online: 26, category: 'community', tag: 'Community · Data', initials: 'DS', icon: '⌘', banner: 'data' },
-  { name: 'Organic Chemistry Desk', description: 'Draw mechanisms together and help each other through reaction practice.', members: 59, online: 8, category: 'study', tag: 'Chemistry · CHM 202', initials: 'OD', icon: '⌬', banner: 'organic' },
-  { name: 'Weekend Wanderers', description: 'Plan low-key campus walks, photo stops, and little weekend adventures.', members: 112, online: 18, category: 'hangout', tag: 'Hangout · Outdoors', initials: 'WW', icon: '↗', banner: 'wanderers' },
-];
-
-const formatCount = (value: number) => new Intl.NumberFormat('en', { notation: value >= 1000 ? 'compact' : 'standard' }).format(value);
+type GroupChannel = { id: string; name: string };
+type CampusGroup = { id: string; name: string; description: string; icon: string; banner: string; joined: boolean; channels: GroupChannel[] };
+type GroupMessage = { id: string; text: string; sender: string; at: string; reactions: string[]; replyToId?: string };
+const STORAGE_KEY = 'nexus-campus-groups-v1';
+const defaultChannels = (): GroupChannel[] => [{ id: crypto.randomUUID(), name: 'general' }, { id: crypto.randomUUID(), name: 'discussion' }, { id: crypto.randomUUID(), name: 'hangout' }];
+const readGroups = (): CampusGroup[] => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; } };
 
 export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, onLogout }) => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [studentType, setStudentType] = useState<'all' | 'study' | 'hangout'>('all');
-  const [communityType, setCommunityType] = useState<'all' | 'community'>('all');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [section, setSection] = useState<'joined' | 'discover'>('joined');
+  const [groups, setGroups] = useState<CampusGroup[]>(readGroups);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [draftDescription, setDraftDescription] = useState('');
+  const [draftIcon, setDraftIcon] = useState('✦');
+  const [draftBanner, setDraftBanner] = useState('#7c5cff');
+  const [channelName, setChannelName] = useState('');
+  const [imagePreview, setImagePreview] = useState('');
+  const [channelInputOpen, setChannelInputOpen] = useState(false);
+  const [openMessageMenu, setOpenMessageMenu] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+  const [groupMessages, setGroupMessages] = useState<Record<string, GroupMessage[]>>(() => { try { return JSON.parse(localStorage.getItem('nexus-campus-group-messages-v1') || '{}'); } catch { return {}; } });
+  const [draftMessage, setDraftMessage] = useState('');
+  const [replyTo, setReplyTo] = useState<GroupMessage | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   if (!currentUser) return null;
 
-  const visibleGroups = useMemo(() => groups.filter(group => {
-    const selectedCategoryMatches = communityType === 'community'
-      ? group.category === 'community'
-      : studentType === 'all' || group.category === studentType;
-    const textMatches = `${group.name} ${group.description} ${group.tag}`.toLowerCase().includes(query.trim().toLowerCase());
-    return selectedCategoryMatches && textMatches;
-  }), [studentType, communityType, query]);
-  const pageCount = Math.max(1, Math.ceil(visibleGroups.length / 8));
-  const pageGroups = visibleGroups.slice((currentPage - 1) * 8, currentPage * 8);
-
-  const changeFilters = (update: () => void) => {
-    update();
-    setCurrentPage(1);
+  const persist = (next: CampusGroup[]) => { setGroups(next); localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); };
+  const visibleGroups = useMemo(() => groups.filter(group => (section === 'joined' ? group.joined : !group.joined) && `${group.name} ${group.description}`.toLowerCase().includes(query.toLowerCase())), [groups, query, section]);
+  const activeGroup = groups.find(group => group.id === activeGroupId) || null;
+  const activeChannel = activeGroup?.channels.find(channel => channel.id === activeChannelId) || activeGroup?.channels[0] || null;
+  const messageKey = activeGroup && activeChannel ? `${activeGroup.id}:${activeChannel.id}` : '';
+  const addGroup = () => {
+    if (!draftName.trim()) return;
+    const group: CampusGroup = { id: crypto.randomUUID(), name: draftName.trim(), description: draftDescription.trim(), icon: imagePreview || draftIcon, banner: draftBanner, joined: true, channels: defaultChannels() };
+    persist([...groups, group]); setActiveGroupId(group.id); setActiveChannelId(group.channels[0].id); setCreateOpen(false); setDraftName(''); setDraftDescription(''); setDraftIcon('✦'); setImagePreview('');
   };
+  const updateGroup = (updated: CampusGroup) => persist(groups.map(group => group.id === updated.id ? updated : group));
+  const selectImage = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => setImagePreview(String(reader.result)); reader.readAsDataURL(file); };
+  const addChannel = () => { if (!activeGroup || !channelName.trim()) return; const next = { ...activeGroup, channels: [...activeGroup.channels, { id: crypto.randomUUID(), name: channelName.trim().toLowerCase().replace(/\s+/g, '-') }] }; updateGroup(next); setActiveChannelId(next.channels[next.channels.length - 1].id); setChannelName(''); setChannelInputOpen(false); };
+  const setMessages = (next: Record<string, GroupMessage[]>) => { setGroupMessages(next); localStorage.setItem('nexus-campus-group-messages-v1', JSON.stringify(next)); };
+  const sendMessage = (event: React.FormEvent) => { event.preventDefault(); if (!draftMessage.trim() || !messageKey) return; setMessages({ ...groupMessages, [messageKey]: [...(groupMessages[messageKey] || []), { id: crypto.randomUUID(), text: draftMessage.trim(), sender: currentUser.display_name || currentUser.full_name || currentUser.username, at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), reactions: [], replyToId: replyTo?.id }] }); setDraftMessage(''); setReplyTo(null); };
+  const jumpToGroupMessage = (messageId: string) => { document.getElementById(`group-message-${messageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setHighlightedMessageId(messageId); window.setTimeout(() => setHighlightedMessageId(current => current === messageId ? null : current), 1600); };
+  const copyText = async (text: string, label: string) => { await navigator.clipboard?.writeText(text); setNotice(`${label} copied`); window.setTimeout(() => setNotice(''), 1800); };
+  const saveGroupBookmark = (message: GroupMessage) => { const key = 'nexus-message-bookmarks-v1'; const saved = JSON.parse(localStorage.getItem(key) || '[]'); const exists = saved.some((item: any) => item.id === message.id); localStorage.setItem(key, JSON.stringify(exists ? saved.filter((item: any) => item.id !== message.id) : [...saved, { ...message, group: activeGroup?.name, channel: activeChannel?.name }])); setNotice(exists ? 'Bookmark removed' : 'Message bookmarked in this browser'); window.setTimeout(() => setNotice(''), 1800); };
+  const scheduleGroupReminder = (message: GroupMessage) => { const minutes = Number(window.prompt('Remind me in how many minutes?', '30')); if (!Number.isFinite(minutes) || minutes <= 0) return; window.setTimeout(() => window.alert(`Reminder: ${message.sender}: ${message.text}`), minutes * 60_000); setNotice(`Reminder set for ${minutes} minutes`); window.setTimeout(() => setNotice(''), 1800); };
+  const markGroupUnread = () => { if (!messageKey) return; localStorage.setItem('nexus-unread-group-channel', messageKey); setNotice('Channel marked unread'); window.setTimeout(() => setNotice(''), 1800); };
+  const speakGroupMessage = (message: GroupMessage) => { window.speechSynthesis?.cancel(); window.speechSynthesis?.speak(new SpeechSynthesisUtterance(`${message.sender} says: ${message.text}`)); };
+  const reactToGroupMessage = (messageId: string, emoji: string) => setMessages({ ...groupMessages, [messageKey]: (groupMessages[messageKey] || []).map(item => item.id === messageId ? { ...item, reactions: item.reactions.includes(emoji) ? item.reactions.filter(reaction => reaction !== emoji) : [...item.reactions, emoji] } : item) });
 
   return <div className="study-groups-layout">
     <SideNav currentUser={currentUser} onLogout={onLogout} onOpenSearch={() => setSearchOpen(true)} />
     <div className="study-groups-shell">
-      <TopHeader breadcrumb="Workspace / Study Groups" currentUser={currentUser} onOpenSearch={() => setSearchOpen(true)} />
-      <main className="study-groups-main">
-        <div className="study-groups-discover-rail">
-          <div className="study-groups-rail-title"><Compass size={17} /><strong>Discover</strong></div>
-          <button type="button" className="study-groups-rail-item active"><UsersRound size={16} /><span>Groups</span></button>
-          <button type="button" className="study-groups-rail-item" onClick={() => setCreateOpen(true)}><Plus size={16} /><span>Create a group</span></button>
-          <div className="study-groups-apps-title">APPS (BETA)</div>
-          <button type="button" className="study-groups-rail-item"><BookOpen size={16} /><span>Study rooms</span><small>Beta</small></button>
-          <button type="button" className="study-groups-rail-item"><Music2 size={16} /><span>Campus radio</span><small>Beta</small></button>
-          <button type="button" className="study-groups-rail-item"><Gamepad2 size={16} /><span>Study breaks</span><small>Beta</small></button>
-          <div className="study-groups-rail-note">Apps are small campus tools, in beta and coming soon.</div>
-        </div>
-
-        <section className="study-groups-content">
-          <header className="study-groups-topbar">
-            <div className="study-groups-top-tabs"><span className="selected"><Compass size={14} /> Discover</span><span>Groups</span><span>For students</span></div>
-            <label className="study-groups-search"><Search size={15} /><input aria-label="Search groups" value={query} onChange={event => { setQuery(event.target.value); setCurrentPage(1); }} placeholder="Search groups" /></label>
-          </header>
-
-          <section className="study-groups-hero">
-            <div className="study-groups-hero-copy"><span className="study-groups-eyebrow">FIND YOUR PEOPLE AT NEXUS</span><h1>Good groups make<br />great campus days.</h1><p>Study together, hang out, and find your campus community.</p></div>
-            <div className="study-groups-hero-art" aria-hidden="true"><span className="hero-orbit orbit-one" /><span className="hero-orbit orbit-two" /><span className="hero-star">✦</span><span className="hero-person person-one">N</span><span className="hero-person person-two">K</span><span className="hero-person person-three">A</span></div>
-          </section>
-
-          <section className="study-groups-listing" aria-label="Discover groups">
-            <div className="study-groups-listing-heading"><div className="study-groups-heading-copy"><span className="study-groups-eyebrow">YOUR NEXT COMMUNITY</span><h2>Find your group</h2><p>Meet students who share your interests, courses, and campus life.</p></div><button type="button" className="study-groups-create" onClick={() => setCreateOpen(true)}><Plus size={15} /> Create group</button></div>
-            <div className="study-groups-filters">
-              <label className="study-groups-select-wrap"><span>Students</span><select aria-label="Filter student groups" value={studentType} onChange={event => changeFilters(() => setStudentType(event.target.value as typeof studentType))}><option value="all">All students</option><option value="study">Study</option><option value="hangout">Chill &amp; hangout</option></select><ChevronDown size={13} /></label>
-              <label className="study-groups-select-wrap"><span>Community</span><select aria-label="Filter community groups" value={communityType} onChange={event => changeFilters(() => setCommunityType(event.target.value as typeof communityType))}><option value="all">All communities</option><option value="community">Community groups</option></select><ChevronDown size={13} /></label>
-              <span className="study-groups-demo-note">Sample groups · demo counts</span>
-            </div>
-            <div className="study-groups-card-grid">
-              {pageGroups.map(group => <article className="study-group-card" key={group.name}>
-                <div className={`study-group-banner banner-${group.banner}`} />
-                <div className="study-group-card-body"><div className="study-group-card-identity"><div className={`study-group-avatar avatar-${group.banner}`}>{group.icon}</div><span className="study-group-tag">{group.tag}</span></div>{group.badge && <span className="study-group-badge">{group.badge}</span>}<div className="study-group-card-title"><h3>{group.name}</h3><p>{group.description}</p></div>
-                  <div className="study-group-card-meta"><span><i className="online-dot" /> {formatCount(group.online)} online</span><span><i className="member-dot" /> {formatCount(group.members)} members</span></div>
-                  <button className="study-group-open" type="button" onClick={() => alert(`${group.name}\n\n${group.description}\n\n${group.members} members · ${group.online} online`)}>View group <ArrowRight size={14} /></button>
-                </div>
-              </article>)}
-              {pageGroups.length === 0 && <div className="study-groups-empty"><Users size={19} /><strong>No groups found</strong><span>Try another category or search term.</span></div>}
-            </div>
-            <nav className="study-groups-pagination" aria-label="Group directory pages"><button type="button" disabled={currentPage === 1} onClick={() => setCurrentPage(page => Math.max(1, page - 1))}><ArrowLeft size={13} /> Previous</button><span>Page {currentPage} of {pageCount} <i /> {visibleGroups.length} groups</span><button type="button" disabled={currentPage >= pageCount} onClick={() => setCurrentPage(page => Math.min(pageCount, page + 1))}>Next <ArrowRight size={13} /></button></nav>
-          </section>
+      <TopHeader breadcrumb="Workspace / Groups" currentUser={currentUser} onOpenSearch={() => setSearchOpen(true)} />
+      <main className="study-groups-main nexus-groups-main">
+        <aside className="nexus-group-rail">
+          <div className="nexus-group-rail-heading"><UsersRound size={17} /><strong>Groups</strong></div>
+          <button className={`nexus-group-nav ${section === 'joined' ? 'active' : ''}`} onClick={() => { setSection('joined'); setActiveGroupId(null); }}><UsersRound size={16} /> My groups <span>{groups.filter(group => group.joined).length}</span></button>
+          <button className={`nexus-group-nav ${section === 'discover' ? 'active' : ''}`} onClick={() => { setSection('discover'); setActiveGroupId(null); }}><Compass size={16} /> All groups</button>
+          <button className="nexus-group-create" onClick={() => setCreateOpen(true)}><Plus size={16} /> Create a group</button>
+          <div className="nexus-group-list-title">{section === 'joined' ? 'YOUR GROUPS' : 'AVAILABLE GROUPS'}</div>
+          <div className="nexus-group-list">{visibleGroups.map(group => <button key={group.id} className={`nexus-group-list-item ${activeGroupId === group.id ? 'active' : ''}`} onClick={() => { setActiveGroupId(group.id); setActiveChannelId(group.channels[0]?.id || null); }}><span className="nexus-group-mini-icon" style={{ background: group.banner }}>{group.icon.startsWith('data:') ? <img src={group.icon} alt="" /> : group.icon}</span><span>{group.name}</span></button>)}
+            {!visibleGroups.length && <p className="nexus-group-rail-empty">{section === 'joined' ? 'No groups yet. Create one to get started.' : 'No groups are available to join yet.'}</p>}</div>
+          <div className="friends-own-profile nexus-group-profile"><span className="friends-avatar">{(currentUser.display_name || currentUser.full_name || currentUser.username || '?').slice(0, 1).toUpperCase()}</span><span><strong>{currentUser.display_name || currentUser.full_name || currentUser.username}</strong><small>Verified student</small></span></div>
+        </aside>
+        <section className="nexus-group-content">
+          {!activeGroup ? <>
+            <header className="nexus-group-topbar"><div className="nexus-group-tabs"><button className={section === 'discover' ? 'active' : ''} onClick={() => setSection('discover')}><Compass size={14} /> All groups</button><button className={section === 'joined' ? 'active' : ''} onClick={() => setSection('joined')}><UsersRound size={14} /> My groups</button></div><label className="study-groups-search"><Search size={15} /><input aria-label="Search groups" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search groups" /></label></header>
+            <div className="nexus-group-welcome"><span>YOUR CAMPUS COMMUNITIES</span><h1>{section === 'joined' ? 'Your groups, together.' : 'Find your people.'}</h1><p>{section === 'joined' ? 'The groups you join will live here.' : 'Browse the communities available to you at NEXUS.'}</p><button onClick={() => setCreateOpen(true)}><Plus size={16} /> Create a group</button></div>
+            <div className="nexus-group-grid">{visibleGroups.map(group => <article key={group.id} className="nexus-group-card"><div className="nexus-group-card-banner" style={{ background: group.banner }}><span className="nexus-group-card-icon">{group.icon.startsWith('data:') ? <img src={group.icon} alt="" /> : group.icon}</span></div><div className="nexus-group-card-body"><h2>{group.name}</h2><p>{group.description || 'A new NEXUS campus community.'}</p><button onClick={() => { updateGroup({ ...group, joined: !group.joined }); if (group.joined) setSection('discover'); }}>{group.joined ? 'Open group' : 'Join group'}</button>{group.joined && <button className="nexus-link-button" onClick={() => { setActiveGroupId(group.id); setActiveChannelId(group.channels[0]?.id || null); }}>View channels</button>}</div></article>)}
+              {!visibleGroups.length && <div className="nexus-group-empty"><UsersRound size={25} /><strong>{section === 'joined' ? 'No groups yet' : 'No groups to discover'}</strong><p>{section === 'joined' ? 'Create your first group or switch to All groups to browse.' : 'When groups are available, you’ll find them here.'}</p></div>}</div>
+          </> : <div className="nexus-group-room">
+            <aside className="nexus-channel-rail"><div className="nexus-channel-banner" style={{ background: activeGroup.banner }}><span>{activeGroup.icon.startsWith('data:') ? <img src={activeGroup.icon} alt="" /> : activeGroup.icon}</span></div><div className="nexus-channel-group-name"><strong>{activeGroup.name}</strong><button aria-label="Group settings" onClick={() => setSettingsOpen(true)}><Settings size={16} /></button></div><div className="nexus-channel-heading">TEXT CHANNELS <button aria-label="Add channel" onClick={() => setChannelInputOpen(value => !value)}><Plus size={15} /></button></div>{channelInputOpen && <form className="nexus-channel-add" onSubmit={event => { event.preventDefault(); addChannel(); }}><input autoFocus value={channelName} onChange={event => setChannelName(event.target.value)} placeholder="channel-name" /><button aria-label="Create channel"><Plus size={14} /></button></form>}{activeGroup.channels.map(channel => <div className={`nexus-channel-row ${activeChannel?.id === channel.id ? 'active' : ''}`} key={channel.id}><button onClick={() => setActiveChannelId(channel.id)}><Hash size={15} /> {channel.name}</button><button aria-label={`Remove ${channel.name} channel`} onClick={() => { if (activeGroup.channels.length < 2) return; const next = { ...activeGroup, channels: activeGroup.channels.filter(item => item.id !== channel.id) }; updateGroup(next); if (channel.id === activeChannel?.id) setActiveChannelId(next.channels[0].id); }}><X size={13} /></button></div>)}<button className="nexus-channel-settings" onClick={() => setSettingsOpen(true)}><Settings size={15} /> Group settings</button></aside>
+            <section className="nexus-chat-panel"><header className="nexus-chat-header"><div><Hash size={19} /><strong>{activeChannel?.name}</strong><span>{activeGroup.description}</span></div><button title="Group settings" aria-label="Group settings" onClick={() => setSettingsOpen(true)}><Settings size={18} /></button></header><div className="nexus-chat-messages">{notice && <div className="nexus-chat-toast" role="status">{notice}</div>}{(groupMessages[messageKey] || []).map((message, index, messages) => { const grouped = index > 0 && messages[index - 1].sender === message.sender; const original = message.replyToId ? messages.find(item => item.id === message.replyToId) : null; return <article id={`group-message-${message.id}`} className={`nexus-chat-message${grouped ? ' grouped' : ''}${highlightedMessageId === message.id ? ' is-jump-target' : ''}`} key={message.id}><span className="nexus-chat-avatar-slot">{!grouped && <span className="nexus-chat-message-avatar">{message.sender.slice(0, 1).toUpperCase()}</span>}</span><div className="nexus-chat-message-content">{!grouped && <div className="nexus-chat-message-meta"><strong>{message.sender}</strong><time>{message.at}</time></div>}{original && <button type="button" className="nexus-chat-reply-preview" onClick={() => jumpToGroupMessage(original.id)}>↪ <strong>{original.sender}</strong> {original.text.slice(0, 100)}</button>}<div className="nexus-chat-message-text-line"><p>{message.text}</p><div className="nexus-message-hover-tools"><button type="button" title="React with laughing" onClick={() => reactToGroupMessage(message.id, '😂')}>😂</button><button type="button" title="React with thumbs up" onClick={() => reactToGroupMessage(message.id, '👍')}>👍</button><button type="button" title="React with heart" onClick={() => reactToGroupMessage(message.id, '❤️')}>❤️</button><button type="button" title="Add another reaction" aria-label="Add reaction" onClick={() => reactToGroupMessage(message.id, '🙂')}><SmilePlus size={15} /></button><button type="button" title="Reply" onClick={() => setReplyTo(message)}>↶</button><button type="button" title="Forward"><Forward size={14} /></button><div className="nexus-chat-message-menu"><button type="button" title="More options" aria-label={`More options for message from ${message.sender}`} aria-expanded={openMessageMenu === message.id} onClick={() => setOpenMessageMenu(openMessageMenu === message.id ? null : message.id)}><MoreHorizontal size={16} /></button>{openMessageMenu === message.id && <div className="nexus-chat-message-menu-popover nexus-context-menu"><div className="nexus-context-quick"><button onClick={() => reactToGroupMessage(message.id, '😂')}>😂</button><button onClick={() => reactToGroupMessage(message.id, '👍')}>👍</button><button onClick={() => reactToGroupMessage(message.id, '❤️')}>❤️</button><button onClick={() => reactToGroupMessage(message.id, '😮')}>😮</button></div><button onClick={() => { reactToGroupMessage(message.id, '🙂'); setOpenMessageMenu(null); }}>☻ <span>Add Reaction</span><i>›</i></button><hr /><button onClick={() => { setReplyTo(message); setOpenMessageMenu(null); }}>↶ <span>Reply</span></button><button onClick={() => { setNotice('Forward message: choose a conversation from Messenger.'); setOpenMessageMenu(null); }}>↗ <span>Forward</span></button><button onClick={() => { setNotice('Threads are not available for browser-local beta groups yet.'); setOpenMessageMenu(null); }}>▤ <span>Create Thread</span></button><hr /><button onClick={() => { void copyText(message.text, 'Message text'); setOpenMessageMenu(null); }}>▢ <span>Copy Text</span></button><button onClick={() => { setNotice('Pin is available for server conversations in Messenger.'); setOpenMessageMenu(null); }}>⌖ <span>Pin Message</span></button><button onClick={() => { saveGroupBookmark(message); setOpenMessageMenu(null); }}>♧ <span>Bookmark Message</span></button><button onClick={() => { scheduleGroupReminder(message); setOpenMessageMenu(null); }}>◷ <span>Create Reminder</span><i>›</i></button><button onClick={() => { setNotice('No message apps are connected.'); setOpenMessageMenu(null); }}>✣ <span>Apps</span><i>›</i></button><button onClick={() => { markGroupUnread(); setOpenMessageMenu(null); }}>◉ <span>Mark Unread</span></button><button onClick={() => { void copyText(`${window.location.origin}/studygroups#${message.id}`, 'Message link'); setOpenMessageMenu(null); }}>↗ <span>Copy Message Link</span></button><button onClick={() => { speakGroupMessage(message); setOpenMessageMenu(null); }}>◖ <span>Speak Message</span></button><hr /><button className="danger" onClick={() => { setMessages({ ...groupMessages, [messageKey]: (groupMessages[messageKey] || []).filter(item => item.id !== message.id) }); setOpenMessageMenu(null); }}>▣ <span>Delete Message</span></button><button className="danger" onClick={() => { const reports = JSON.parse(localStorage.getItem('nexus-message-reports-v1') || '[]'); reports.push({ messageId: message.id, text: message.text, reportedAt: new Date().toISOString() }); localStorage.setItem('nexus-message-reports-v1', JSON.stringify(reports)); setNotice('Report saved for beta review on this browser.'); setOpenMessageMenu(null); }}>⚑ <span>Report Message</span></button><hr /><button onClick={() => { void copyText(message.id, 'Message ID'); setOpenMessageMenu(null); }}>ID <span>Copy Message ID</span></button></div>}</div></div>{message.reactions.map(reaction => <button type="button" key={reaction} aria-pressed="true" title="Remove your reaction" onClick={() => reactToGroupMessage(message.id, reaction)}>{reaction}</button>)}</div></div></article>; })}{!(groupMessages[messageKey] || []).length && <div className="nexus-channel-empty"><Hash size={28} /><strong>Welcome to #{activeChannel?.name}</strong><p>This is the beginning of the channel.</p></div>}</div><div className="nexus-chat-tools"><button onClick={() => { if (window.confirm(`Permanently clear all messages in #${activeChannel?.name}?`)) setMessages({ ...groupMessages, [messageKey]: [] }); }}><Trash2 size={14} /> Clear this channel’s history</button><small>Beta messages are kept in this browser only.</small></div><form className="nexus-chat-composer" onSubmit={sendMessage}>{replyTo && <div className="nexus-chat-replying"><span>Replying to <strong>{replyTo.sender}</strong><small>{replyTo.text.slice(0, 90)}</small></span><button type="button" title="Cancel reply" onClick={() => setReplyTo(null)}><X size={15} /></button></div>}<button type="button" title="Add emoji" onClick={() => setDraftMessage(value => `${value}🙂`)}>☺</button><input value={draftMessage} onChange={event => setDraftMessage(event.target.value)} placeholder={`Message #${activeChannel?.name}`} /><button type="submit">Send</button></form></section>
+          </div>}
         </section>
       </main>
     </div>
-    {createOpen && <div className="study-group-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setCreateOpen(false); }}><section className="study-group-modal" role="dialog" aria-modal="true" aria-labelledby="study-group-modal-title"><button type="button" className="study-group-modal-close" onClick={() => setCreateOpen(false)} aria-label="Close">×</button><span className="study-groups-eyebrow">COMING SOON</span><h2 id="study-group-modal-title">Create your group</h2><p>Group creation is in beta planning. Real groups will have a profile icon, cover banner, description, member total, and live online count.</p><button type="button" onClick={() => setCreateOpen(false)}>Got it</button></section></div>}
+    {createOpen && <div className="study-group-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setCreateOpen(false); }}><section className="study-group-modal nexus-group-modal" role="dialog" aria-modal="true" aria-labelledby="study-group-modal-title"><button type="button" className="study-group-modal-close" onClick={() => setCreateOpen(false)} aria-label="Close">×</button><span className="study-groups-eyebrow">NEW COMMUNITY</span><h2 id="study-group-modal-title">Create your group</h2><label>Group name<input value={draftName} onChange={event => setDraftName(event.target.value)} placeholder="e.g. Weekend Wanderers" /></label><label>Description<textarea value={draftDescription} onChange={event => setDraftDescription(event.target.value)} placeholder="What brings your group together?" /></label><div className="nexus-group-customize"><label className="nexus-group-icon-picker">Group icon<input type="file" accept="image/*" onChange={event => selectImage(event.target.files?.[0])} /><span style={{ background: draftBanner }}>{imagePreview ? <img src={imagePreview} alt="Group icon preview" /> : draftIcon}</span><small><ImagePlus size={14} /> Upload icon</small></label><label>Icon symbol<input maxLength={3} value={draftIcon} onChange={event => setDraftIcon(event.target.value)} /></label><label>Banner color<input type="color" value={draftBanner} onChange={event => setDraftBanner(event.target.value)} /></label></div><div className="nexus-group-banner-preview" style={{ background: draftBanner }} /><button type="button" className="nexus-group-submit" disabled={!draftName.trim()} onClick={addGroup}>Create group</button><small className="nexus-beta-note"><LockKeyhole size={12} /> Groups are stored in this browser during beta.</small></section></div>}
+    {settingsOpen && activeGroup && <div className="study-group-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setSettingsOpen(false); }}><section className="study-group-modal nexus-group-settings" role="dialog" aria-modal="true" aria-labelledby="nexus-settings-title"><button type="button" className="study-group-modal-close" onClick={() => setSettingsOpen(false)} aria-label="Close">×</button><span className="study-groups-eyebrow">GROUP CONTROLS</span><h2 id="nexus-settings-title">{activeGroup.name} settings</h2><label>Group name<input value={activeGroup.name} onChange={event => updateGroup({ ...activeGroup, name: event.target.value })} /></label><label>Description<textarea value={activeGroup.description} onChange={event => updateGroup({ ...activeGroup, description: event.target.value })} /></label><label>Banner color<input type="color" value={activeGroup.banner} onChange={event => updateGroup({ ...activeGroup, banner: event.target.value })} /></label><button className="nexus-group-submit" onClick={() => setSettingsOpen(false)}>Done</button></section></div>}
     <GlobalSearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
   </div>;
 };

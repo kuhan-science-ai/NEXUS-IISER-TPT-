@@ -2,38 +2,65 @@
 
 NEXUS is an integrated academic, communication, and productivity platform built for students, faculty, and administrators of IISER Tirupati.
 
-## Run and stop the site locally
+## Start the site locally (Windows)
 
-These commands apply to this cloned workspace. Run them in separate PowerShell windows from the project root.
+Run the backend and frontend in **two separate PowerShell windows**. The frontend proxies API and WebSocket requests to the backend.
 
-### Activate / start
+### 1. Prepare the backend (first run, or if Uvicorn is missing)
 
-1. Start the API:
+From the project root:
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r backend\requirements.txt
+```
+
+Use Python 3.10 or later. If this folder already has a `.venv` but it reports `No module named uvicorn`, activate it and install the backend requirements:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-uvicorn backend.app.main:app --reload --port 8000
+python -m pip install -r backend\requirements.txt
 ```
 
-2. Start the web app in a second PowerShell window:
+If PowerShell blocks activation, run the install through the virtual environment directly:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+```
+
+### 2. Start the backend
+
+From the project root, with the virtual environment active:
+
+```powershell
+uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+The backend uses local SQLite by default and creates `nexus.db` on first launch. Optional settings can be copied from `.env.example` into a local `.env`; keep `.env` private and never commit it. The API health check is at [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health), and interactive API docs are at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+
+Alternatively, after installing the backend requirements, start it from the project root using:
+
+```powershell
+.\scripts\run_backend.bat
+```
+
+### 3. Start the frontend
+
+Open a second PowerShell window. From the project root, install the Node dependencies once, then start Vite:
 
 ```powershell
 cd frontend
-npm install   # only needed once, or after dependencies change
+npm install
 npm run dev
 ```
 
-Open the local address Vite prints in the terminal (normally `http://localhost:5173`). If you start Vite with another port, use that printed address instead.
+Open the `Local` URL printed by Vite. It normally uses [http://localhost:5173](http://localhost:5173); if that port is already occupied, Vite automatically selects the next available port (for example, `http://localhost:5174`). You can also launch the frontend with `..\scripts\run_frontend.bat` from the project root (after `npm install` has completed).
 
-### Revoke / stop
+### Stop the servers
 
-To stop either running service, focus its PowerShell window and press `Ctrl+C`. This stops only the local development server; it does not delete your database, files, or source code.
-
-To deactivate the Python environment after stopping the API, run:
-
-```powershell
-deactivate
-```
+Press `Ctrl+C` in each server window. To leave the Python virtual environment, run `deactivate` in the backend window.
 
 ## Architecture Philosophy
 - **Decoupled Design**: The frontend is built with minimal functional, unstyled components awaiting official Figma UI design handoff.

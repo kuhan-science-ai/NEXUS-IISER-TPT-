@@ -439,6 +439,39 @@ async def delete_message(
 
     return {"message": "Message deleted"}
 
+@router.delete("/conversations/{conv_id}/messages")
+async def clear_conversation_history(
+    conv_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    membership_stmt = select(ConversationMember).where(
+        and_(ConversationMember.conversation_id == conv_id, ConversationMember.user_id == current_user.id)
+    )
+    membership = (await db.execute(membership_stmt)).scalar_one_or_none()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not a member of this conversation")
+
+    messages_stmt = select(Message).where(
+        and_(Message.conversation_id == conv_id, Message.is_deleted.is_(False))
+    )
+    messages = (await db.execute(messages_stmt)).scalars().all()
+    now = datetime.now(timezone.utc)
+    for message in messages:
+        message.is_deleted = True
+        message.deleted_by_id = current_user.id
+        message.updated_at = now
+    await db.commit()
+
+    member_ids = (await db.execute(
+        select(ConversationMember.user_id).where(ConversationMember.conversation_id == conv_id)
+    )).scalars().all()
+    await manager.broadcast_to_users(
+        list(member_ids),
+        {"event": "conversation.cleared", "conversation_id": conv_id},
+    )
+    return {"message": "Conversation history cleared", "cleared_count": len(messages)}
+
 @router.post("/messages/{message_id}/reactions")
 async def toggle_reaction(
     message_id: str,

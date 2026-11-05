@@ -8,6 +8,9 @@ NEXUS is a student community and academic platform for IISER Tirupati. The activ
 
 ## Current status
 
+- Friends and Messenger no longer display seeded demo people, requests, conversations, or messages. Friends and requests load from the API, student search can send requests, and Messenger loads persisted conversations, sends stored messages, and listens for WebSocket updates. Beta history clearing soft-deletes messages for the selected conversation and broadcasts the change.
+- The Groups page now has My groups and All groups views, group creation with icon/banner customization, configurable channel lists, group settings, emoji/reply/delete controls, and per-channel clear controls. Beta group profiles and messages are stored in this browser only; they are not shared across users/devices and do not yet use backend group membership.
+
 - The dashboard QOTD artwork now scales to the available widget height as well as width, preserving its aspect ratio and leaving room for the action link above the fixed profile pin.
 - AOTD has a development-only sample-answer toggle to preview the blurred locked state and mock community responses; samples are local UI data and are never submitted to the API.
 

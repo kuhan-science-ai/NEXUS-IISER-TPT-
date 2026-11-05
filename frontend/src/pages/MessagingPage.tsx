@@ -1,448 +1,137 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { MessagesSquare, MoreHorizontal, Phone, Plus, Rocket, Search, UserRound, Video, X } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { CornerUpLeft, Forward, MessagesSquare, MoreHorizontal, Phone, Plus, Rocket, Search, SmilePlus, Trash2, UserRound, Video, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { UserSummary } from '../services/api';
+import { api, UserSummary } from '../services/api';
+import { wsClient } from '../services/websocket';
 import { SideNav } from '../components/SideNav';
 import { TopHeader } from '../components/TopHeader';
 import { GlobalSearchModal } from '../components/GlobalSearchModal';
 import './FriendsPage.css';
 import './MessagingPage.css';
 
-interface MessagingPageProps {
-  currentUser: UserSummary | null;
-  onLogout?: () => void;
-}
+interface MessagingPageProps { currentUser: UserSummary | null; onLogout?: () => void; }
+type Conversation = { id: string; type: string; title?: string; description?: string; members?: any[]; last_message?: Message | null };
+type Message = { id: string; conversation_id: string; sender_id: string; sender_name?: string; sender_username?: string; content: string; created_at: string; reactions?: { emoji: string; count: number; user_ids: string[] }[]; reply_to_id?: string | null; reply_preview?: string | null; is_deleted?: boolean; is_pinned?: boolean };
 
 export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLogout }) => {
   const navigate = useNavigate();
-  const isOperaGX = typeof navigator !== 'undefined' && /OPR\//.test(navigator.userAgent);
   const [searchOpen, setSearchOpen] = useState(false);
   const [conversationQuery, setConversationQuery] = useState('');
   const [inputText, setInputText] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
   const [callPreview, setCallPreview] = useState<'voice' | 'video' | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [menuNotice, setMenuNotice] = useState('');
   const conversationSearchRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollAfterSendRef = useRef(false);
 
-  const conversations = [
-    {
-      id: 'meera',
-      name: 'Meera Iyer',
-      initials: 'MI',
-      time: '10:45',
-      snippet: 'Library after lunch?',
-      unread: true,
-      online: true,
-      major: 'Physics · BS–MS 2023',
-    },
-    {
-      id: 'qc',
-      name: 'Quantum Collective',
-      initials: 'QC',
-      time: '10:32',
-      snippet: 'Arjun: Uploaded the solutions',
-      unread: true,
-      online: true,
-      major: 'Study group · 12 members',
-    },
-    {
-      id: 'arjun',
-      name: 'Arjun Nair',
-      initials: 'AN',
-      time: '09:41',
-      snippet: 'Astronomy night this Friday?',
-      unread: true,
-      online: true,
-      major: 'Mathematics · BS–MS 2023',
-    },
-    {
-      id: 'sana',
-      name: 'Sana Khan',
-      initials: 'SK',
-      time: 'Yesterday',
-      snippet: 'Thanks for sharing the notes!',
-      unread: false,
-      online: false,
-      major: 'Biology · BS–MS 2024',
-    },
-    {
-      id: 'skywatchers',
-      name: 'Skywatchers Club',
-      initials: 'SC',
-      time: 'Yesterday',
-      snippet: 'Rooftop access confirmed 🔭',
-      unread: false,
-      online: true,
-      major: 'Campus club · 148 members',
-    },
-    {
-      id: 'dev',
-      name: 'Dev Patel',
-      initials: 'DP',
-      time: 'Sunday',
-      snippet: 'See you at the lab',
-      unread: false,
-      online: false,
-      major: 'Chemistry · BS–MS 2023',
-    },
-  ];
-
-  const [activeConvId, setActiveConvId] = useState('meera');
-
-  const [chatMessages, setChatMessages] = useState([
-    {
-      sender: 'Meera',
-      text: 'Hey! Did you get the last step in the perturbation proof? I think we missed a minus sign 😅',
-      time: '10:42',
-      isMe: false,
-    },
-    {
-      sender: 'You',
-      text: 'Yes! The second term should be negative. I marked it in my notes.',
-      time: '10:43',
-      isMe: true,
-      status: 'Read ✓✓',
-    },
-    {
-      sender: 'You',
-      attachment: {
-        name: 'Perturbation_theory.pdf',
-        meta: 'PDF · 1.2 MB · 18 pages',
-      },
-      time: '10:43',
-      isMe: true,
-    },
-    {
-      sender: 'Meera',
-      text: 'Let’s work through the rest at the library after lunch?',
-      time: '10:44',
-      isMe: false,
-    },
-  ]);
-
-  const activeConv = conversations.find((c) => c.id === activeConvId) || conversations[0];
-
+  const loadConversations = useCallback(async () => {
+    try { const rows = await api.listConversations(); setConversations(rows); setActiveConvId(current => current && rows.some((row: Conversation) => row.id === current) ? current : null); }
+    catch { setConversations([]); }
+  }, []);
+  useEffect(() => { void loadConversations(); }, [loadConversations]);
   useEffect(() => {
-    if (!scrollAfterSendRef.current) return;
-    scrollAfterSendRef.current = false;
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [chatMessages]);
-
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim()) return;
-    scrollAfterSendRef.current = true;
-    setChatMessages((messages) => [
-      ...messages,
-      {
-        sender: 'You',
-        text: inputText,
-        time: 'Just now',
-        isMe: true,
-        status: 'Delivered ✓✓',
-      },
-    ]);
-    setInputText('');
+    if (!activeConvId) { setChatMessages([]); return; }
+    let alive = true; setLoading(true); setError('');
+    api.getMessages(activeConvId).then(rows => { if (alive) setChatMessages(rows); }).catch(() => { if (alive) { setChatMessages([]); setError('Messages could not be loaded. Check your connection and try again.'); } }).finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [activeConvId]);
+  useEffect(() => {
+    const removeListener = wsClient.addListener(event => {
+    if (event.event === 'message.new' && event.message) {
+      if (event.conversation_id === activeConvId) setChatMessages(items => items.some(item => item.id === event.message.id) ? items : [...items, event.message]);
+      void loadConversations();
+    } else if (event.event === 'message.deleted' && event.conversation_id === activeConvId) setChatMessages(items => items.map(item => item.id === event.message_id ? { ...item, is_deleted: true, content: 'This message was deleted.' } : item));
+    else if (event.event === 'conversation.cleared' && event.conversation_id === activeConvId) setChatMessages(items => items.map(item => ({ ...item, is_deleted: true, content: 'This message was deleted.' })));
+    else if (event.event === 'message.edited' && event.conversation_id === activeConvId && event.message) setChatMessages(items => items.map(item => item.id === event.message.id ? event.message : item));
+    else if (event.event === 'message.reaction' && event.conversation_id === activeConvId) void api.getMessages(activeConvId).then(setChatMessages).catch(() => undefined);
+    });
+    return () => { removeListener(); };
+  }, [activeConvId, loadConversations]);
+  useEffect(() => { document.getElementById('messenger-bottom-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages]);
+  const jumpToMessage = (messageId: string) => {
+    const target = document.getElementById(`message-${messageId}`);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedMessageId(messageId);
+    window.setTimeout(() => setHighlightedMessageId(current => current === messageId ? null : current), 1600);
   };
+  const showMenuNotice = (text: string) => { setMenuNotice(text); window.setTimeout(() => setMenuNotice(''), 1800); };
+  const copyMessageValue = async (text: string, label: string) => { await navigator.clipboard?.writeText(text); showMenuNotice(`${label} copied`); };
+  const toggleMessageBookmark = (message: Message) => { const key = 'nexus-message-bookmarks-v1'; const saved = JSON.parse(localStorage.getItem(key) || '[]'); const exists = saved.some((item: any) => item.id === message.id); const conversation = conversations.find(item => item.id === message.conversation_id); localStorage.setItem(key, JSON.stringify(exists ? saved.filter((item: any) => item.id !== message.id) : [...saved, { ...message, conversation: conversation ? displayName(conversation) : 'Conversation' }])); showMenuNotice(exists ? 'Bookmark removed' : 'Message bookmarked in this browser'); };
 
   if (!currentUser) return null;
+  const activeConv = conversations.find(conversation => conversation.id === activeConvId);
+  const displayName = (conversation: Conversation) => conversation.title || conversation.members?.filter(member => member.user_id !== currentUser.id).map(member => member.full_name || member.username).join(', ') || 'Conversation';
+  const initials = (conversation: Conversation) => displayName(conversation).split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase();
+  const sendMessage = async (event: React.FormEvent) => {
+    event.preventDefault(); if (!activeConvId || !inputText.trim()) return;
+    const content = inputText.trim(); setInputText('');
+    try { const sent = await api.sendMessage(activeConvId, { content, reply_to_id: replyTo?.id || null }); setChatMessages(items => items.some(item => item.id === sent.id) ? items : [...items, sent]); setReplyTo(null); void loadConversations(); }
+    catch { setInputText(content); setError('Message was not sent. Please try again.'); }
+  };
+  const clearHistory = async () => {
+    if (!activeConvId || !window.confirm('Delete every message in this conversation? This permanently removes its stored history.')) return;
+    try { await api.clearConversationHistory(activeConvId); setChatMessages(items => items.map(item => ({ ...item, is_deleted: true, content: 'This message was deleted.' }))); setError(''); }
+    catch { setError('Some messages could not be deleted. Reloading conversation history.'); setChatMessages(await api.getMessages(activeConvId).catch(() => [])); }
+  };
+  const filteredConversations = conversations.filter(conversation => displayName(conversation).toLowerCase().includes(conversationQuery.toLowerCase()));
 
-  return (
-    <div className={`messenger-route${isOperaGX ? ' is-opera-gx' : ''}`} style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-canvas)' }}>
-      <SideNav currentUser={currentUser} onLogout={onLogout} onOpenSearch={() => setSearchOpen(true)} />
-
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh' }}>
-        <TopHeader
-          breadcrumb="Workspace / Messenger"
-          currentUser={currentUser}
-          onOpenSearch={() => setSearchOpen(true)}
-        />
-
-        {/* 3-Column Messenger Layout (Page 9) */}
-        <div className="messenger-discord-layout" style={{ flex: 1, display: 'grid', gridTemplateColumns: profileOpen ? '272px minmax(0, 1fr) 280px' : '272px minmax(0, 1fr)', overflow: 'hidden' }}>
-          {/* Column 1: Conversations List */}
-          <aside className="friends-dm-sidebar messenger-dm-sidebar">
-            <label className="friends-start-conversation messenger-conversation-search">
-              <Search size={15} />
-              <input ref={conversationSearchRef} value={conversationQuery} onChange={(event) => setConversationQuery(event.target.value)} placeholder="Find or start a conversation" aria-label="Find or start a conversation" />
-            </label>
-            <div className="friends-side-active messenger-side-active"><MessagesSquare size={17} /> Messenger <span>{conversations.filter((conv) => conv.unread).length}</span></div>
-            <div className="friends-dm-heading">Direct Messages <button aria-label="Find a conversation" onClick={() => conversationSearchRef.current?.focus()}><Plus size={17} /></button></div>
-            <div className="friends-dm-list">
-              {conversations.filter((conv) => conv.name.toLowerCase().includes(conversationQuery.toLowerCase())).map((conv) => (
-                <button key={conv.id} className={`friends-dm-item ${conv.id === activeConvId ? 'is-selected' : ''}`} onClick={() => setActiveConvId(conv.id)}>
-                  <span className={`friends-avatar ${conv.online ? 'is-online' : ''}`}>{conv.initials}</span>
-                  <span className="friends-dm-copy"><strong>{conv.name}</strong><small>{conv.snippet}</small></span>
-                </button>
-              ))}
-              {conversations.every((conv) => !conv.name.toLowerCase().includes(conversationQuery.toLowerCase())) && <p className="friends-empty">No conversations match your search.</p>}
-            </div>
-            <div className="friends-own-profile">
-              <span className="friends-avatar">{(currentUser.display_name || currentUser.full_name || currentUser.username || 'AR').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>
-              <span><strong>{currentUser.display_name || currentUser.full_name || currentUser.username || 'Student'}</strong><small>Verified student</small></span>
-              <button aria-label="Open profile settings" onClick={() => navigate('/settings')}><MoreHorizontal size={18} /></button>
-            </div>
-          </aside>
-
-          {/* Column 2: Active Chat */}
-          <div className="messenger-chat-panel" style={{
-            display: 'flex',
-            flexDirection: 'column',
-            background: 'var(--bg-canvas)',
-            height: '100%',
-            minWidth: 0,
-            position: 'relative',
-          }}>
-            {/* Chat Header */}
-            <div className="messenger-chat-header" style={{
-              height: '56px',
-              borderBottom: '1px solid var(--border)',
-              padding: '0 20px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 10,
-              background: 'var(--bg-surface)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  background: 'var(--primary)',
-                  color: '#ffffff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                }}>
-                  {activeConv.initials}
-                </div>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {activeConv.name}
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span>●</span> Online · {activeConv.major}
-                  </div>
-                </div>
-              </div>
-              <div className="messenger-chat-actions">
-                <button type="button" aria-label="Start voice call" title="Voice call" onClick={() => setCallPreview('voice')}><Phone size={17} /></button>
-                <button type="button" aria-label="Start video call" title="Video call" onClick={() => setCallPreview('video')}><Video size={17} /></button>
-                <button type="button" className={`messenger-profile-toggle ${profileOpen ? 'is-open' : ''}`} aria-label={profileOpen ? 'Close profile panel' : 'Open profile panel'} aria-pressed={profileOpen} title={profileOpen ? 'Close profile' : 'Open profile'} onClick={() => setProfileOpen((open) => !open)}><UserRound size={17} />{profileOpen && <i aria-hidden="true" />}</button>
-              </div>
-            </div>
-
-            {callPreview && <div className="messenger-call-notice" role="status"><span>{callPreview === 'voice' ? 'Voice' : 'Video'} calls are not connected in this preview yet.</span><button type="button" aria-label="Dismiss call notice" onClick={() => setCallPreview(null)}><X size={15} /></button></div>}
-
-            {/* Chat Messages */}
-            <div className="messenger-chat-messages" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div className="messenger-date-divider" style={{ textAlign: 'center', margin: '8px 0 16px' }}>
-                <span style={{
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  color: 'var(--text-subtle)',
-                  letterSpacing: '0.06em',
-                  background: 'var(--bg-surface)',
-                  padding: '4px 12px',
-                  borderRadius: '12px',
-                  border: '1px solid var(--border)',
-                }}>
-                  MONDAY, 2 NOVEMBER
-                </span>
-              </div>
-
-              {chatMessages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`messenger-message-row ${msg.isMe ? 'is-outgoing' : 'is-incoming'}`}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: msg.isMe ? 'flex-end' : 'flex-start',
-                  }}
-                >
-                  {msg.attachment ? (
-                    <div className="messenger-bubble messenger-attachment-bubble" style={{
-                      padding: '12px 16px',
-                      background: 'var(--bg-raised)',
-                      border: '1px solid var(--border-bright)',
-                      borderRadius: 'var(--radius-md)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '14px',
-                      maxWidth: '380px',
-                    }}>
-                      <div style={{ fontSize: '24px' }}>📄</div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {msg.attachment.name}
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                          {msg.attachment.meta}
-                        </div>
-                      </div>
-                      <button style={{
-                        background: 'var(--primary)',
-                        color: '#ffffff',
-                        padding: '4px 10px',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                      }}>
-                        Download ↓
-                      </button>
+  return <div className="messenger-route" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-canvas)' }}>
+    <SideNav currentUser={currentUser} onLogout={onLogout} onOpenSearch={() => setSearchOpen(true)} />
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh' }}><TopHeader breadcrumb="Workspace / Messenger" currentUser={currentUser} onOpenSearch={() => setSearchOpen(true)} />
+      <div className="messenger-discord-layout" style={{ flex: 1, display: 'grid', gridTemplateColumns: profileOpen ? '272px minmax(0, 1fr) 280px' : '272px minmax(0, 1fr)', overflow: 'hidden' }}>
+        <aside className="friends-dm-sidebar messenger-dm-sidebar">
+          <label className="friends-start-conversation messenger-conversation-search"><Search size={15} /><input ref={conversationSearchRef} value={conversationQuery} onChange={event => setConversationQuery(event.target.value)} placeholder="Find or start a conversation" aria-label="Find or start a conversation" /></label>
+          <div className="friends-side-active messenger-side-active"><MessagesSquare size={17} /> Messenger <span>{conversations.length}</span></div>
+          <div className="friends-dm-heading">Conversations <button aria-label="Start a conversation" onClick={() => navigate('/friends')}><Plus size={17} /></button></div>
+          <div className="friends-dm-list">{filteredConversations.map(conversation => <button key={conversation.id} className={`friends-dm-item ${conversation.id === activeConvId ? 'is-selected' : ''}`} onClick={() => { setActiveConvId(conversation.id); setProfileOpen(false); }}><span className="friends-avatar">{initials(conversation)}</span><span className="friends-dm-copy"><strong>{displayName(conversation)}</strong><small>{conversation.last_message?.content || 'No messages yet'}</small></span></button>)}
+            {!filteredConversations.length && <p className="friends-empty">{conversationQuery ? 'No conversations match your search.' : 'No conversations yet. Add a friend to start a chat.'}</p>}</div>
+          <div className="friends-own-profile"><span className="friends-avatar">{(currentUser.display_name || currentUser.full_name || currentUser.username || '?').slice(0, 1).toUpperCase()}</span><span><strong>{currentUser.display_name || currentUser.full_name || currentUser.username}</strong><small>Verified student</small></span><button aria-label="Open profile settings" onClick={() => navigate('/settings')}><MoreHorizontal size={18} /></button></div>
+        </aside>
+        <section className="messenger-chat-panel" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-canvas)', height: '100%', minWidth: 0, position: 'relative' }}>
+          {activeConv ? <>
+            <header className="messenger-chat-header" style={{ height: 56, borderBottom: '1px solid var(--border)', padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: 'var(--bg-surface)' }}><div className="nexus-dm-heading"><span className="friends-avatar">{initials(activeConv)}</span><div><strong>{displayName(activeConv)}</strong><small>{activeConv.type === 'GROUP' ? 'Group conversation' : 'Direct conversation'}</small></div></div><div className="messenger-chat-actions"><button type="button" aria-label="Start voice call" title="Voice call" onClick={() => setCallPreview('voice')}><Phone size={17} /></button><button type="button" aria-label="Start video call" title="Video call" onClick={() => setCallPreview('video')}><Video size={17} /></button><button type="button" aria-label="Clear conversation history" title="Clear conversation history" onClick={() => void clearHistory()}><Trash2 size={17} /></button><button type="button" className={`messenger-profile-toggle ${profileOpen ? 'is-open' : ''}`} aria-label="Open conversation details" onClick={() => setProfileOpen(value => !value)}><UserRound size={17} /></button></div></header>
+            {callPreview && <div className="messenger-call-notice" role="status"><span>{callPreview === 'voice' ? 'Voice' : 'Video'} calls are not connected yet.</span><button onClick={() => setCallPreview(null)} aria-label="Dismiss"><X size={15} /></button></div>}
+            {error && <p className="nexus-message-error" role="alert">{error}</p>}{menuNotice && <div className="nexus-chat-toast" role="status">{menuNotice}</div>}
+            <div className="messenger-chat-messages nexus-chat-messages" style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column' }}>
+              {loading && <p className="friends-empty">Loading messages…</p>}
+              {!loading && !chatMessages.length && <div className="nexus-dm-empty"><MessagesSquare size={30} /><strong>This is the start of your conversation.</strong><p>Send a message to get things going.</p></div>}
+              {chatMessages.map(message => {
+                const mine = message.sender_id === currentUser.id;
+                const author = mine ? 'You' : message.sender_name || message.sender_username || 'Student';
+                const previous = chatMessages[chatMessages.indexOf(message) - 1];
+                const sameAuthor = previous && (previous.sender_id === currentUser.id ? 'You' : previous.sender_name || previous.sender_username || 'Student') === author;
+                return <article id={`message-${message.id}`} className={`nexus-message-row nexus-chat-message${sameAuthor ? ' grouped' : ''} ${mine ? 'mine' : ''}${highlightedMessageId === message.id ? ' is-jump-target' : ''}`} key={message.id}>
+                  <span className="nexus-chat-avatar-slot">{!sameAuthor && <span className="nexus-message-avatar nexus-chat-message-avatar">{author.slice(0, 1).toUpperCase()}</span>}</span>
+                  <div className="nexus-message-main">
+                    {!sameAuthor && <div className="nexus-message-meta"><strong>{author}</strong><time>{new Date(message.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</time></div>}
+                    <div className="nexus-message-text-line"><p className={message.is_deleted ? 'deleted' : ''}>{message.content}</p><div className="nexus-message-hover-tools"><button title="React with laughing" onClick={() => void api.toggleReaction(message.id, '😂').then(() => api.getMessages(activeConvId).then(setChatMessages))}>😂</button><button title="React with thumbs up" onClick={() => void api.toggleReaction(message.id, '👍').then(() => api.getMessages(activeConvId).then(setChatMessages))}>👍</button><button title="React with heart" onClick={() => void api.toggleReaction(message.id, '❤️').then(() => api.getMessages(activeConvId).then(setChatMessages))}>❤️</button><button title="Add reaction" aria-label="Add reaction" onClick={() => void api.toggleReaction(message.id, '🙂').then(() => api.getMessages(activeConvId).then(setChatMessages))}><SmilePlus size={15} /></button><button title="Reply" onClick={() => setReplyTo(message)}><CornerUpLeft size={15} /></button><button title="Forward"><Forward size={14} /></button><div className="nexus-message-menu"><button aria-label="More message options"><MoreHorizontal size={16} /></button><div>
+                        <div className="nexus-context-quick"><button onClick={() => void api.toggleReaction(message.id, '😂').then(() => api.getMessages(activeConvId).then(setChatMessages))}>😂</button><button onClick={() => void api.toggleReaction(message.id, '👍').then(() => api.getMessages(activeConvId).then(setChatMessages))}>👍</button><button onClick={() => void api.toggleReaction(message.id, '❤️').then(() => api.getMessages(activeConvId).then(setChatMessages))}>❤️</button><button onClick={() => void api.toggleReaction(message.id, '😮').then(() => api.getMessages(activeConvId).then(setChatMessages))}>😮</button></div>
+                        <button onClick={() => void api.toggleReaction(message.id, '🙂').then(() => api.getMessages(activeConvId).then(setChatMessages))}>☻ <span>Add Reaction</span><i>›</i></button><hr />
+                        <button onClick={() => setReplyTo(message)}>↶ <span>Reply</span></button><button onClick={() => showMenuNotice('Forward message: choose a conversation from Messenger.')}>↗ <span>Forward</span></button><button onClick={() => showMenuNotice('Message threads are not available yet.')}>▤ <span>Create Thread</span></button><hr />
+                        <button onClick={() => void copyMessageValue(message.content, 'Message text')}>▢ <span>Copy Text</span></button><button onClick={() => void api.toggleMessagePin(message.id).then(() => api.getMessages(activeConvId).then(setChatMessages))}>⌖ <span>{message.is_pinned ? 'Unpin Message' : 'Pin Message'}</span></button><button onClick={() => toggleMessageBookmark(message)}>♧ <span>Bookmark Message</span></button><button onClick={() => { const minutes = Number(window.prompt('Remind me in how many minutes?', '30')); if (minutes > 0) { window.setTimeout(() => window.alert(`Reminder: ${message.content}`), minutes * 60_000); showMenuNotice(`Reminder set for ${minutes} minutes`); } }}>◷ <span>Create Reminder</span><i>›</i></button><button onClick={() => showMenuNotice('No message apps are connected.')}>✣ <span>Apps</span><i>›</i></button><button onClick={() => showMenuNotice('Conversation marked unread on this browser.')}>◉ <span>Mark Unread</span></button><button onClick={() => void copyMessageValue(`${window.location.origin}/messaging#${message.id}`, 'Message link')}>↗ <span>Copy Message Link</span></button><button onClick={() => { window.speechSynthesis?.cancel(); window.speechSynthesis?.speak(new SpeechSynthesisUtterance(message.content)); }}>◖ <span>Speak Message</span></button><hr />
+                        {mine && !message.is_deleted && <button className="danger" onClick={() => void api.deleteMessage(message.id).then(() => setChatMessages(items => items.map(item => item.id === message.id ? { ...item, content: 'This message was deleted.', is_deleted: true } : item)))}>▣ <span>Delete Message</span></button>}<button className="danger" onClick={() => showMenuNotice('Report noted. Message reports are not connected to moderation yet.')}>⚑ <span>Report Message</span></button><hr /><button onClick={() => void copyMessageValue(message.id, 'Message ID')}>ID <span>Copy Message ID</span></button>
+                      </div></div></div>
                     </div>
-                  ) : (
-                    <div className="messenger-bubble" style={{
-                      maxWidth: '480px',
-                      padding: '12px 16px',
-                      borderRadius: msg.isMe ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
-                      background: msg.isMe ? 'var(--primary)' : 'var(--bg-surface)',
-                      color: msg.isMe ? '#ffffff' : 'var(--text-primary)',
-                      border: msg.isMe ? 'none' : '1px solid var(--border)',
-                      fontSize: '13.5px',
-                      lineHeight: 1.45,
-                    }}>
-                      {msg.text}
-                    </div>
-                  )}
-
-                  <div style={{ fontSize: '11px', color: 'var(--text-subtle)', marginTop: '4px', display: 'flex', gap: '6px' }}>
-                    <span>{msg.time}</span>
-                    {msg.status && <span>· {msg.status}</span>}
+                    {message.reply_preview && message.reply_to_id && <button type="button" className="nexus-chat-reply-preview nexus-message-reply-preview" onClick={() => jumpToMessage(message.reply_to_id!)}>↪ {message.reply_preview}</button>}
+                    <div className="nexus-message-reactions">{message.reactions?.map(reaction => <button className={reaction.user_ids.includes(currentUser.id) ? 'is-reacted' : ''} key={reaction.emoji} aria-pressed={reaction.user_ids.includes(currentUser.id)} title={reaction.user_ids.includes(currentUser.id) ? 'Remove your reaction' : 'Add your reaction'} onClick={() => void api.toggleReaction(message.id, reaction.emoji).then(() => api.getMessages(activeConvId).then(setChatMessages))}>{reaction.emoji} {reaction.count}</button>)}<button className="nexus-add-reaction" title="Add reaction" aria-label="Add reaction" onClick={() => void api.toggleReaction(message.id, '🙂').then(() => api.getMessages(activeConvId).then(setChatMessages))}><SmilePlus size={15} /></button></div>
                   </div>
-                </div>
-              ))}
-
-              <div className="messenger-typing-indicator" style={{ width: '100%', fontSize: '12px', color: 'var(--text-subtle)', fontStyle: 'italic', marginTop: '6px' }}>
-                Meera is typing…
-              </div>
-              <div ref={messagesEndRef} aria-hidden="true" />
+                </article>;
+              })}
+              <div id="messenger-bottom-anchor" ref={messagesEndRef} />
             </div>
-
-            {/* Message Input Box */}
-            <form className="messenger-chat-composer" onSubmit={handleSendMessage} style={{
-              padding: '16px 20px',
-              borderTop: '1px solid var(--border)',
-              background: 'var(--bg-surface)',
-            }}>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <input
-                  type="text"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder={`Message ${activeConv.name}…`}
-                  style={{ flex: 1, background: 'var(--bg-raised)' }}
-                />
-                <button
-                  type="submit"
-                  aria-label="Send message"
-                  title="Send message"
-                  style={{
-                    background: 'var(--primary)',
-                    color: '#ffffff',
-                    padding: '8px 18px',
-                    borderRadius: 'var(--radius-sm)',
-                    fontWeight: 600,
-                    fontSize: '13px',
-                  }}
-                >
-                  <Rocket size={17} />
-                </button>
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-subtle)', marginTop: '6px' }}>
-                Enter to send · Shift + Enter for a new line
-              </div>
-            </form>
-          </div>
-
-          {/* Column 3: Shared Context & Profile Sidebar */}
-          {profileOpen && <aside className="messenger-profile-panel" style={{
-            borderLeft: '1px solid var(--border)',
-            background: 'var(--bg-navigation)',
-            padding: '24px 18px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '24px',
-          }}>
-            <button type="button" className="messenger-profile-close" aria-label="Close profile panel" title="Close profile" onClick={() => setProfileOpen(false)}><X size={17} /></button>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{
-                width: '64px',
-                height: '64px',
-                borderRadius: '50%',
-                background: 'var(--bg-raised)',
-                border: '2px solid var(--primary)',
-                color: 'var(--primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '20px',
-                fontWeight: 800,
-                margin: '0 auto 12px',
-              }}>
-                {activeConv.initials}
-              </div>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                {activeConv.name}
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                {activeConv.major}
-              </div>
-              <div style={{ fontSize: '11.5px', color: 'var(--text-subtle)', marginTop: '2px' }}>
-                IISER Tirupati
-              </div>
-              <button style={{
-                marginTop: '12px',
-                padding: '6px 14px',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-primary)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: '12px',
-              }}>
-                View profile
-              </button>
-            </div>
-
-            {/* Shared Files */}
-            <div>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', marginBottom: '10px' }}>
-                Shared files
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ padding: '8px 10px', background: 'var(--bg-surface)', borderRadius: '6px', fontSize: '12.5px', color: 'var(--text-primary)' }}>
-                  📄 Perturbation_theory.pdf
-                </div>
-                <div style={{ padding: '8px 10px', background: 'var(--bg-surface)', borderRadius: '6px', fontSize: '12.5px', color: 'var(--text-primary)' }}>
-                  📄 QM_complete_notes.pdf
-                </div>
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--primary)', marginTop: '8px', cursor: 'pointer' }}>
-                View all 12 files →
-              </div>
-            </div>
-
-            {/* Connected Info */}
-            <div style={{
-              fontSize: '12px',
-              color: 'var(--text-subtle)',
-              borderTop: '1px solid var(--border)',
-              paddingTop: '16px',
-              lineHeight: 1.4,
-            }}>
-              Connected through PHY 301 and Quantum Collective.
-            </div>
-          </aside>}
-        </div>
+            <form className="messenger-chat-composer nexus-real-composer" onSubmit={sendMessage}>{replyTo && <div className="nexus-replying"><span>Replying to <strong>{replyTo.sender_name || replyTo.sender_username}</strong><small>{replyTo.content.slice(0, 90)}</small></span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><X size={14} /></button></div>}<div><button type="button" title="Insert emoji" onClick={() => setInputText(value => `${value}🙂`)}>☺</button><input value={inputText} onChange={event => setInputText(event.target.value)} placeholder={`Message ${displayName(activeConv)}…`} /><button type="submit" aria-label="Send message" title="Send message"><Rocket size={17} /></button></div><small>Messages are saved to your conversation history.</small></form>
+          </> : <div className="nexus-dm-empty"><MessagesSquare size={34} /><strong>{conversations.length ? 'Choose a conversation' : 'No conversations yet'}</strong><p>{conversations.length ? 'Select a chat from the list to see its messages.' : 'No contacts or chats here yet. Add a friend to start a conversation.'}</p><button onClick={() => navigate('/friends')}>Find people</button></div>}
+        </section>
+        {profileOpen && activeConv && <aside className="messenger-profile-panel nexus-conversation-details"><button type="button" className="messenger-profile-close" onClick={() => setProfileOpen(false)} aria-label="Close"><X size={17} /></button><div className="nexus-details-avatar">{initials(activeConv)}</div><h3>{displayName(activeConv)}</h3><p>{activeConv.description || `${activeConv.members?.length || 0} conversation members`}</p><div className="nexus-details-members"><strong>Members</strong>{activeConv.members?.map(member => <span key={member.user_id}>{member.full_name || member.username}</span>)}</div><button className="nexus-clear-history" onClick={() => void clearHistory()}><Trash2 size={15} /> Clear history</button><small>Clearing permanently removes messages from this conversation.</small></aside>}
       </div>
-
-      <GlobalSearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
-  );
+    <GlobalSearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
+  </div>;
 };
