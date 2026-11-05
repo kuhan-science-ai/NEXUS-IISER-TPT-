@@ -1,4 +1,4 @@
-from typing import AsyncGenerator, Callable
+from typing import AsyncGenerator, Callable, Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,7 @@ from backend.app.core.security import decode_token
 from backend.app.models.user import User, UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -36,6 +37,29 @@ async def get_current_user(
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user account")
 
+    return user
+
+
+async def get_current_user_optional(
+    token: Optional[str] = Depends(optional_oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    if not token:
+        return None
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate authentication credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    payload = decode_token(token)
+    if not payload or payload.get("token_type") != "access" or not payload.get("sub"):
+        raise credentials_exception
+    stmt = select(User).where(User.id == payload["sub"])
+    user = (await db.execute(stmt)).scalar_one_or_none()
+    if user is None:
+        raise credentials_exception
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user account")
     return user
 
 async def get_current_active_user(

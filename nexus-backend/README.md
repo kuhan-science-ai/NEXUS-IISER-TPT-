@@ -1,6 +1,6 @@
 # NEXUS on Cloudflare Workers + D1
 
-This is the Cloudflare deployment for the existing `/api/v1` client contract. It implements account registration/login/profile reads, four beta accounts, user search/friends/requests, persistent direct/group messaging, persistent AI session management, and the QOTD/AOTD read, answer, archive, and discussion APIs. Other NEXUS features still use the existing FastAPI app and are not migrated by this Worker.
+This is the Cloudflare deployment for the existing `/api/v1` client contract. It implements account registration/login/profile reads, four beta accounts, user search/friends/requests, globally shared Study Groups, persistent direct/group messaging and typing state, persistent AI session management, and the QOTD/AOTD read, answer, archive, and discussion APIs. Other NEXUS features still use the existing FastAPI app and are not migrated by this Worker.
 
 ## Local development
 
@@ -50,7 +50,7 @@ cd ..\nexus-backend
 uv run pywrangler deploy
 ```
 
-The current config points to the existing `nexus-database`. Migration `0003_ai_qotd.sql` and the Worker routes are deployed to production. Do not use `--remote` for local experiments.
+The current config points to the existing `nexus-database`. Migrations through `0005_global_groups_typing.sql` are applied in production. Do not use `--remote` for local experiments.
 
 ## Supported API slice and current gaps
 
@@ -60,13 +60,12 @@ The current config points to the existing `nexus-database`. Migration `0003_ai_q
 - AI conversations, threads, and messages are persisted in D1. The Worker forwards bounded requests to GPT‑OSS 20B in Ollama on the owner's laptop, through a bearer-token-protected local proxy and a Cloudflare Tunnel. The local model uses a 16,384-token context and 2,048 output-token limit; prompts are capped at 4,000 characters and page context at 2,500 characters. The laptop and tunnel must be online for responses.
 - QOTD/AOTD questions, archive entries, answer submissions, points, and comments use D1. The migration seeds one initial question. PDF attachments are not supported by this Worker yet.
 - The Messenger refreshes visible conversations every five seconds to receive messages across sessions. Cloudflare Durable Objects/WebSockets are not wired yet, so this is polling rather than push delivery.
-- Uploads, settings, password reset, notifications, group UI data/channels, academic features, and other application APIs are not migrated.
+- Uploads, settings, password reset, notifications, academic features, and other application APIs are not migrated.
 - The four beta credentials are intentionally public testing credentials. They are unsuitable for real accounts.
 
 ## Checks
 
 ```powershell
 uv run python -m py_compile src\entry.py
-npx wrangler types
 npx wrangler d1 migrations apply nexus-database --local
 ```

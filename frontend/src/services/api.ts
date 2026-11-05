@@ -147,6 +147,8 @@ class ApiService {
     return this.request('/friends/requests');
   }
 
+  async listSentFriendRequests(): Promise<any[]> { return this.request('/friends/requests/sent'); }
+
   async sendFriendRequest(userId: string): Promise<any> {
     return this.request(`/friends/request/${userId}`, { method: 'POST' });
   }
@@ -155,8 +157,12 @@ class ApiService {
     return this.request(`/friends/accept/${requestId}`, { method: 'POST' });
   }
 
+  async rejectFriendRequest(requestId: string): Promise<any> { return this.request(`/friends/reject/${requestId}`, { method: 'POST' }); }
+  async cancelFriendRequest(requestId: string): Promise<any> { return this.request(`/friends/requests/${requestId}`, { method: 'DELETE' }); }
+  async getPublicProfile(username: string): Promise<any> { return this.request(`/users/profile/${encodeURIComponent(username)}`); }
+
   async searchUsers(query: string): Promise<any[]> {
-    return this.request(`/friends/search?q=${encodeURIComponent(query)}`);
+    return this.request(`/friends/search?q=${encodeURIComponent(query.replace(/^@+/, '').trim())}`);
   }
 
   // Messaging
@@ -167,6 +173,23 @@ class ApiService {
   async createConversation(data: any): Promise<any> {
     return this.request('/messages/conversations', { method: 'POST', body: JSON.stringify(data) });
   }
+
+  async openDirectMessage(userId: string): Promise<any> { return this.request(`/messages/direct/${encodeURIComponent(userId)}`, { method: 'POST' }); }
+  async setTyping(conversationId: string, isTyping: boolean): Promise<any> { return this.request(`/messages/conversations/${conversationId}/typing`, { method: 'POST', body: JSON.stringify({ is_typing: isTyping }) }); }
+  async getTyping(conversationId: string): Promise<any[]> { return this.request(`/messages/conversations/${conversationId}/typing`); }
+
+  async listCampusGroups(): Promise<any[]> { return this.request('/groups'); }
+  async importCampusGroups(groups: any[]): Promise<any> { return this.request('/groups/import', { method: 'POST', body: JSON.stringify({ groups }) }); }
+  async createCampusGroup(group: any): Promise<any> { return this.request('/groups', { method: 'POST', body: JSON.stringify(group) }); }
+  async joinCampusGroup(groupId: string): Promise<any> { return this.request(`/groups/${groupId}/join`, { method: 'POST' }); }
+  async updateCampusGroup(groupId: string, group: any): Promise<any> { return this.request(`/groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(group) }); }
+  async addCampusGroupChannel(groupId: string, name: string): Promise<any> { return this.request(`/groups/${groupId}/channels`, { method: 'POST', body: JSON.stringify({ name }) }); }
+  async deleteCampusGroupChannel(groupId: string, channelId: string): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}`, { method: 'DELETE' }); }
+  async listCampusGroupMessages(groupId: string, channelId: string): Promise<any[]> { return this.request(`/groups/${groupId}/channels/${channelId}/messages`); }
+  async sendCampusGroupMessage(groupId: string, channelId: string, content: string, replyToId?: string): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}/messages`, { method: 'POST', body: JSON.stringify({ content, reply_to_id: replyToId || null }) }); }
+  async clearCampusGroupMessages(groupId: string, channelId: string): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}/messages`, { method: 'DELETE' }); }
+  async deleteCampusGroupMessage(groupId: string, messageId: string): Promise<any> { return this.request(`/groups/${groupId}/messages/${messageId}`, { method: 'DELETE' }); }
+  async toggleCampusGroupReaction(groupId: string, messageId: string, emoji: string): Promise<any> { return this.request(`/groups/${groupId}/messages/${messageId}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }); }
 
   async getMessages(convId: string): Promise<any[]> {
     return this.request(`/messages/conversations/${convId}/messages`);

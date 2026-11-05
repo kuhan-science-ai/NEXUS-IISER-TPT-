@@ -135,6 +135,7 @@ async def upload_academic_resource(
         file=file,
         category="academics",
         allowed_mimes=ALLOWED_DOCUMENT_MIMES,
+        delivery_type="upload",
     )
 
     file_meta = FileMetadata(

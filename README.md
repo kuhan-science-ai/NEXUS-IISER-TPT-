@@ -40,6 +40,8 @@ uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 
 The backend uses local SQLite by default and creates `nexus.db` on first launch. Optional settings can be copied from `.env.example` into a local `.env`; keep `.env` private and never commit it. The API health check is at [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health), and interactive API docs are at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
+File uploads use local storage unless all three Cloudinary settings in `.env` are configured. Cloudinary applies to new uploads only; existing local files are not moved automatically.
+
 Alternatively, after installing the backend requirements, start it from the project root using:
 
 ```powershell

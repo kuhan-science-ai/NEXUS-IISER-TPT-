@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -7,7 +7,7 @@ from backend.app.db.session import get_db
 from backend.app.models.file import FileMetadata
 from backend.app.models.user import User
 from backend.app.services.storage import storage_service
-from backend.app.api.deps import get_current_user
+from backend.app.api.deps import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/files", tags=["File Storage"])
 
@@ -25,7 +25,7 @@ async def upload_daily_question_attachment(
         raise HTTPException(status_code=400, detail="This file does not contain a valid PDF header")
     stored_name, rel_path, size_bytes, mime = await storage_service.save_file(
         file=file, category="daily-question-answers", allowed_mimes={"application/pdf"},
-        max_size=10 * 1024 * 1024,
+        max_size=10 * 1024 * 1024, delivery_type="authenticated",
     )
     meta = FileMetadata(
         filename=(file.filename or "answer.pdf")[:255], stored_filename=stored_name,
@@ -48,6 +48,7 @@ async def upload_file(
     stored_name, rel_path, size_bytes, mime = await storage_service.save_file(
         file=file,
         category=category,
+        delivery_type="upload" if is_public else "authenticated",
     )
 
     meta = FileMetadata(
@@ -74,7 +75,11 @@ async def upload_file(
     }
 
 @router.get("/{file_id}/download")
-async def download_file(file_id: str, db: AsyncSession = Depends(get_db)):
+async def download_file(
+    file_id: str,
+    current_user: User = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
     stmt = select(FileMetadata).where(FileMetadata.id == file_id)
     result = await db.execute(stmt)
     meta = result.scalar_one_or_none()
@@ -83,6 +88,12 @@ async def download_file(file_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="File not found")
     if meta.file_category == "daily-question-answers":
         raise HTTPException(status_code=404, detail="File not found")
+
+    if not meta.is_public and (not current_user or current_user.id != meta.uploader_id):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if storage_service.is_cloudinary_path(meta.file_path):
+        return RedirectResponse(storage_service.get_download_url(meta.file_path), status_code=307)
 
     abs_path = storage_service.get_absolute_path(meta.file_path)
     if not abs_path.exists():

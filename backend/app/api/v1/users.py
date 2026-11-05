@@ -114,7 +114,8 @@ async def upload_avatar(
         file=file,
         category="avatars",
         allowed_mimes=ALLOWED_PROFILE_MEDIA_MIMES,
-        max_size=25 * 1024 * 1024  # Animated media retains source quality
+        max_size=25 * 1024 * 1024,  # Animated media retains source quality
+        delivery_type="upload",
     )
 
     meta = FileMetadata(
@@ -162,7 +163,8 @@ async def upload_banner(
         file=file,
         category="banners",
         allowed_mimes=ALLOWED_PROFILE_MEDIA_MIMES,
-        max_size=25 * 1024 * 1024  # Animated media retains source quality
+        max_size=25 * 1024 * 1024,  # Animated media retains source quality
+        delivery_type="upload",
     )
 
     meta = FileMetadata(

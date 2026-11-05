@@ -119,6 +119,10 @@
   .messenger-chat-messages { padding:20px 18px!important; }
   .messenger-chat-composer { padding:12px!important; }
 }
+.nexus-typing-indicator { display:flex;align-items:center;gap:4px;padding:7px 20px;color:var(--text-muted,#a4a6ad);font-size:12px; }
+.nexus-typing-indicator i { width:4px;height:4px;border-radius:50%;background:currentColor;animation:nexus-typing-dot 1s infinite ease-in-out; }
+.nexus-typing-indicator i:nth-of-type(2) { animation-delay:.16s; }.nexus-typing-indicator i:nth-of-type(3) { animation-delay:.32s; }
+@keyframes nexus-typing-dot { 0%,60%,100% { transform:translateY(0);opacity:.4; } 30% { transform:translateY(-3px);opacity:1; } }
 @media (max-width:760px) {
   .messenger-discord-layout { grid-template-columns:minmax(0,1fr)!important; }
   .messenger-discord-layout .messenger-dm-sidebar { display:none; }

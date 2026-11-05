@@ -2,7 +2,7 @@ from typing import Optional, List
 import json
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -545,6 +545,8 @@ async def download_daily_question_answer_attachment(
     attachment = await db.get(FileMetadata, answer.attachment_file_id)
     if not attachment or attachment.file_category != "daily-question-answers":
         raise HTTPException(status_code=404, detail="Attachment not found")
+    if storage_service.is_cloudinary_path(attachment.file_path):
+        return RedirectResponse(storage_service.get_download_url(attachment.file_path), status_code=307)
     abs_path = storage_service.get_absolute_path(attachment.file_path)
     if not abs_path.exists():
         raise HTTPException(status_code=404, detail="Attachment data missing on disk")

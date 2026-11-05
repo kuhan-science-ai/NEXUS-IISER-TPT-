@@ -15,23 +15,28 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout 
   const [query, setQuery] = useState('');
   const [friends, setFriends] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
+  const [sentRequests, setSentRequests] = useState<any[]>([]);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<any | null>(null);
+  const [profileTab, setProfileTab] = useState<'activity' | 'friends' | 'groups'>('activity');
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
 
   const load = async () => {
     try {
-      const [friendRows, requestRows] = await Promise.all([api.listFriends(), api.listFriendRequests()]);
+      const [friendRows, requestRows, sentRows] = await Promise.all([api.listFriends(), api.listFriendRequests(), api.listSentFriendRequests()]);
       setFriends(friendRows);
       setRequests(requestRows);
-    } catch { setFriends([]); setRequests([]); }
+      setSentRequests(sentRows);
+    } catch { setFriends([]); setRequests([]); setSentRequests([]); }
   };
   useEffect(() => { void load(); }, []);
 
   useEffect(() => {
     let active = true;
-    if (activeTab !== 'pending' && query.trim()) {
-      api.searchUsers(query.trim()).then(rows => { if (active) setSearchResults(rows); }).catch(() => { if (active) setSearchResults([]); });
+    if (query.trim()) {
+      const timer = window.setTimeout(() => api.searchUsers(query.trim()).then(rows => { if (active) setSearchResults(rows); }).catch(() => { if (active) setSearchResults([]); }), 180);
+      return () => { active = false; window.clearTimeout(timer); };
     } else setSearchResults([]);
     return () => { active = false; };
   }, [activeTab, query]);
@@ -44,7 +49,10 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout 
   if (!currentUser) return null;
   const initials = (person: any) => (person.full_name || person.username || '?').split(' ').map((part: string) => part[0]).join('').slice(0, 2).toUpperCase();
   const accept = async (id: string) => { setBusy(true); try { await api.acceptFriendRequest(id); await load(); } finally { setBusy(false); } };
-  const sendRequest = async (id: string) => { setBusy(true); try { await api.sendFriendRequest(id); setSearchResults(items => items.filter(item => item.id !== id)); } finally { setBusy(false); } };
+  const sendRequest = async (id: string) => { setBusy(true); try { await api.sendFriendRequest(id); await load(); if (selectedProfile) setSelectedProfile({ ...selectedProfile, relationship_status: 'outgoing_pending' }); setSearchResults(items => items.map(item => item.id === id ? { ...item, relationship_status: 'outgoing_pending' } : item)); } finally { setBusy(false); } };
+  const openProfile = async (person: any) => { try { setSelectedProfile(await api.getPublicProfile(person.username)); setProfileTab('activity'); } catch { setSelectedProfile(person); } };
+  const openDm = async (person: any) => { setBusy(true); try { const conversation = await api.openDirectMessage(person.id); navigate(`/messaging?conversationId=${encodeURIComponent(conversation.id)}`); } catch { /* unavailable until request accepted */ } finally { setBusy(false); } };
+  const handlePendingAction = async (request: any, action: 'accept' | 'reject' | 'cancel') => { setBusy(true); try { if (action === 'accept') { const result = await api.acceptFriendRequest(request.id); await load(); if (result.conversation_id) navigate(`/messaging?conversationId=${encodeURIComponent(result.conversation_id)}`); } else if (action === 'reject') { await api.rejectFriendRequest(request.id); await load(); } else { await api.cancelFriendRequest(request.id); await load(); } } finally { setBusy(false); } };
 
   return <div className="friends-route">
     <SideNav currentUser={currentUser} onLogout={onLogout} onOpenSearch={() => setSearchOpen(true)} />
@@ -75,23 +83,20 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout 
           {activeTab === 'pending' ? <div className="friends-content-list">
             <div className="friends-list-heading">Friend requests — {requests.length}</div>
             {requests.map(request => <div className="friends-person-row" key={request.id}>
-              <span className="friends-avatar">{(request.sender_name || request.sender_username || '?').split(' ').map((part: string) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div className="friends-person-info"><strong>{request.sender_name || request.sender_username || 'Student'}</strong><small>Wants to connect with you</small></div>
-              <button className="friends-accept" disabled={busy} onClick={() => void accept(request.id)}>Accept</button>
+              <button className="friends-profile-open" onClick={() => void openProfile({ id: request.sender_id, username: request.sender_username })}><span className="friends-avatar">{(request.sender_name || request.sender_username || '?').split(' ').map((part: string) => part[0]).join('').slice(0, 2).toUpperCase()}</span><span className="friends-person-info"><strong>{request.sender_name || request.sender_username || 'Student'}</strong><small>@{request.sender_username} · Wants to connect</small></span></button>
+              <div className="friends-request-actions"><button title="Accept friend request" aria-label={`Accept ${request.sender_name || request.sender_username}`} disabled={busy} onClick={() => void handlePendingAction(request, 'accept')}>✓</button><button title="Decline friend request" aria-label={`Decline ${request.sender_name || request.sender_username}`} disabled={busy} onClick={() => void handlePendingAction(request, 'reject')}>×</button></div>
             </div>)}
-            {!requests.length && <p className="friends-empty">No pending friend requests.</p>}
+            {sentRequests.map(request => <div className="friends-person-row" key={request.id}><button className="friends-profile-open" onClick={() => void openProfile(request)}><span className="friends-avatar">{initials(request)}</span><span className="friends-person-info"><strong>{request.full_name || request.username}</strong><small>@{request.username} · Request sent</small></span></button><button className="friends-accept is-pending" disabled={busy} onClick={() => void handlePendingAction(request, 'cancel')}>Pending · Cancel</button></div>)}
+            {!requests.length && !sentRequests.length && <p className="friends-empty">No pending friend requests.</p>}
           </div> : <>
-            <label className="friends-search"><Search size={16} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search friends or students" /></label>
+            <div className="friends-search-wrap"><label className="friends-search"><Search size={16} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search friends or students" /></label>{query.trim() && searchResults.length > 0 && <div className="friends-search-suggestions">{searchResults.map(person => <button key={person.id} onClick={() => { setQuery(''); void openProfile(person); }}><span className="friends-avatar">{initials(person)}</span><span><strong>{person.full_name || person.username}</strong><small>@{person.username}</small></span><span className="friends-suggestion-status">{person.relationship_status === 'friends' ? 'Friend' : person.relationship_status === 'outgoing_pending' ? 'Pending' : person.relationship_status === 'incoming_pending' ? 'Respond' : 'View profile'}</span></button>)}</div>}</div>
             <div className="friends-content-list">
               <div className="friends-list-heading">{activeTab === 'online' ? `Online — ${visibleFriends.length}` : `Friends — ${visibleFriends.length}`}</div>
               {visibleFriends.map(friend => <div className="friends-person-row" key={friend.id}>
-                <span className="friends-avatar">{initials(friend)}</span><div className="friends-person-info"><strong>{friend.full_name || friend.username}</strong><small>{friend.department || friend.program || 'NEXUS student'}</small></div>
-                <button className="friends-icon-button" aria-label={`Message ${friend.full_name || friend.username}`} onClick={() => navigate('/messaging')}><MessageCircle size={17} /></button>
+                <button className="friends-profile-open" onClick={() => void openProfile(friend)}><span className="friends-avatar">{initials(friend)}</span><span className="friends-person-info"><strong>{friend.full_name || friend.username}</strong><small>{friend.department || friend.program || 'NEXUS student'}</small></span></button>
+                <button className="friends-icon-button" aria-label={`Message ${friend.full_name || friend.username}`} onClick={() => void openDm(friend)}><MessageCircle size={17} /></button>
               </div>)}
               {visibleFriends.length === 0 && <p className="friends-empty">{query ? 'No friends match your search. Student matches appear below.' : 'No friends added yet. Search for a student above and send a friend request.'}</p>}
-              {query.trim() && searchResults.filter(person => !friends.some(friend => friend.id === person.id) && person.id !== currentUser.id).map(person => <div className="friends-person-row" key={person.id}>
-                <span className="friends-avatar">{initials(person)}</span><div className="friends-person-info"><strong>{person.full_name || person.username}</strong><small>{person.department || person.program || 'NEXUS student'}</small></div>
-                <button className="friends-accept" disabled={busy} onClick={() => void sendRequest(person.id)}>Add friend</button>
-              </div>)}
             </div>
           </>}
         </section>
@@ -99,5 +104,6 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout 
       </main>
     </div>
     <GlobalSearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
+    {selectedProfile && <div className="nexus-public-profile-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setSelectedProfile(null); }}><section className="nexus-public-profile" role="dialog" aria-modal="true" aria-label={`${selectedProfile.full_name || selectedProfile.username} profile`}><button className="nexus-profile-close" onClick={() => setSelectedProfile(null)} aria-label="Close profile">×</button><div className="nexus-profile-left"><div className="nexus-profile-banner" style={{ background: selectedProfile.banner_url ? `center / cover url(${selectedProfile.banner_url})` : selectedProfile.accent_color || 'linear-gradient(135deg,#253e39,#18221f)' }} /><div className="nexus-profile-avatar" style={{ outlineColor: selectedProfile.accent_color || '#292a2e' }}>{selectedProfile.avatar_url ? <img src={selectedProfile.avatar_url} alt="" /> : initials(selectedProfile)}<i /></div><h2>{selectedProfile.display_name || selectedProfile.full_name || selectedProfile.username}</h2><strong className="nexus-profile-handle">@{selectedProfile.username}</strong>{selectedProfile.status_text && <p className="nexus-profile-status">{selectedProfile.status_text}</p>}<div className="nexus-profile-actions">{selectedProfile.relationship_status === 'friends' ? <button className="primary" onClick={() => void openDm(selectedProfile)}><MessageCircle size={15} /> Message</button> : selectedProfile.relationship_status === 'incoming_pending' ? <><button className="primary" onClick={() => void handlePendingAction({ id: selectedProfile.friend_request_id }, 'accept')}>✓ Accept</button><button onClick={() => void handlePendingAction({ id: selectedProfile.friend_request_id }, 'reject')}>×</button></> : selectedProfile.relationship_status === 'outgoing_pending' ? <button disabled>Request sent</button> : selectedProfile.relationship_status === 'none' ? <button className="primary" onClick={() => void sendRequest(selectedProfile.id)}><UserPlus size={15} /> Add Friend</button> : null}<button aria-label="More profile options" title="More options">···</button></div><dl><dt>Member Since</dt><dd>{selectedProfile.member_since ? new Date(selectedProfile.member_since).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : 'NEXUS student'}</dd>{selectedProfile.friends_since && <><dt>Friends Since</dt><dd>{new Date(selectedProfile.friends_since).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</dd></>}<dt>Program</dt><dd>{selectedProfile.program || 'NEXUS student'}</dd><dt>Department</dt><dd>{selectedProfile.department || 'Not provided'}</dd></dl><p className="nexus-profile-bio">{selectedProfile.bio || 'No profile description yet.'}</p></div><div className="nexus-profile-right"><nav><button className={profileTab === 'activity' ? 'active' : ''} onClick={() => setProfileTab('activity')}>Activity</button><button className={profileTab === 'friends' ? 'active' : ''} onClick={() => setProfileTab('friends')}>Friends</button><button className={profileTab === 'groups' ? 'active' : ''} onClick={() => setProfileTab('groups')}>Groups</button></nav><h3>{profileTab === 'activity' ? 'Current activity' : profileTab === 'friends' ? 'Mutual friends' : 'Mutual groups'}</h3><div className="nexus-profile-empty">{profileTab === 'activity' ? 'No public activity to show yet.' : profileTab === 'friends' ? 'Mutual friend details are not available yet.' : 'Mutual group details are not available yet.'}</div></div></section></div>}
   </div>;
 };

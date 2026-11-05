@@ -83,3 +83,8 @@ All notable changes to the NEXUS core architecture will be documented here.
 - **Local LaTeX Mathematical Rendering**: Integrated locally bundled KaTeX (zero CDN reliance) with `MathRenderer` component supporting inline `$math$` and display `$$math$$` notation across Forums, Messages, and the Scientific Document Editor.
 - **Academic & Campus Systems**: Built REST APIs and data access for Academic Repository, Course Catalogue, Discussion Forums, Campus Pulse, Notifications, Calendar, Tasks, and QOTD/AOTD.
 - **Automated Verification**: Created and passed 6 comprehensive test suites covering auth, profiles, storage, friends & blocking, messaging, and AI orchestration. Built frontend with Vite + React 18 + TypeScript with zero compilation errors.
+# 2026-11-05
+
+- Moved Study Groups profiles, membership, channels, messages, and reactions to Cloudflare D1 so they are shared between accounts and devices; added a one-time import for browser-local groups. Applied migration 0005 and deployed the Worker.
+- Added username search suggestions, profile cards, sent and received friend request handling, accept/decline controls, and direct conversation creation after friendship acceptance.
+- Added expiring D1 typing indicators to direct messages.

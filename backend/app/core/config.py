@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # Storage
     STORAGE_DIR: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../storage"))
     MAX_UPLOAD_SIZE_BYTES: int = 50 * 1024 * 1024  # 50 MB
+
+    # Cloudinary is optional; local disk remains the default until all values are configured.
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
     
     # Rate Limiting
     MAX_LOGIN_ATTEMPTS: int = 5

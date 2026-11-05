@@ -7,7 +7,7 @@ import json
 import secrets
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
@@ -27,6 +27,41 @@ class AIConversationCreate(BaseModel):
 class AIChatRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
     page_context: dict[str, Any] | None = None
+
+
+class CampusGroupChannelInput(BaseModel):
+    id: str | None = Field(default=None, max_length=36)
+    name: str = Field(min_length=1, max_length=80)
+
+
+class CampusGroupInput(BaseModel):
+    id: str | None = Field(default=None, max_length=36)
+    name: str = Field(min_length=1, max_length=60)
+    description: str = Field(default="", max_length=1000)
+    icon: str = Field(default="✦", max_length=350_000)
+    banner: str = Field(default="#7c5cff", max_length=100)
+    channels: list[CampusGroupChannelInput] = Field(default_factory=list, max_length=20)
+    joined: bool = False
+
+
+class CampusGroupImport(BaseModel):
+    groups: list[CampusGroupInput] = Field(default_factory=list, max_length=50)
+
+
+class CampusGroupUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    description: str = Field(default="", max_length=1000)
+    icon: str = Field(default="✦", max_length=350_000)
+    banner: str = Field(default="#7c5cff", max_length=100)
+
+
+class CampusGroupMessageCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+    reply_to_id: str | None = Field(default=None, max_length=36)
+
+
+class TypingStatusUpdate(BaseModel):
+    is_typing: bool
 
 
 class DailyQuestionAnswerCreate(BaseModel):
@@ -323,12 +358,23 @@ async def demo_accounts():
 
 @app.get("/api/v1/friends/search")
 async def search_users(q: str = Query(min_length=1, max_length=100), user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
-    needle = f"%{q.strip()}%"
-    rows = await query(db, """SELECT u.id,u.username,p.full_name,p.department,p.status_text,p.avatar_url,p.program
+    term = q.strip().removeprefix("@").strip()
+    if not term:
+        return []
+    needle = f"%{term[:45]}%"
+    rows = await query(db, """SELECT u.id,u.username,p.full_name,p.department,p.status_text,p.avatar_url,p.program,
+        CASE WHEN f.id IS NOT NULL THEN 'friends'
+             WHEN sent.id IS NOT NULL THEN 'outgoing_pending'
+             WHEN received.id IS NOT NULL THEN 'incoming_pending'
+             ELSE 'none' END AS relationship_status
         FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id
+        LEFT JOIN friendships f ON f.user_id_1=CASE WHEN u.id<? THEN u.id ELSE ? END AND f.user_id_2=CASE WHEN u.id<? THEN ? ELSE u.id END
+        LEFT JOIN friend_requests sent ON sent.sender_id=? AND sent.receiver_id=u.id AND sent.status='pending'
+        LEFT JOIN friend_requests received ON received.sender_id=u.id AND received.receiver_id=? AND received.status='pending'
         WHERE u.is_active=1 AND u.id<>? AND (u.username LIKE ? OR p.full_name LIKE ?)
-        ORDER BY u.username LIMIT 25""", user["sub"], needle, needle)
-    return [{"id": r["id"], "username": r["username"], "full_name": r.get("full_name") or r["username"], "avatar_url": r.get("avatar_url"), "department": r.get("department"), "program": r.get("program"), "status_text": r.get("status_text")} for r in rows]
+        ORDER BY CASE WHEN lower(u.username)=lower(?) THEN 0 WHEN lower(u.username) LIKE lower(?) THEN 1 ELSE 2 END,u.username LIMIT 10""",
+        user["sub"], user["sub"], user["sub"], user["sub"], user["sub"], user["sub"], user["sub"], needle, needle, term, f"{term}%")
+    return [{"id": r["id"], "username": r["username"], "full_name": r.get("full_name") or r["username"], "avatar_url": r.get("avatar_url"), "department": r.get("department"), "program": r.get("program"), "status_text": r.get("status_text"), "relationship_status": r["relationship_status"]} for r in rows]
 
 
 @app.get("/api/v1/friends")
@@ -341,10 +387,18 @@ async def friends(user: dict[str, Any] = Depends(get_current_user), db: Any = De
 
 @app.get("/api/v1/friends/requests")
 async def friend_requests(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
-    rows = await query(db, """SELECT fr.*,s.username sender_username,sp.full_name sender_name,r.username receiver_username
+    rows = await query(db, """SELECT fr.*,s.username sender_username,sp.full_name sender_name,sp.avatar_url sender_avatar_url,r.username receiver_username
         FROM friend_requests fr JOIN users s ON s.id=fr.sender_id LEFT JOIN user_profiles sp ON sp.user_id=s.id
         JOIN users r ON r.id=fr.receiver_id WHERE fr.receiver_id=? AND fr.status='pending' ORDER BY fr.created_at""", user["sub"])
-    return [{"id": r["id"], "sender_id": r["sender_id"], "sender_username": r["sender_username"], "sender_name": r.get("sender_name") or r["sender_username"], "receiver_id": r["receiver_id"], "receiver_username": r["receiver_username"], "status": r["status"], "created_at": r["created_at"]} for r in rows]
+    return [{"id": r["id"], "sender_id": r["sender_id"], "sender_username": r["sender_username"], "sender_name": r.get("sender_name") or r["sender_username"], "sender_avatar_url": r.get("sender_avatar_url"), "receiver_id": r["receiver_id"], "receiver_username": r["receiver_username"], "status": r["status"], "direction": "received", "created_at": r["created_at"]} for r in rows]
+
+
+@app.get("/api/v1/friends/requests/sent")
+async def sent_friend_requests(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    rows = await query(db, """SELECT fr.id,fr.receiver_id,fr.created_at,u.username,p.full_name,p.avatar_url
+        FROM friend_requests fr JOIN users u ON u.id=fr.receiver_id LEFT JOIN user_profiles p ON p.user_id=u.id
+        WHERE fr.sender_id=? AND fr.status='pending' ORDER BY fr.created_at""", user["sub"])
+    return [{"id": row["id"], "user_id": row["receiver_id"], "username": row["username"], "full_name": row.get("full_name") or row["username"], "avatar_url": row.get("avatar_url"), "status": "pending", "direction": "sent", "created_at": row["created_at"]} for row in rows]
 
 
 @app.post("/api/v1/friends/request/{target_user_id}")
@@ -378,7 +432,8 @@ async def accept_friend_request(request_id: str, user: dict[str, Any] = Depends(
     stamp = now()
     await execute(db, "UPDATE friend_requests SET status='accepted',updated_at=? WHERE id=?", stamp, request_id)
     await execute(db, "INSERT OR IGNORE INTO friendships(id,user_id_1,user_id_2,created_at) VALUES(?,?,?,?)", new_id(), low, high, stamp)
-    return {"message": "Friend request accepted"}
+    conversation_id = await ensure_direct_conversation(db, low, high)
+    return {"message": "Friend request accepted", "conversation_id": conversation_id}
 
 
 @app.post("/api/v1/friends/reject/{request_id}")
@@ -390,6 +445,14 @@ async def reject_friend_request(request_id: str, user: dict[str, Any] = Depends(
     return {"message": "Friend request rejected"}
 
 
+@app.delete("/api/v1/friends/requests/{request_id}")
+async def cancel_friend_request(request_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    result = await execute(db, "DELETE FROM friend_requests WHERE id=? AND sender_id=? AND status='pending'", request_id, user["sub"])
+    if not getattr(result, "meta", {}).get("changes", 0):
+        raise HTTPException(status_code=404, detail="Outgoing friend request not found")
+    return {"message": "Friend request cancelled"}
+
+
 @app.delete("/api/v1/friends/{target_user_id}")
 async def remove_friend(target_user_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     low, high = sorted([user["sub"], target_user_id])
@@ -397,6 +460,192 @@ async def remove_friend(target_user_id: str, user: dict[str, Any] = Depends(get_
     if not getattr(result, "meta", {}).get("changes", 0):
         raise HTTPException(status_code=404, detail="Friendship not found")
     return {"message": "Friend removed"}
+
+
+@app.post("/api/v1/messages/direct/{target_user_id}")
+async def open_direct_message(target_user_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    current_id = user["sub"]
+    if target_user_id == current_id:
+        raise HTTPException(status_code=400, detail="Cannot message yourself")
+    low, high = sorted([current_id, target_user_id])
+    if not await first(db, "SELECT 1 AS ok FROM friendships WHERE user_id_1=? AND user_id_2=?", low, high):
+        raise HTTPException(status_code=403, detail="Accept the friend request before starting a direct message")
+    if await first(db, "SELECT 1 AS ok FROM blocked_users WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)", current_id, target_user_id, target_user_id, current_id):
+        raise HTTPException(status_code=403, detail="Cannot message a blocked user")
+    conversation_id = await ensure_direct_conversation(db, low, high)
+    conversation = await first(db, "SELECT * FROM conversations WHERE id=?", conversation_id)
+    return await conversation_summary(db, conversation, current_id)
+
+
+async def require_campus_group_member(db: Any, group_id: str, user_id: str) -> dict[str, Any]:
+    row = await first(db, "SELECT role FROM campus_group_members WHERE group_id=? AND user_id=?", group_id, user_id)
+    if not row:
+        raise HTTPException(status_code=403, detail="Join this group to view its channels")
+    return row
+
+
+@app.get("/api/v1/groups")
+async def list_campus_groups(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    rows = await query(db, """SELECT g.*,gm.role AS viewer_role,
+        (SELECT COUNT(*) FROM campus_group_members m WHERE m.group_id=g.id) AS member_count
+        FROM campus_groups g LEFT JOIN campus_group_members gm ON gm.group_id=g.id AND gm.user_id=?
+        ORDER BY g.updated_at DESC,g.created_at DESC""", user["sub"])
+    if not rows:
+        return []
+    ids = [row["id"] for row in rows]
+    channels = await query(db, f"SELECT id,group_id,name FROM campus_group_channels WHERE group_id IN ({','.join('?' for _ in ids)}) ORDER BY position,name", *ids)
+    by_group: dict[str, list[dict[str, str]]] = {}
+    for channel in channels:
+        by_group.setdefault(channel["group_id"], []).append({"id": channel["id"], "name": channel["name"]})
+    return [{"id": row["id"], "name": row["name"], "description": row["description"], "icon": row["icon"], "banner": row["banner"], "owner_id": row["owner_id"], "joined": bool(row.get("viewer_role")), "role": row.get("viewer_role"), "member_count": int(row.get("member_count") or 0), "channels": by_group.get(row["id"], [])} for row in rows]
+
+
+async def insert_campus_group(db: Any, req: CampusGroupInput, user_id: str, group_id: str | None = None) -> str:
+    stamp, group_id = now(), group_id or new_id()
+    await execute(db, "INSERT INTO campus_groups(id,owner_id,name,description,icon,banner,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", group_id, user_id, req.name.strip(), req.description.strip(), req.icon, req.banner, stamp, stamp)
+    await execute(db, "INSERT INTO campus_group_members(group_id,user_id,role,joined_at) VALUES(?,?,'owner',?)", group_id, user_id, stamp)
+    initial_channels = req.channels or [CampusGroupChannelInput(name=name) for name in ("general", "discussion", "hangout")]
+    for position, channel in enumerate(initial_channels):
+        await execute(db, "INSERT INTO campus_group_channels(id,group_id,name,position,created_at) VALUES(?,?,?,?,?)", channel.id or new_id(), group_id, channel.name.strip().lower().replace(" ", "-")[:80], position, stamp)
+    return group_id
+
+
+@app.post("/api/v1/groups", status_code=status.HTTP_201_CREATED)
+async def create_campus_group(req: CampusGroupInput, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    group_id = await insert_campus_group(db, req, user["sub"])
+    return next(group for group in await list_campus_groups(user, db) if group["id"] == group_id)
+
+
+@app.post("/api/v1/groups/import")
+async def import_local_campus_groups(payload: CampusGroupImport, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    imported = 0
+    for group in payload.groups:
+        if not group.id:
+            continue
+        existing = await first(db, "SELECT id,owner_id FROM campus_groups WHERE id=?", group.id)
+        if not existing:
+            await insert_campus_group(db, group, user["sub"], group.id)
+            imported += 1
+        elif group.joined:
+            await execute(db, "INSERT OR IGNORE INTO campus_group_members(group_id,user_id,role,joined_at) VALUES(?,?,'member',?)", group.id, user["sub"], now())
+        if not existing or existing["owner_id"] == user["sub"]:
+            for position, channel in enumerate(group.channels):
+                if channel.name.strip():
+                    await execute(db, "INSERT OR IGNORE INTO campus_group_channels(id,group_id,name,position,created_at) VALUES(?,?,?,?,?)", channel.id or new_id(), group.id, channel.name.strip().lower().replace(" ", "-")[:80], position, now())
+    return {"imported": imported}
+
+
+@app.post("/api/v1/groups/{group_id}/join")
+async def join_campus_group(group_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if not await first(db, "SELECT 1 AS ok FROM campus_groups WHERE id=?", group_id):
+        raise HTTPException(status_code=404, detail="Group not found")
+    await execute(db, "INSERT OR IGNORE INTO campus_group_members(group_id,user_id,role,joined_at) VALUES(?,?,'member',?)", group_id, user["sub"], now())
+    return {"message": "Joined group", "group_id": group_id}
+
+
+@app.patch("/api/v1/groups/{group_id}")
+async def update_campus_group(group_id: str, payload: CampusGroupUpdate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    group = await first(db, "SELECT owner_id FROM campus_groups WHERE id=?", group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    if group["owner_id"] != user["sub"]:
+        raise HTTPException(status_code=403, detail="Only the group owner can update its profile")
+    await execute(db, "UPDATE campus_groups SET name=?,description=?,icon=?,banner=?,updated_at=? WHERE id=?", payload.name.strip(), payload.description.strip(), payload.icon, payload.banner, now(), group_id)
+    return next(item for item in await list_campus_groups(user, db) if item["id"] == group_id)
+
+
+@app.post("/api/v1/groups/{group_id}/channels", status_code=status.HTTP_201_CREATED)
+async def create_campus_group_channel(group_id: str, payload: CampusGroupChannelInput, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    member = await require_campus_group_member(db, group_id, user["sub"])
+    if member["role"] != "owner":
+        raise HTTPException(status_code=403, detail="Only the group owner can add channels")
+    name = payload.name.strip().lower().replace(" ", "-")
+    if await first(db, "SELECT 1 AS ok FROM campus_group_channels WHERE group_id=? AND name=?", group_id, name):
+        raise HTTPException(status_code=409, detail="That channel already exists")
+    position = await first(db, "SELECT COALESCE(MAX(position),-1)+1 AS next_position FROM campus_group_channels WHERE group_id=?", group_id)
+    channel_id = new_id()
+    await execute(db, "INSERT INTO campus_group_channels(id,group_id,name,position,created_at) VALUES(?,?,?,?,?)", channel_id, group_id, name, int(position["next_position"]), now())
+    return {"id": channel_id, "name": name}
+
+
+@app.delete("/api/v1/groups/{group_id}/channels/{channel_id}")
+async def delete_campus_group_channel(group_id: str, channel_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    member = await require_campus_group_member(db, group_id, user["sub"])
+    if member["role"] != "owner":
+        raise HTTPException(status_code=403, detail="Only the group owner can remove channels")
+    channels = await query(db, "SELECT id FROM campus_group_channels WHERE group_id=?", group_id)
+    if len(channels) < 2:
+        raise HTTPException(status_code=400, detail="A group must keep at least one channel")
+    result = await execute(db, "DELETE FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id)
+    if not getattr(result, "meta", {}).get("changes", 0):
+        raise HTTPException(status_code=404, detail="Channel not found")
+    return {"message": "Channel removed"}
+
+
+@app.get("/api/v1/groups/{group_id}/channels/{channel_id}/messages")
+async def list_campus_group_messages(group_id: str, channel_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_campus_group_member(db, group_id, user["sub"])
+    if not await first(db, "SELECT 1 AS ok FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id):
+        raise HTTPException(status_code=404, detail="Channel not found")
+    rows = await query(db, """SELECT m.*,u.username,p.full_name FROM campus_group_messages m
+        LEFT JOIN users u ON u.id=m.sender_id LEFT JOIN user_profiles p ON p.user_id=u.id
+        WHERE m.channel_id=? ORDER BY m.created_at DESC LIMIT 200""", channel_id)
+    rows.reverse()
+    output = []
+    for row in rows:
+        reactions = await query(db, "SELECT emoji,user_id FROM campus_group_message_reactions WHERE message_id=? ORDER BY created_at", row["id"])
+        original = await first(db, "SELECT m.content,u.username,p.full_name FROM campus_group_messages m LEFT JOIN users u ON u.id=m.sender_id LEFT JOIN user_profiles p ON p.user_id=u.id WHERE m.id=?", row["reply_to_id"]) if row.get("reply_to_id") else None
+        output.append({"id": row["id"], "text": "This message was deleted." if row["is_deleted"] else row["content"], "sender": row.get("full_name") or row.get("username") or "Former student", "sender_id": row.get("sender_id"), "at": row["created_at"], "reactions": [{"emoji": emoji, "count": len([r for r in reactions if r["emoji"] == emoji]), "user_ids": [r["user_id"] for r in reactions if r["emoji"] == emoji]} for emoji in dict.fromkeys(reaction["emoji"] for reaction in reactions)], "replyToId": row.get("reply_to_id"), "reply_preview": ((original.get("full_name") or original.get("username") or "Student") + ": " + original.get("content", ""))[:200] if original else None})
+    return output
+
+
+@app.post("/api/v1/groups/{group_id}/channels/{channel_id}/messages", status_code=status.HTTP_201_CREATED)
+async def send_campus_group_message(group_id: str, channel_id: str, payload: CampusGroupMessageCreate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_campus_group_member(db, group_id, user["sub"])
+    if not await first(db, "SELECT 1 AS ok FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id):
+        raise HTTPException(status_code=404, detail="Channel not found")
+    if payload.reply_to_id and not await first(db, "SELECT 1 AS ok FROM campus_group_messages WHERE id=? AND channel_id=?", payload.reply_to_id, channel_id):
+        raise HTTPException(status_code=404, detail="Reply target not found")
+    message_id, stamp = new_id(), now()
+    await execute(db, "INSERT INTO campus_group_messages(id,group_id,channel_id,sender_id,content,reply_to_id,created_at) VALUES(?,?,?,?,?,?,?)", message_id, group_id, channel_id, user["sub"], payload.content.strip(), payload.reply_to_id, stamp)
+    row = await first(db, "SELECT u.username,p.full_name FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?", user["sub"])
+    return {"id": message_id, "text": payload.content.strip(), "sender": row.get("full_name") or row["username"], "sender_id": user["sub"], "at": stamp, "reactions": [], "replyToId": payload.reply_to_id}
+
+
+@app.delete("/api/v1/groups/{group_id}/channels/{channel_id}/messages")
+async def clear_campus_group_channel(group_id: str, channel_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    member = await require_campus_group_member(db, group_id, user["sub"])
+    if member["role"] != "owner":
+        raise HTTPException(status_code=403, detail="Only the group owner can clear shared channel history")
+    if not await first(db, "SELECT 1 AS ok FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id):
+        raise HTTPException(status_code=404, detail="Channel not found")
+    result = await execute(db, "DELETE FROM campus_group_messages WHERE channel_id=?", channel_id)
+    return {"cleared_count": getattr(result, "meta", {}).get("changes", 0)}
+
+
+@app.delete("/api/v1/groups/{group_id}/messages/{message_id}")
+async def delete_campus_group_message(group_id: str, message_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_campus_group_member(db, group_id, user["sub"])
+    row = await first(db, "SELECT sender_id,is_deleted FROM campus_group_messages WHERE id=? AND group_id=?", message_id, group_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if row["sender_id"] != user["sub"]:
+        raise HTTPException(status_code=403, detail="You can only delete your own messages")
+    await execute(db, "UPDATE campus_group_messages SET is_deleted=1,content='' WHERE id=?", message_id)
+    return {"message": "Message deleted"}
+
+
+@app.post("/api/v1/groups/{group_id}/messages/{message_id}/reactions")
+async def toggle_campus_group_reaction(group_id: str, message_id: str, payload: ReactionBody, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_campus_group_member(db, group_id, user["sub"])
+    if not await first(db, "SELECT 1 AS ok FROM campus_group_messages WHERE id=? AND group_id=? AND is_deleted=0", message_id, group_id):
+        raise HTTPException(status_code=404, detail="Message not found")
+    existing = await first(db, "SELECT 1 AS ok FROM campus_group_message_reactions WHERE message_id=? AND user_id=? AND emoji=?", message_id, user["sub"], payload.emoji)
+    if existing:
+        await execute(db, "DELETE FROM campus_group_message_reactions WHERE message_id=? AND user_id=? AND emoji=?", message_id, user["sub"], payload.emoji)
+    else:
+        await execute(db, "INSERT INTO campus_group_message_reactions(message_id,user_id,emoji,created_at) VALUES(?,?,?,?)", message_id, user["sub"], payload.emoji, now())
+    return {"emoji": payload.emoji, "is_reacted": not bool(existing)}
 
 
 def profile_url(row: dict[str, Any]) -> str | None:
@@ -441,11 +690,40 @@ async def conversation_summary(db: Any, conversation: dict[str, Any], current_us
     }
 
 
+async def ensure_direct_conversation(db: Any, user_id_1: str, user_id_2: str) -> str:
+    matches = await query(db, """SELECT c.id FROM conversations c
+        JOIN conversation_members a ON a.conversation_id=c.id AND a.user_id=?
+        JOIN conversation_members b ON b.conversation_id=c.id AND b.user_id=?
+        WHERE c.type='direct' LIMIT 1""", user_id_1, user_id_2)
+    if matches:
+        return matches[0]["id"]
+    conv_id, stamp = new_id(), now()
+    await execute(db, "INSERT INTO conversations(id,type,title,description,creator_id,created_at,updated_at) VALUES(?,'direct',NULL,NULL,?,?,?)", conv_id, user_id_1, stamp, stamp)
+    for participant in (user_id_1, user_id_2):
+        await execute(db, "INSERT INTO conversation_members(conversation_id,user_id,role,joined_at) VALUES(?,?,'member',?)", conv_id, participant, stamp)
+    return conv_id
+
+
 @app.get("/api/v1/messages/conversations")
 async def list_conversations(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     rows = await query(db, """SELECT c.* FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id
         WHERE cm.user_id=? ORDER BY c.updated_at DESC""", user["sub"])
     return [await conversation_summary(db, row, user["sub"]) for row in rows]
+
+
+@app.post("/api/v1/messages/direct/{target_user_id}")
+async def open_direct_message(target_user_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    current_id = user["sub"]
+    if target_user_id == current_id:
+        raise HTTPException(status_code=400, detail="Cannot open a direct message with yourself")
+    low, high = sorted((current_id, target_user_id))
+    if not await first(db, "SELECT 1 AS ok FROM friendships WHERE user_id_1=? AND user_id_2=?", low, high):
+        raise HTTPException(status_code=403, detail="Accept the friend request before starting a direct message")
+    if await first(db, "SELECT 1 AS ok FROM blocked_users WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)", current_id, target_user_id, target_user_id, current_id):
+        raise HTTPException(status_code=403, detail="Cannot message a blocked user")
+    conv_id = await ensure_direct_conversation(db, current_id, target_user_id)
+    conversation = await first(db, "SELECT * FROM conversations WHERE id=?", conv_id)
+    return await conversation_summary(db, conversation, current_id)
 
 
 @app.post("/api/v1/messages/conversations", status_code=status.HTTP_201_CREATED)
@@ -539,6 +817,26 @@ async def clear_conversation(conv_id: str, user: dict[str, Any] = Depends(get_cu
     return {"message": "Conversation history cleared", "cleared_count": changes}
 
 
+@app.post("/api/v1/messages/conversations/{conv_id}/typing")
+async def update_typing_status(conv_id: str, payload: TypingStatusUpdate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_member(db, conv_id, user["sub"])
+    if payload.is_typing:
+        await execute(db, "INSERT INTO typing_indicators(conversation_id,user_id,updated_at) VALUES(?,?,?) ON CONFLICT(conversation_id,user_id) DO UPDATE SET updated_at=excluded.updated_at", conv_id, user["sub"], now())
+    else:
+        await execute(db, "DELETE FROM typing_indicators WHERE conversation_id=? AND user_id=?", conv_id, user["sub"])
+    return {"is_typing": payload.is_typing}
+
+
+@app.get("/api/v1/messages/conversations/{conv_id}/typing")
+async def get_typing_status(conv_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_member(db, conv_id, user["sub"])
+    since = (datetime.now(timezone.utc) - timedelta(seconds=6)).isoformat()
+    rows = await query(db, """SELECT u.id,p.full_name,u.username FROM typing_indicators t
+        JOIN users u ON u.id=t.user_id LEFT JOIN user_profiles p ON p.user_id=u.id
+        WHERE t.conversation_id=? AND t.user_id<>? AND t.updated_at>=? ORDER BY t.updated_at DESC""", conv_id, user["sub"], since)
+    return [{"user_id": row["id"], "name": row.get("full_name") or row["username"]} for row in rows]
+
+
 @app.post("/api/v1/messages/messages/{message_id}/reactions")
 async def toggle_reaction(message_id: str, req: ReactionBody, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     message = await first(db, "SELECT conversation_id,is_deleted FROM messages WHERE id=?", message_id)
@@ -568,11 +866,16 @@ async def toggle_pin(message_id: str, user: dict[str, Any] = Depends(get_current
 
 @app.get("/api/v1/users/profile/{username}")
 async def public_profile(username: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
-    row = await first(db, "SELECT u.id,u.username,p.* FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.username=?", username.lower())
+    row = await first(db, "SELECT u.id,u.username,u.created_at,p.* FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.username=? AND u.is_active=1", username.lower().removeprefix("@"))
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
-    is_friend = bool(await first(db, "SELECT 1 AS ok FROM friendships WHERE (user_id_1=? AND user_id_2=?) OR (user_id_1=? AND user_id_2=?)", min(user["sub"], row["id"]), max(user["sub"], row["id"]), min(user["sub"], row["id"]), max(user["sub"], row["id"])))
-    return {"id": row["id"], "username": row["username"], "full_name": row.get("full_name") or row["username"], "display_name": row.get("display_name"), "bio": row.get("bio") or "", "program": row.get("program"), "academic_year": row.get("academic_year"), "department": row.get("department"), "status_text": row.get("status_text"), "avatar_url": row.get("avatar_url"), "banner_url": row.get("banner_url"), "accent_color": row.get("accent_color"), "is_friend": is_friend, "is_blocked": False, "mutual_friends_count": 0}
+    current_id, other_id = user["sub"], row["id"]
+    low, high = sorted([current_id, other_id])
+    friendship = await first(db, "SELECT created_at FROM friendships WHERE user_id_1=? AND user_id_2=?", low, high) if current_id != other_id else None
+    request = await first(db, "SELECT id,sender_id,receiver_id FROM friend_requests WHERE status='pending' AND ((sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?))", current_id, other_id, other_id, current_id) if current_id != other_id else None
+    blocked = bool(await first(db, "SELECT 1 AS ok FROM blocked_users WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)", current_id, other_id, other_id, current_id)) if current_id != other_id else False
+    relationship = "self" if current_id == other_id else "blocked" if blocked else "friends" if friendship else "outgoing_pending" if request and request["sender_id"] == current_id else "incoming_pending" if request else "none"
+    return {"id": row["id"], "username": row["username"], "full_name": row.get("full_name") or row["username"], "display_name": row.get("display_name"), "bio": row.get("bio") or "", "program": row.get("program"), "academic_year": row.get("academic_year"), "department": row.get("department"), "status_text": row.get("status_text"), "avatar_url": row.get("avatar_url"), "banner_url": row.get("banner_url"), "accent_color": row.get("accent_color"), "member_since": row.get("created_at"), "friends_since": friendship["created_at"] if friendship else None, "is_friend": bool(friendship), "is_blocked": blocked, "relationship_status": relationship, "friend_request_id": request["id"] if request else None, "mutual_friends_count": 0}
 
 
 @app.put("/api/v1/users/profile")
