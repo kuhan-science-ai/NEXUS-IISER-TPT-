@@ -8,5 +8,7 @@ __pycache__/
 
 .dev.vars*
 !.dev.vars.example
+.local-ai-token
+.local-ai-url
 .env*
 !.env.example

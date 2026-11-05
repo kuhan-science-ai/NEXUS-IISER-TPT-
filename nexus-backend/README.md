@@ -31,6 +31,10 @@ uv run pywrangler dev
 
 The local worker needs `JWT_SECRET` and `PASSWORD_PEPPER` in `.dev.vars`. Never commit `.dev.vars`; generate separate random secrets for each environment. Passwords use Workers Web Crypto PBKDF2-SHA256 at the platform's 100,000-iteration limit, mixed with the private pepper for new accounts. The migrations seed student1–student4 with the shared beta password distributed to testers; their initial hashes are unpeppered and are upgraded after their first successful login. Replace/remove these publicly selectable beta credentials before opening a production sign-up flow.
 
+## Laptop-hosted AI
+
+The hosted chat calls Ollama on the owner's laptop through an authenticated localhost proxy and Cloudflare Tunnel. Install Ollama, pull `gpt-oss:20b`, and install `cloudflared`. In two PowerShell terminals run `.start-local-ai.ps1` (generates/loads its private token) and `.start-local-ai.ps1 -Tunnel`. Copy the temporary HTTPS URL printed by cloudflared, set Worker secrets `OLLAMA_BASE_URL` and `OLLAMA_API_KEY`, then deploy. The API key must match the token stored in `.local-ai-token`. Quick Tunnels are temporary and intended for development; their hostname changes after restarting and the laptop, Ollama, proxy, and tunnel must stay online. For a stable production setup, replace the Quick Tunnel with a named Cloudflare Tunnel. Ollama remains bound to localhost and is never exposed directly. The proxy is limited to GPT‑OSS 20B and does not log prompts.
+
 ## Deploy to Cloudflare
 
 Set a private Worker secret first, apply migrations to the remote D1 database, build the client, then deploy:
@@ -53,7 +57,7 @@ The current config points to the existing `nexus-database`. Migration `0003_ai_q
 - Authentication uses signed HS256 bearer access tokens and PBKDF2-SHA256 password hashes; D1 access uses prepared statements.
 - Cloudflare Workers currently caps Web Crypto PBKDF2 at 100,000 iterations. Workers Free also has a 10 ms CPU budget per request, so measure deployed sign-in CPU before treating Free-plan capacity as sufficient.
 - Friends, friend requests, profiles, conversations, messages, reactions, pin/edit/delete, and history clearing are persisted in D1.
-- AI conversations, threads, and messages are persisted in D1. Replies use the `AI` Workers AI binding with `@cf/meta/llama-3.1-8b-instruct-fp8`; the route limits each user to 20 prompts per UTC day, 4,000 prompt characters, 2,500 page-context characters, and 512 output tokens. Workers AI includes 10,000 Neurons/day in its free allocation; paid usage above that is billed per Cloudflare's current pricing. Check the Workers AI dashboard for usage.
+- AI conversations, threads, and messages are persisted in D1. The Worker forwards bounded requests to GPT‑OSS 20B in Ollama on the owner's laptop, through a bearer-token-protected local proxy and a Cloudflare Tunnel. The local model uses a 16,384-token context and 2,048 output-token limit; prompts are capped at 4,000 characters and page context at 2,500 characters. The laptop and tunnel must be online for responses.
 - QOTD/AOTD questions, archive entries, answer submissions, points, and comments use D1. The migration seeds one initial question. PDF attachments are not supported by this Worker yet.
 - The Messenger refreshes visible conversations every five seconds to receive messages across sessions. Cloudflare Durable Objects/WebSockets are not wired yet, so this is polling rather than push delivery.
 - Uploads, settings, password reset, notifications, group UI data/channels, academic features, and other application APIs are not migrated.

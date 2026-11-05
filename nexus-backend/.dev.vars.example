@@ -1,2 +1,4 @@
 JWT_SECRET=replace-with-a-private-random-secret-before-local-use
 PASSWORD_PEPPER=replace-with-another-private-random-secret-before-local-use
+OLLAMA_BASE_URL=https://your-tunnel-host.trycloudflare.com
+OLLAMA_API_KEY=replace-with-the-local-ai-proxy-token

@@ -9,7 +9,7 @@ NEXUS is a student community and academic platform for IISER Tirupati. The activ
 ## Current status
 
 - Cloudflare Pages proxies same-origin `/api/*` requests to the deployed `nexus-backend` Worker. The browser keeps using `/api/v1` without cross-origin requests. The Worker currently supports beta authentication, profiles, friends, and direct/group messaging; other APIs and WebSockets are not yet served by this Cloudflare backend.
-- The Cloudflare Worker persists AI conversations, threads, and messages and generates replies through its Workers AI binding using Llama 3.1 8B; requests are bounded to 20 per user per UTC day and 512 generated tokens. QOTD/AOTD APIs are available, with one starter physics question seeded. PDF attachments are not supported by this Worker.
+- The Cloudflare Worker persists AI conversations, threads, and messages and can call the authenticated laptop Ollama proxy for GPT‑OSS 20B. The laptop must remain online with Ollama and a Cloudflare Tunnel running; the local helper is in `nexus-backend/local_ai_proxy.py`. QOTD/AOTD APIs are available, with one starter physics question seeded. PDF attachments are not supported by this Worker.
 - Generated `JWT_SECRET` and `PASSWORD_PEPPER` values are configured as Cloudflare Worker secrets; secret values are not stored in the repository.
 
 - File uploads keep working on local disk by default. Cloudinary is an optional storage backend configured with three environment variables; new remote file metadata reuses `FileMetadata.file_path`, and download routes support both local and Cloudinary assets. Existing uploads are not migrated automatically.
