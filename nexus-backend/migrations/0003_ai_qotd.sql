@@ -73,8 +73,8 @@ CREATE INDEX IF NOT EXISTS idx_daily_question_proposals_submitted ON daily_quest
 INSERT OR IGNORE INTO daily_questions(id,date,category,question_latex,explanation_latex,options_json,points,created_at)
 VALUES(
   'qotd-seed-20261105', '2026-11-05', 'Physics',
-  'State Schrödinger’s time-dependent wave equation: $i\\hbar \\frac{\\partial}{\\partial t} \\Psi(\\mathbf{r}, t) = \\hat{H}\\Psi(\\mathbf{r}, t)$.',
-  'The equation describes how a quantum state changes over time under a Hamiltonian: $i\\hbar \\partial_t \\Psi = \\hat{H}\\Psi$.',
+  'State the time-dependent Schrodinger wave equation: $i\hbar \frac{\partial}{\partial t} \Psi(\mathbf{r}, t) = \hat{H}\Psi(\mathbf{r}, t)$.',
+  'It describes how a quantum state changes over time under a Hamiltonian: $i\hbar \partial_t \Psi = \hat{H}\Psi$.',
   '["It describes time evolution of a quantum state","It gives the probability density directly","It defines the position operator","It states conservation of particle number"]',
   10, strftime('%Y-%m-%dT%H:%M:%f+00:00','now')
 );

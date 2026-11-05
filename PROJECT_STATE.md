@@ -8,6 +8,8 @@ NEXUS is a student community and academic platform for IISER Tirupati. The activ
 
 ## Current status
 
+- Generated JWT_SECRET and PASSWORD_PEPPER values are configured as Cloudflare Worker secrets; secret values are not stored in the repository.
+
 - Cloudflare Pages proxies same-origin `/api/*` requests to the deployed `nexus-backend` Worker. The browser keeps using `/api/v1` without cross-origin requests. The Worker supports beta authentication, profiles, friends, direct/group messaging, persistent AI sessions/threads, and QOTD/AOTD question, archive, answer, and discussion routes. AI model inference, PDF attachments, and WebSockets are not configured on Cloudflare yet.
 
 - Four separate beta student accounts (student1–student4) are seeded with the same beta password and can log in using their username or institute email. The login screen lists selectable account names. Fresh browser sessions now remain signed out so users can choose an account; the Courses preview stays available as an explicit action. The public demo-account endpoint lists usernames and emails only, never passwords.
