@@ -33,7 +33,28 @@ The local worker needs `JWT_SECRET` and `PASSWORD_PEPPER` in `.dev.vars`. Never 
 
 ## Laptop-hosted AI
 
-The hosted chat calls Ollama on the owner's laptop through an authenticated localhost proxy and Cloudflare Tunnel. Install Ollama, pull `gpt-oss:20b`, and install `cloudflared`. In two PowerShell terminals run `.start-local-ai.ps1` (generates/loads its private token) and `.start-local-ai.ps1 -Tunnel`. Copy the temporary HTTPS URL printed by cloudflared, set Worker secrets `OLLAMA_BASE_URL` and `OLLAMA_API_KEY`, then deploy. The API key must match the token stored in `.local-ai-token`. Quick Tunnels are temporary and intended for development; their hostname changes after restarting and the laptop, Ollama, proxy, and tunnel must stay online. For a stable production setup, replace the Quick Tunnel with a named Cloudflare Tunnel. Ollama remains bound to localhost and is never exposed directly. The proxy is limited to GPT‑OSS 20B and does not log prompts.
+The hosted chat calls Ollama on the owner's laptop through an authenticated localhost proxy and Cloudflare Tunnel. Install Ollama, pull `gpt-oss:20b`, and install `cloudflared`.
+
+### Quick Start Commands to Activate AI:
+
+1. **Terminal 1 — Local Proxy**:
+   ```powershell
+   cd nexus-backend
+   python local_ai_proxy.py
+   ```
+2. **Terminal 2 — Cloudflare Tunnel**:
+   ```powershell
+   cd nexus-backend
+   .\start-local-ai.ps1 -Tunnel
+   ```
+3. **Set/Update Worker Secret**:
+   Copy the temporary HTTPS URL printed by cloudflared (`https://<name>.trycloudflare.com`), then:
+   ```powershell
+   npx wrangler secret put OLLAMA_BASE_URL
+   ```
+   Paste the tunnel URL when prompted.
+
+Keep both terminals running while you want the laptop AI accessible to users worldwide. The API key must match the token stored in `.local-ai-token`. Quick Tunnels are temporary and intended for development; their hostname changes after restarting. For a stable production setup, replace the Quick Tunnel with a named Cloudflare Tunnel. Ollama remains bound to localhost and is never exposed directly. The proxy is limited to GPT‑OSS 20B and does not log prompts.
 
 ## Deploy to Cloudflare
 

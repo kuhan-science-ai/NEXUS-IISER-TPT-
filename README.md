@@ -64,6 +64,48 @@ Open the `Local` URL printed by Vite. It normally uses [http://localhost:5173](h
 
 Press `Ctrl+C` in each server window. To leave the Python virtual environment, run `deactivate` in the backend window.
 
+## Running Laptop GPU AI (GPT-OSS 20B) for All Users Worldwide
+
+NEXUS can route AI Study Companion and Ask AI chats to OpenAI `gpt-oss:20b` running locally on your laptop's GPU via Ollama, accessible securely from the deployed Cloudflare site anywhere in the world.
+
+### Prerequisites
+1. [Ollama](https://ollama.com/) installed with `gpt-oss:20b`:
+   ```powershell
+   ollama pull gpt-oss:20b
+   ```
+2. Cloudflare tunnel client (`cloudflared`) installed:
+   ```powershell
+   winget install --id Cloudflare.cloudflared --exact
+   ```
+
+### Steps to Activate / Run
+
+1. **Terminal 1 — Start the Authenticated Local Proxy**:
+   ```powershell
+   cd .\nexus-backend
+   python local_ai_proxy.py
+   ```
+   This listens on `http://127.0.0.1:18787` and securely bridges requests to Ollama.
+
+2. **Terminal 2 — Start the Cloudflare Tunnel**:
+   ```powershell
+   cd .\nexus-backend
+   .\start-local-ai.ps1 -Tunnel
+   ```
+   `cloudflared` generates a secure HTTPS tunnel and outputs a URL such as:
+   ```text
+   https://<generated-name>.trycloudflare.com
+   ```
+
+3. **Update the Worker Secret (if the tunnel URL changed)**:
+   ```powershell
+   cd .\nexus-backend
+   npx wrangler secret put OLLAMA_BASE_URL
+   ```
+   Paste the tunnel URL (e.g. `https://<generated-name>.trycloudflare.com`) when prompted.
+
+Keep both terminals open while you want the AI active. Users worldwide using the website will now have their AI queries answered directly by your local GPU!
+
 ## Architecture Philosophy
 - **Decoupled Design**: The frontend is built with minimal functional, unstyled components awaiting official Figma UI design handoff.
 - **Robust Relational Data**: Persistent database models powered by SQLAlchemy 2.0 with Alembic versioning.
