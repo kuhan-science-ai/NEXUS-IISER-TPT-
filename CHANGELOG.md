@@ -88,3 +88,5 @@ All notable changes to the NEXUS core architecture will be documented here.
 - Moved Study Groups profiles, membership, channels, messages, and reactions to Cloudflare D1 so they are shared between accounts and devices; added a one-time import for browser-local groups. Applied migration 0005 and deployed the Worker.
 - Added username search suggestions, profile cards, sent and received friend request handling, accept/decline controls, and direct conversation creation after friendship acceptance.
 - Added expiring D1 typing indicators to direct messages.
+- Added Public vs Private visibility toggle to group creation and group settings: Public groups appear to all accounts in All groups, while Private groups are visible only to joined members. Added Migration 0006 for `is_public` and channel typing state.
+- Relocated and integrated typing indicators for both direct messages and Study Group channels to display directly above the message composer input.

@@ -190,6 +190,8 @@ class ApiService {
   async clearCampusGroupMessages(groupId: string, channelId: string): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}/messages`, { method: 'DELETE' }); }
   async deleteCampusGroupMessage(groupId: string, messageId: string): Promise<any> { return this.request(`/groups/${groupId}/messages/${messageId}`, { method: 'DELETE' }); }
   async toggleCampusGroupReaction(groupId: string, messageId: string, emoji: string): Promise<any> { return this.request(`/groups/${groupId}/messages/${messageId}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }); }
+  async setCampusGroupTyping(groupId: string, channelId: string, isTyping: boolean): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}/typing`, { method: 'POST', body: JSON.stringify({ is_typing: isTyping }) }); }
+  async getCampusGroupTyping(groupId: string, channelId: string): Promise<any[]> { return this.request(`/groups/${groupId}/channels/${channelId}/typing`); }
 
   async getMessages(convId: string): Promise<any[]> {
     return this.request(`/messages/conversations/${convId}/messages`);

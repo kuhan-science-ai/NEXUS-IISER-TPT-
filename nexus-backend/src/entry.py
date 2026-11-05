@@ -40,6 +40,7 @@ class CampusGroupInput(BaseModel):
     description: str = Field(default="", max_length=1000)
     icon: str = Field(default="✦", max_length=350_000)
     banner: str = Field(default="#7c5cff", max_length=100)
+    is_public: bool = True
     channels: list[CampusGroupChannelInput] = Field(default_factory=list, max_length=20)
     joined: bool = False
 
@@ -53,6 +54,7 @@ class CampusGroupUpdate(BaseModel):
     description: str = Field(default="", max_length=1000)
     icon: str = Field(default="✦", max_length=350_000)
     banner: str = Field(default="#7c5cff", max_length=100)
+    is_public: bool = True
 
 
 class CampusGroupMessageCreate(BaseModel):
@@ -489,6 +491,7 @@ async def list_campus_groups(user: dict[str, Any] = Depends(get_current_user), d
     rows = await query(db, """SELECT g.*,gm.role AS viewer_role,
         (SELECT COUNT(*) FROM campus_group_members m WHERE m.group_id=g.id) AS member_count
         FROM campus_groups g LEFT JOIN campus_group_members gm ON gm.group_id=g.id AND gm.user_id=?
+        WHERE g.is_public=1 OR gm.user_id IS NOT NULL
         ORDER BY g.updated_at DESC,g.created_at DESC""", user["sub"])
     if not rows:
         return []
@@ -497,12 +500,13 @@ async def list_campus_groups(user: dict[str, Any] = Depends(get_current_user), d
     by_group: dict[str, list[dict[str, str]]] = {}
     for channel in channels:
         by_group.setdefault(channel["group_id"], []).append({"id": channel["id"], "name": channel["name"]})
-    return [{"id": row["id"], "name": row["name"], "description": row["description"], "icon": row["icon"], "banner": row["banner"], "owner_id": row["owner_id"], "joined": bool(row.get("viewer_role")), "role": row.get("viewer_role"), "member_count": int(row.get("member_count") or 0), "channels": by_group.get(row["id"], [])} for row in rows]
+    return [{"id": row["id"], "name": row["name"], "description": row["description"], "icon": row["icon"], "banner": row["banner"], "owner_id": row["owner_id"], "is_public": bool(row.get("is_public", 1)), "joined": bool(row.get("viewer_role")), "role": row.get("viewer_role"), "member_count": int(row.get("member_count") or 0), "channels": by_group.get(row["id"], [])} for row in rows]
 
 
 async def insert_campus_group(db: Any, req: CampusGroupInput, user_id: str, group_id: str | None = None) -> str:
     stamp, group_id = now(), group_id or new_id()
-    await execute(db, "INSERT INTO campus_groups(id,owner_id,name,description,icon,banner,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", group_id, user_id, req.name.strip(), req.description.strip(), req.icon, req.banner, stamp, stamp)
+    is_pub = 1 if req.is_public else 0
+    await execute(db, "INSERT INTO campus_groups(id,owner_id,name,description,icon,banner,is_public,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)", group_id, user_id, req.name.strip(), req.description.strip(), req.icon, req.banner, is_pub, stamp, stamp)
     await execute(db, "INSERT INTO campus_group_members(group_id,user_id,role,joined_at) VALUES(?,?,'owner',?)", group_id, user_id, stamp)
     initial_channels = req.channels or [CampusGroupChannelInput(name=name) for name in ("general", "discussion", "hangout")]
     for position, channel in enumerate(initial_channels):
@@ -550,7 +554,8 @@ async def update_campus_group(group_id: str, payload: CampusGroupUpdate, user: d
         raise HTTPException(status_code=404, detail="Group not found")
     if group["owner_id"] != user["sub"]:
         raise HTTPException(status_code=403, detail="Only the group owner can update its profile")
-    await execute(db, "UPDATE campus_groups SET name=?,description=?,icon=?,banner=?,updated_at=? WHERE id=?", payload.name.strip(), payload.description.strip(), payload.icon, payload.banner, now(), group_id)
+    is_pub = 1 if payload.is_public else 0
+    await execute(db, "UPDATE campus_groups SET name=?,description=?,icon=?,banner=?,is_public=?,updated_at=? WHERE id=?", payload.name.strip(), payload.description.strip(), payload.icon, payload.banner, is_pub, now(), group_id)
     return next(item for item in await list_campus_groups(user, db) if item["id"] == group_id)
 
 
@@ -633,6 +638,26 @@ async def delete_campus_group_message(group_id: str, message_id: str, user: dict
         raise HTTPException(status_code=403, detail="You can only delete your own messages")
     await execute(db, "UPDATE campus_group_messages SET is_deleted=1,content='' WHERE id=?", message_id)
     return {"message": "Message deleted"}
+
+
+@app.post("/api/v1/groups/{group_id}/channels/{channel_id}/typing")
+async def update_campus_group_typing(group_id: str, channel_id: str, payload: TypingStatusUpdate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_campus_group_member(db, group_id, user["sub"])
+    if payload.is_typing:
+        await execute(db, "INSERT INTO campus_group_typing(group_id,channel_id,user_id,updated_at) VALUES(?,?,?,?) ON CONFLICT(channel_id,user_id) DO UPDATE SET updated_at=excluded.updated_at", group_id, channel_id, user["sub"], now())
+    else:
+        await execute(db, "DELETE FROM campus_group_typing WHERE channel_id=? AND user_id=?", channel_id, user["sub"])
+    return {"is_typing": payload.is_typing}
+
+
+@app.get("/api/v1/groups/{group_id}/channels/{channel_id}/typing")
+async def get_campus_group_typing(group_id: str, channel_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_campus_group_member(db, group_id, user["sub"])
+    since = (datetime.now(timezone.utc) - timedelta(seconds=6)).isoformat()
+    rows = await query(db, """SELECT u.id,p.full_name,u.username FROM campus_group_typing t
+        JOIN users u ON u.id=t.user_id LEFT JOIN user_profiles p ON p.user_id=u.id
+        WHERE t.channel_id=? AND t.user_id<>? AND t.updated_at>=? ORDER BY t.updated_at DESC""", channel_id, user["sub"], since)
+    return [{"user_id": row["id"], "name": row.get("full_name") or row["username"]} for row in rows]
 
 
 @app.post("/api/v1/groups/{group_id}/messages/{message_id}/reactions")
