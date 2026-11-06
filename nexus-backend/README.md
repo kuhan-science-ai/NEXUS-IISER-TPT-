@@ -34,7 +34,7 @@ The local worker needs `JWT_SECRET`, `PASSWORD_PEPPER`, and `FIREBASE_PROJECT_ID
 ## Firebase Authentication setup
 
 1. Create a Firebase project and register a Web app. In Authentication → Sign-in method, enable Email/Password and Google. Add `nexus-iisert.pages.dev` and your local Vite host (`localhost`) under Authorized domains.
-2. Copy the Firebase Web app `apiKey`, `authDomain`, `projectId`, and `appId` into Cloudflare Pages build environment variables `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID`. These are public web-client settings, not Admin SDK credentials.
+2. Set `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID` in `frontend/.env.production` from the Firebase Web app config. These are public web-client settings, not Admin SDK credentials.
 3. Set the Worker variable `FIREBASE_PROJECT_ID` to the same project ID in `wrangler.jsonc` (or a deployment environment variable), then deploy the Worker and rebuild/redeploy the frontend.
 4. Apply D1 migration `0007_firebase_identity.sql` to local/production D1.
 5. To enable the developer console, set `FIREBASE_ADMIN_EMAIL` to the exact Google account email for the developer. The Worker grants the admin role only after Firebase verifies that same email; Alt+C only opens the console for an account that already has the server-side role.
