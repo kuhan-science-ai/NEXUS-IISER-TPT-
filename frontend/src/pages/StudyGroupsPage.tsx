@@ -23,6 +23,7 @@ export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, o
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [deletingGroup, setDeletingGroup] = useState(false);
   const [draftName, setDraftName] = useState('');
   const [draftDescription, setDraftDescription] = useState('');
   const [draftIcon, setDraftIcon] = useState('✦');
@@ -55,6 +56,26 @@ export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, o
     await refreshGroups(); setActiveGroupId(group.id); setActiveChannelId(group.channels[0]?.id || null); setCreateOpen(false); setDraftName(''); setDraftDescription(''); setDraftIcon('✦'); setImagePreview(''); setDraftIsPublic(true);
   };
   const updateGroup = async (updated: CampusGroup) => { try { const saved = await api.updateCampusGroup(updated.id, updated); setGroups(items => items.map(group => group.id === updated.id ? { ...group,...saved,ownerId:saved.owner_id } : group)); } catch { setNotice('Only the group owner can update group details.'); } };
+  const deleteGroup = async () => {
+    if (!activeGroup || activeGroup.role !== 'owner' || activeGroup.ownerId !== currentUser.id || deletingGroup) return;
+    const groupName = activeGroup.name;
+    if (!window.confirm(`Delete “${groupName}” permanently? This also removes its channels and messages for every member.`)) return;
+    setDeletingGroup(true);
+    try {
+      await api.deleteCampusGroup(activeGroup.id);
+      const deletedId = activeGroup.id;
+      setSettingsOpen(false);
+      setActiveGroupId(null);
+      setActiveChannelId(null);
+      setGroupMessages(messages => Object.fromEntries(Object.entries(messages).filter(([key]) => !key.startsWith(`${deletedId}:`))));
+      await refreshGroups();
+      setNotice(`“${groupName}” was deleted.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not delete this group. Only its owner can delete it.');
+    } finally {
+      setDeletingGroup(false);
+    }
+  };
   const selectImage = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => setImagePreview(String(reader.result)); reader.readAsDataURL(file); };
   const addChannel = async () => { if (!activeGroup || !channelName.trim()) return; try { const channel = await api.addCampusGroupChannel(activeGroup.id,channelName.trim()); await refreshGroups(); setActiveChannelId(channel.id); setChannelName(''); setChannelInputOpen(false); } catch { setNotice('Only the group owner can add channels.'); } };
   useEffect(() => { if (!activeGroup || !activeChannel || !activeGroup.joined) return; let alive=true; const key=`${activeGroup.id}:${activeChannel.id}`; const load=async()=>{try{const rows=await api.listCampusGroupMessages(activeGroup.id,activeChannel.id);if(alive)setGroupMessages(value=>({...value,[key]:rows.map((m:any)=>({id:m.id,text:m.text,sender:m.sender,sender_id:m.sender_id,at:new Date(m.at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),reactions:(m.reactions || []).map((r:any)=>r.emoji),replyToId:m.replyToId,reply_preview:m.reply_preview}))}));}catch{/* preserve current view during brief disconnect */}};void load();const timer=window.setInterval(()=>void load(),4000);return()=>{alive=false;window.clearInterval(timer);}; },[activeGroup?.id,activeChannel?.id,activeGroup?.joined]);
@@ -121,6 +142,7 @@ export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, o
     {createOpen && <div className="study-group-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setCreateOpen(false); }}><section className="study-group-modal nexus-group-modal" role="dialog" aria-modal="true" aria-labelledby="study-group-modal-title"><button type="button" className="study-group-modal-close" onClick={() => setCreateOpen(false)} aria-label="Close">×</button><span className="study-groups-eyebrow">NEW COMMUNITY</span><h2 id="study-group-modal-title">Create your group</h2><label>Group name<input value={draftName} onChange={event => setDraftName(event.target.value)} placeholder="e.g. Weekend Wanderers" /></label><label>Description<textarea value={draftDescription} onChange={event => setDraftDescription(event.target.value)} placeholder="What brings your group together?" /></label><div className="nexus-group-customize"><label className="nexus-group-icon-picker">Group icon<input type="file" accept="image/*" onChange={event => selectImage(event.target.files?.[0])} /><span style={{ background: draftBanner }}>{imagePreview ? <img src={imagePreview} alt="Group icon preview" /> : draftIcon}</span><small><ImagePlus size={14} /> Upload icon</small></label><label>Icon symbol<input maxLength={3} value={draftIcon} onChange={event => setDraftIcon(event.target.value)} /></label><label>Banner color<input type="color" value={draftBanner} onChange={event => setDraftBanner(event.target.value)} /></label></div><div className="nexus-group-banner-preview" style={{ background: draftBanner }} /><div className="nexus-group-privacy-selector"><label className="nexus-group-privacy-label">Group privacy</label><div className="nexus-group-privacy-options"><button type="button" className={`nexus-privacy-btn ${draftIsPublic ? 'selected' : ''}`} onClick={() => setDraftIsPublic(true)}><span>🌐 Public</span><small>Visible to all accounts in All groups</small></button><button type="button" className={`nexus-privacy-btn ${!draftIsPublic ? 'selected' : ''}`} onClick={() => setDraftIsPublic(false)}><span>🔒 Private</span><small>Visible only to joined members</small></button></div></div>
 <button type="button" className="nexus-group-submit" disabled={!draftName.trim()} onClick={addGroup}>Create group</button><small className="nexus-beta-note"><LockKeyhole size={12} /> Groups are shared with your NEXUS accounts.</small></section></div>}
     {settingsOpen && activeGroup && <div className="study-group-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setSettingsOpen(false); }}><section className="study-group-modal nexus-group-settings" role="dialog" aria-modal="true" aria-labelledby="nexus-settings-title"><button type="button" className="study-group-modal-close" onClick={() => setSettingsOpen(false)} aria-label="Close">×</button><span className="study-groups-eyebrow">GROUP CONTROLS</span><h2 id="nexus-settings-title">{activeGroup.name} settings</h2><label>Group name<input value={activeGroup.name} onChange={event => updateGroup({ ...activeGroup, name: event.target.value })} /></label><label>Description<textarea value={activeGroup.description} onChange={event => updateGroup({ ...activeGroup, description: event.target.value })} /></label><label>Banner color<input type="color" value={activeGroup.banner} onChange={event => updateGroup({ ...activeGroup, banner: event.target.value })} /></label><div className="nexus-group-privacy-selector"><label className="nexus-group-privacy-label">Group privacy</label><div className="nexus-group-privacy-options"><button type="button" className={`nexus-privacy-btn ${activeGroup.is_public !== false ? 'selected' : ''}`} onClick={() => updateGroup({ ...activeGroup, is_public: true })}><span>🌐 Public</span><small>Visible to all accounts</small></button><button type="button" className={`nexus-privacy-btn ${activeGroup.is_public === false ? 'selected' : ''}`} onClick={() => updateGroup({ ...activeGroup, is_public: false })}><span>🔒 Private</span><small>Visible only to joined members</small></button></div></div>
+{activeGroup.role === 'owner' && activeGroup.ownerId === currentUser.id && <><p className="nexus-group-delete-warning">Deleting this group permanently removes it, its channels, and its messages for every member.</p><button type="button" className="nexus-group-delete" onClick={() => void deleteGroup()} disabled={deletingGroup}><Trash2 size={14} /> {deletingGroup ? 'Deleting…' : 'Delete group'}</button></>}
 <button className="nexus-group-submit" onClick={() => setSettingsOpen(false)}>Done</button></section></div>}
     <GlobalSearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
   </div>;

@@ -10,6 +10,7 @@ NEXUS is a student community and academic platform for IISER Tirupati. The activ
 
 - Authentication UI is wired for Firebase email/password and Google providers. The Worker verifies Firebase ID tokens and creates persistent D1 profiles. Deployment is pending Firebase project configuration, authorized domains/providers, D1 migration `0007_firebase_identity.sql`, and Worker/frontend deployment.
 - The Alt+C developer console is visible only to accounts granted `admin` by the Worker after matching the configured, verified `FIREBASE_ADMIN_EMAIL`; admin group deletion and direct-message soft deletion are server-authorized.
+- Group owners can delete their group from its settings after confirming; the Worker checks the owner ID and cascades deletion to the group's channels and messages.
 
 - Cloudflare Pages proxies same-origin `/api/*` requests to the deployed `nexus-backend` Worker. The browser keeps using `/api/v1` without cross-origin requests. The Worker currently supports beta authentication, profiles, friends, and direct/group messaging; other APIs and WebSockets are not yet served by this Cloudflare backend.
 - The Cloudflare Worker persists AI conversations, threads, and messages and can call the authenticated laptop Ollama proxy for GPT‑OSS 20B. The laptop must remain online with Ollama and a Cloudflare Tunnel running; the local helper is in `nexus-backend/local_ai_proxy.py`. QOTD/AOTD APIs are available, with one starter physics question seeded. PDF attachments are not supported by this Worker.

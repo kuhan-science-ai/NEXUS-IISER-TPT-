@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-05
+- Added a confirmation-protected Delete group action to group settings; only the group owner sees it, and the API verifies ownership before deletion.
 - Added an Alt+C developer console with server-enforced admin authorization and controls to remove server groups or direct messages.
 - Replaced beta-account sign-in UI with Firebase email/password and Google sign-in, profile completion, and D1-backed Firebase identity verification; added setup instructions and Firebase identity migration.
 - Configured local Ollama for 15 parallel AI requests with a 512-request FIFO queue and 2,048-token contexts; the launcher restarts Ollama so the concurrency settings take effect.
