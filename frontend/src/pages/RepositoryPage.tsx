@@ -584,7 +584,7 @@ export const RepositoryPage: React.FC<RepositoryPageProps> = ({ currentUser, onL
       </div>
 
       <GlobalSearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
-      <UploadResourceModal isOpen={uploadOpen} onClose={() => setUploadOpen(false)} />
+      <UploadResourceModal isOpen={uploadOpen} onClose={() => setUploadOpen(false)} currentUserId={currentUser.id} />
     </div>
   );
 };

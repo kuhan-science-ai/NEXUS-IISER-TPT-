@@ -7,6 +7,7 @@ import {
   Users, type LucideIcon,
 } from 'lucide-react';
 import { api, UserSummary } from '../services/api';
+import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 
 interface SideNavProps {
   currentUser: UserSummary;
@@ -23,15 +24,16 @@ interface NavItem {
 
 export const SideNav: React.FC<SideNavProps> = ({ currentUser, onLogout, onOpenSearch }) => {
   const loc = useLocation();
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem('nexus-sidebar-collapsed') === 'true'; }
-    catch { return false; }
-  });
+  const [collapsed, setCollapsed] = useState(() => readUserPreference('nexus-sidebar-collapsed', currentUser.id, false));
+
+  React.useEffect(() => {
+    setCollapsed(readUserPreference('nexus-sidebar-collapsed', currentUser.id, false));
+  }, [currentUser.id]);
 
   const toggleCollapsed = () => {
     setCollapsed((current) => {
       const next = !current;
-      try { localStorage.setItem('nexus-sidebar-collapsed', String(next)); } catch { /* storage may be unavailable */ }
+      writeUserPreference('nexus-sidebar-collapsed', currentUser.id, next);
       return next;
     });
   };

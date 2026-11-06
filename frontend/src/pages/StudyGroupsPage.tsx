@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Compass, Forward, Hash, ImagePlus, LockKeyhole, MoreHorizontal, Plus, Search, Settings, SmilePlus, Trash2, UsersRound, X } from 'lucide-react';
 import { api, UserSummary } from '../services/api';
+import { readUserPreference, userPreferenceStorageKey, writeUserPreference } from '../services/userPreferences';
 import { SideNav } from '../components/SideNav';
 import { TopHeader } from '../components/TopHeader';
 import { GlobalSearchModal } from '../components/GlobalSearchModal';
@@ -12,7 +13,7 @@ type CampusGroup = { id: string; name: string; description: string; icon: string
 type GroupMessage = { id: string; text: string; sender: string; at: string; reactions: string[]; replyToId?: string; reply_preview?: string };
 const STORAGE_KEY = 'nexus-campus-groups-v1';
 const defaultChannels = (): GroupChannel[] => [{ id: crypto.randomUUID(), name: 'general' }, { id: crypto.randomUUID(), name: 'discussion' }, { id: crypto.randomUUID(), name: 'hangout' }];
-const readGroups = (userId: string): CampusGroup[] => { try { const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); const groups = stored.map((group: CampusGroup) => { const { joined, ...rest } = group; return { ...rest, joinedBy: group.joinedBy || (joined ? [userId] : []) }; }); localStorage.setItem(STORAGE_KEY, JSON.stringify(groups)); return groups; } catch { return []; } };
+const readGroups = (userId: string): CampusGroup[] => { try { const key = userPreferenceStorageKey(STORAGE_KEY, userId); const stored = JSON.parse(localStorage.getItem(key) || localStorage.getItem(STORAGE_KEY) || '[]'); const groups = stored.map((group: CampusGroup) => { const { joined, ...rest } = group; return { ...rest, joinedBy: group.joinedBy || (joined ? [userId] : []) }; }); localStorage.setItem(key, JSON.stringify(groups)); localStorage.removeItem(STORAGE_KEY); return groups; } catch { return []; } };
 
 export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, onLogout }) => {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -95,9 +96,9 @@ export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, o
   }, [activeGroup?.id, activeChannel?.id, activeGroup?.joined]);
   const jumpToGroupMessage = (messageId: string) => { document.getElementById(`group-message-${messageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setHighlightedMessageId(messageId); window.setTimeout(() => setHighlightedMessageId(current => current === messageId ? null : current), 1600); };
   const copyText = async (text: string, label: string) => { await navigator.clipboard?.writeText(text); setNotice(`${label} copied`); window.setTimeout(() => setNotice(''), 1800); };
-  const saveGroupBookmark = (message: GroupMessage) => { const key = 'nexus-message-bookmarks-v1'; const saved = JSON.parse(localStorage.getItem(key) || '[]'); const exists = saved.some((item: any) => item.id === message.id); localStorage.setItem(key, JSON.stringify(exists ? saved.filter((item: any) => item.id !== message.id) : [...saved, { ...message, group: activeGroup?.name, channel: activeChannel?.name }])); setNotice(exists ? 'Bookmark removed' : 'Message bookmarked in this browser'); window.setTimeout(() => setNotice(''), 1800); };
+  const saveGroupBookmark = (message: GroupMessage) => { const key = 'nexus-message-bookmarks-v1'; const saved = readUserPreference<any[]>(key, currentUser.id, []); const exists = saved.some((item: any) => item.id === message.id); const next = exists ? saved.filter((item: any) => item.id !== message.id) : [...saved, { ...message, group: activeGroup?.name, channel: activeChannel?.name }]; writeUserPreference(key, currentUser.id, next); setNotice(exists ? 'Bookmark removed' : 'Message bookmarked in this browser'); window.setTimeout(() => setNotice(''), 1800); };
   const scheduleGroupReminder = (message: GroupMessage) => { const minutes = Number(window.prompt('Remind me in how many minutes?', '30')); if (!Number.isFinite(minutes) || minutes <= 0) return; window.setTimeout(() => window.alert(`Reminder: ${message.sender}: ${message.text}`), minutes * 60_000); setNotice(`Reminder set for ${minutes} minutes`); window.setTimeout(() => setNotice(''), 1800); };
-  const markGroupUnread = () => { if (!messageKey) return; localStorage.setItem('nexus-unread-group-channel', messageKey); setNotice('Channel marked unread'); window.setTimeout(() => setNotice(''), 1800); };
+  const markGroupUnread = () => { if (!messageKey) return; writeUserPreference('nexus-unread-group-channel', currentUser.id, messageKey); setNotice('Channel marked unread'); window.setTimeout(() => setNotice(''), 1800); };
   const speakGroupMessage = (message: GroupMessage) => { window.speechSynthesis?.cancel(); window.speechSynthesis?.speak(new SpeechSynthesisUtterance(`${message.sender} says: ${message.text}`)); };
   const reactToGroupMessage = async (messageId: string, emoji: string) => { if (!activeGroup) return; await api.toggleCampusGroupReaction(activeGroup.id,messageId,emoji); if(activeChannel) { const rows=await api.listCampusGroupMessages(activeGroup.id,activeChannel.id);setGroupMessages(value=>({...value,[messageKey]:rows.map((m:any)=>({id:m.id,text:m.text,sender:m.sender,at:new Date(m.at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),reactions:(m.reactions || []).map((r:any)=>r.emoji),replyToId:m.replyToId,reply_preview:m.reply_preview}))})); } };
 

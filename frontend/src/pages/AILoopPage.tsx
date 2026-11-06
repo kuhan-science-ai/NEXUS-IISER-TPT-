@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api, UserSummary } from '../services/api';
 import { MathRenderer } from '../components/MathRenderer';
+import { readUserPreference } from '../services/userPreferences';
 import { SideNav } from '../components/SideNav';
 import { Activity, Ban, BarChart3, Bot, BrainCircuit, Circle, CircleCheck, CircleX, Copy, Database, GitFork, Radio, Reply, Save, Search, Settings2, ShieldCheck, Target, Trash2, Wrench, Zap, type LucideIcon } from 'lucide-react';
 
@@ -33,10 +34,7 @@ const stageBorderColor = (stage: string) => {
   return 'rgba(139,92,246,0.2)';
 };
 
-const readAssistantName = () => {
-  try { return (localStorage.getItem('nexus-ai-name') || 'NEXUS').trim().slice(0, 10) || 'NEXUS'; }
-  catch { return 'NEXUS'; }
-};
+const readAssistantName = (userId: string) => readUserPreference('nexus-ai-name', userId, 'NEXUS').trim().slice(0, 10) || 'NEXUS';
 
 export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout }) => {
   const [conversations, setConversations] = useState<any[]>([]);
@@ -53,7 +51,7 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
   const [messageOffset, setMessageOffset] = useState(0);
   const [loadingEarlierMessages, setLoadingEarlierMessages] = useState(false);
   const [showTools, setShowTools] = useState(false);
-  const [assistantName, setAssistantName] = useState(readAssistantName);
+  const [assistantName, setAssistantName] = useState(() => readAssistantName(currentUser?.id || 'guest'));
 
   const copyMessage = async (content: string) => { try { await navigator.clipboard.writeText(content); } catch { setRequestError('Could not copy this message in this browser.'); } };
   const quoteMessage = (content: string) => { setPrompt(value => `${value}${value ? '\n' : ''}> ${content.split('\n').join('\n> ')}\n\n`); document.querySelector<HTMLInputElement>('[data-ai-prompt]')?.focus(); };
@@ -70,12 +68,12 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
   useEffect(() => {
     const updateAssistantName = (event?: Event) => {
       const name = (event as CustomEvent<{ name?: string }> | undefined)?.detail?.name;
-      setAssistantName(name?.trim().slice(0, 10) || readAssistantName());
+      setAssistantName(name?.trim().slice(0, 10) || readAssistantName(currentUser?.id || 'guest'));
     };
     window.addEventListener('nexus-ai-name-updated', updateAssistantName);
     window.addEventListener('storage', updateAssistantName);
     return () => { window.removeEventListener('nexus-ai-name-updated', updateAssistantName); window.removeEventListener('storage', updateAssistantName); };
-  }, []);
+  }, [currentUser?.id]);
 
   const getPageContext = () => ({
     path: window.location.pathname + window.location.search,

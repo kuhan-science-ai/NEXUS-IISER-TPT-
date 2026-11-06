@@ -1,3 +1,6 @@
+import type { CSSProperties } from 'react';
+import { readUserPreference, userPreferenceStorageKey, writeUserPreference } from './userPreferences';
+
 export const UI_PALETTE_STORAGE_KEY = 'nexus-interior-ui-palette';
 export const CUSTOM_UI_PALETTES_STORAGE_KEY = 'nexus-custom-interior-ui-palettes';
 
@@ -25,9 +28,9 @@ export const UI_PALETTES = {
 
 export type UiPaletteId = keyof typeof UI_PALETTES | `custom-${string}`;
 
-export function readCustomUiPalettes(): CustomUiPalette[] {
+export function readCustomUiPalettes(userId: string): CustomUiPalette[] {
   try {
-    const stored = JSON.parse(localStorage.getItem(CUSTOM_UI_PALETTES_STORAGE_KEY) || '[]');
+    const stored = readUserPreference<unknown>(CUSTOM_UI_PALETTES_STORAGE_KEY, userId, []);
     if (!Array.isArray(stored)) return [];
     return stored.filter((palette): palette is CustomUiPalette =>
       palette && typeof palette.id === 'string' && palette.id.startsWith('custom-')
@@ -41,15 +44,24 @@ export function readCustomUiPalettes(): CustomUiPalette[] {
   }
 }
 
-export function readUiPalette(): UiPaletteId {
+export function writeCustomUiPalettes(userId: string, palettes: CustomUiPalette[]): void {
+  localStorage.setItem(userPreferenceStorageKey(CUSTOM_UI_PALETTES_STORAGE_KEY, userId), JSON.stringify(palettes));
+  localStorage.removeItem(CUSTOM_UI_PALETTES_STORAGE_KEY);
+}
+
+export function readUiPalette(userId: string): UiPaletteId {
   try {
-    const stored = localStorage.getItem(UI_PALETTE_STORAGE_KEY);
+    const stored = readUserPreference<string>(UI_PALETTE_STORAGE_KEY, userId, 'slate');
     if (stored && stored in UI_PALETTES) return stored as UiPaletteId;
-    if (stored && readCustomUiPalettes().some(palette => palette.id === stored)) return stored as UiPaletteId;
+    if (stored && readCustomUiPalettes(userId).some(palette => palette.id === stored)) return stored as UiPaletteId;
     return 'slate';
   } catch {
     return 'slate';
   }
+}
+
+export function writeUiPalette(userId: string, palette: UiPaletteId): void {
+  writeUserPreference(UI_PALETTE_STORAGE_KEY, userId, palette);
 }
 
 const colorIsLight = (hex: string) => {
@@ -59,8 +71,8 @@ const colorIsLight = (hex: string) => {
   return luminance > 0.48;
 };
 
-export function customPaletteStyle(id: UiPaletteId, theme: 'dark' | 'light', preview?: CustomUiPalette): CSSProperties | undefined {
-  const palette = preview || readCustomUiPalettes().find(item => item.id === id);
+export function customPaletteStyle(id: UiPaletteId, theme: 'dark' | 'light', userId: string, preview?: CustomUiPalette): CSSProperties | undefined {
+  const palette = preview || readCustomUiPalettes(userId).find(item => item.id === id);
   if (!palette) return undefined;
 
   const canvas = theme === 'light' ? `color-mix(in srgb, ${palette.background} 8%, #ffffff)` : palette.background;
@@ -105,5 +117,4 @@ export function customPaletteStyle(id: UiPaletteId, theme: 'dark' | 'light', pre
     '--text-faint': `color-mix(in srgb, ${subtle} 70%, ${surface})`,
   } as CSSProperties;
 }
-import type { CSSProperties } from 'react';
 

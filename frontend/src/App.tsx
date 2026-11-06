@@ -31,8 +31,9 @@ import { AIQuickPanel } from './components/AIQuickPanel';
 import { DeveloperConsole } from './components/DeveloperConsole';
 import { firebaseAuth } from './services/firebase';
 import { signOut } from 'firebase/auth';
-import { customPaletteStyle, CustomUiPalette, readCustomUiPalettes, readUiPalette, UI_PALETTE_STORAGE_KEY, UiPaletteId } from './services/appearance';
+import { customPaletteStyle, CustomUiPalette, readCustomUiPalettes, readUiPalette, UiPaletteId, writeUiPalette } from './services/appearance';
 import { recordDashboardHistory } from './services/dashboard';
+import { readUserPreference, writeUserPreference } from './services/userPreferences';
 
 const queryClient = new QueryClient();
 
@@ -54,7 +55,7 @@ const RouteShell: React.FC<React.PropsWithChildren<{ theme: 'dark' | 'light'; ui
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const profileLaunch = useRef<ProfileLaunchAnimation | null>(null);
   const isInterior = pathname !== '/' && pathname !== '/landing' && pathname !== '/auth';
-  const customPalette = uiPalettePreview || readCustomUiPalettes().find(palette => palette.id === uiPalette);
+  const customPalette = uiPalettePreview || (currentUser ? readCustomUiPalettes(currentUser.id).find(palette => palette.id === uiPalette) : undefined);
   const paletteClass = customPalette ? 'discord-ui-palette-custom' : `discord-ui-palette-${uiPalette}`;
   useEffect(() => {
     if (!currentUser || !isInterior) return;
@@ -97,8 +98,7 @@ const RouteShell: React.FC<React.PropsWithChildren<{ theme: 'dark' | 'light'; ui
       layer.className = 'profile-launch-layer';
       const explosion = document.createElement('video');
       explosion.className = 'profile-launch-explosion';
-      let launchEffect: ProfileLaunchEffect = 'classic';
-      try { launchEffect = localStorage.getItem(PROFILE_LAUNCH_EFFECT_KEY) === 'fireball' ? 'fireball' : 'classic'; } catch { /* use the default effect when storage is unavailable */ }
+      const launchEffect: ProfileLaunchEffect = currentUser && readUserPreference<ProfileLaunchEffect>(PROFILE_LAUNCH_EFFECT_KEY, currentUser.id, 'classic') === 'fireball' ? 'fireball' : 'classic';
       explosion.src = launchEffect === 'fireball' ? '/profile-launch-fireball.webm' : '/profile-launch-explosion.webm';
       explosion.preload = 'auto';
       explosion.muted = true;
@@ -170,7 +170,7 @@ const RouteShell: React.FC<React.PropsWithChildren<{ theme: 'dark' | 'light'; ui
         profileLaunch.current = null;
       }
     };
-  }, []);
+  }, [currentUser?.id]);
 
   const closeProfileEditor = () => {
     setProfileEditorOpen(false);
@@ -202,10 +202,10 @@ const RouteShell: React.FC<React.PropsWithChildren<{ theme: 'dark' | 'light'; ui
   useEffect(() => {
     if (!currentUser) setProfileEditorOpen(false);
   }, [currentUser?.id]);
-  return <div className={isInterior ? `discord-interior-scope ${paletteClass}${customPalette?.animated ? ' discord-ui-palette-animated' : ''}${theme === 'light' ? ' discord-theme-light' : ''}` : 'nexus-route-scope'} data-ui-custom-palette={customPalette ? 'true' : undefined} data-ui-palette-wallpaper={customPalette?.backgroundImage ? 'true' : undefined} data-profile-editor-open={profileEditorOpen ? 'true' : undefined} style={isInterior ? customPaletteStyle(uiPalette, theme, uiPalettePreview || undefined) : undefined}>
+  return <div className={isInterior ? `discord-interior-scope ${paletteClass}${customPalette?.animated ? ' discord-ui-palette-animated' : ''}${theme === 'light' ? ' discord-theme-light' : ''}` : 'nexus-route-scope'} data-ui-custom-palette={customPalette ? 'true' : undefined} data-ui-palette-wallpaper={customPalette?.backgroundImage ? 'true' : undefined} data-profile-editor-open={profileEditorOpen ? 'true' : undefined} style={isInterior && currentUser ? customPaletteStyle(uiPalette, theme, currentUser.id, uiPalettePreview || undefined) : undefined}>
     {children}
     {isInterior && currentUser && profileEditorOpen && <ProfileEditor currentUser={currentUser} onProfileUpdated={onProfileUpdated} onClose={closeProfileEditor} />}
-    {isInterior && <VisualEditor />}
+    {isInterior && currentUser && <VisualEditor currentUser={currentUser} />}
     {isInterior && <AIQuickPanel currentUser={currentUser} />}
     {isInterior && <DeveloperConsole currentUser={currentUser} />}
   </div>;
@@ -213,26 +213,30 @@ const RouteShell: React.FC<React.PropsWithChildren<{ theme: 'dark' | 'light'; ui
 
 export const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserSummary | null>(null);
+  const currentUserRef = useRef<UserSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    try { return localStorage.getItem('nexus-interior-theme') === 'light' ? 'light' : 'dark'; }
-    catch { return 'dark'; }
-  });
-  const [uiPalette, setUiPalette] = useState<UiPaletteId>(readUiPalette);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [uiPalette, setUiPalette] = useState<UiPaletteId>('slate');
   const [uiPalettePreview, setUiPalettePreview] = useState<CustomUiPalette | null>(null);
 
   useEffect(() => {
-    try { localStorage.setItem('nexus-interior-theme', theme); } catch { /* storage may be disabled */ }
-  }, [theme]);
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
 
   useEffect(() => {
-    try { localStorage.setItem(UI_PALETTE_STORAGE_KEY, uiPalette); } catch { /* storage may be disabled */ }
-  }, [uiPalette]);
+    if (!currentUser) return;
+    writeUserPreference('nexus-interior-theme', currentUser.id, theme);
+    writeUiPalette(currentUser.id, uiPalette);
+  }, [currentUser?.id, theme, uiPalette]);
 
   const fetchUser = async () => {
     try {
       if (api.getToken()) {
         const u = await api.getMe();
+        const savedTheme = readUserPreference<string>('nexus-interior-theme', u.id, 'dark');
+        setTheme(savedTheme === 'light' ? 'light' : 'dark');
+        setUiPalette(readUiPalette(u.id));
+        setUiPalettePreview(null);
         setCurrentUser(u);
       } else {
         setCurrentUser(null);
@@ -251,8 +255,12 @@ export const App: React.FC = () => {
       if (detail?.tool_name === 'update_my_profile') void fetchUser();
       if (detail?.tool_name === 'update_my_settings' && detail.tool_result?.status === 'success') {
         const preference = detail.tool_result.settings?.theme_preference;
-        if (preference === 'dark' || preference === 'light') setTheme(preference);
-        else if (preference === 'system') setTheme(window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        const userId = currentUserRef.current?.id;
+        const nextTheme = preference === 'dark' || preference === 'light' ? preference : preference === 'system' ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : null;
+        if (userId && nextTheme) {
+          setTheme(nextTheme);
+          writeUserPreference('nexus-interior-theme', userId, nextTheme);
+        }
       }
     };
     window.addEventListener('nexus-ai-action-completed', onAIActionCompleted);
@@ -269,6 +277,9 @@ export const App: React.FC = () => {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setTheme('dark');
+    setUiPalette('slate');
+    setUiPalettePreview(null);
     api.setToken(null);
     if (firebaseAuth) void signOut(firebaseAuth);
   };

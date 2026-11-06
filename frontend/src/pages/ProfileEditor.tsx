@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, Camera, Check, ChevronDown, CircleUserRound, ImagePlus, LayoutGrid, LockKeyhole, RotateCcw, Sparkles, X, ZoomIn } from 'lucide-react';
 import { api, UserSummary } from '../services/api';
+import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 import './ProfileEditor.css';
 
 interface ProfileEditorProps {
@@ -33,9 +34,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
   const imageDrag = useRef<{ pointerId: number; x: number; y: number; startX: number; startY: number } | null>(null);
   const [displayName, setDisplayName] = useState(currentUser.display_name || currentUser.full_name || '');
   const [bio, setBio] = useState(currentUser.bio || '');
-  const [pronouns, setPronouns] = useState(() => {
-    try { return localStorage.getItem('nexus-profile-pronouns') || 'Prefer not to say'; } catch { return 'Prefer not to say'; }
-  });
+  const [pronouns, setPronouns] = useState(() => readUserPreference('nexus-profile-pronouns', currentUser.id, 'Prefer not to say'));
   const [accentColor, setAccentColor] = useState(currentUser.accent_color && currentUser.accent_color.toLowerCase() !== '#10b981' ? currentUser.accent_color : '#5865f2');
   const themeStorageKey = `nexus-profile-theme-${currentUser.id}`;
   const storedTheme = (() => {
@@ -210,7 +209,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
         setBannerUrl(result.banner_url || `/api/v1/files/${result.banner_file_id}/download`);
       }
       await api.updateProfile({ display_name: displayName.trim(), bio: bio.trim(), accent_color: accentColor });
-      try { localStorage.setItem('nexus-profile-pronouns', pronouns === 'Prefer not to say' ? '' : pronouns); } catch { /* local preference storage may be unavailable */ }
+      writeUserPreference('nexus-profile-pronouns', currentUser.id, pronouns === 'Prefer not to say' ? '' : pronouns);
       try { localStorage.setItem(themeStorageKey, JSON.stringify({ a: themeColorA, b: themeColorB })); } catch { /* theme preview remains available for this session */ }
       try { localStorage.setItem(mediaStorageKey, JSON.stringify({ avatarIsVideo, bannerIsVideo, avatarEffect })); } catch { /* media preferences remain available for this session */ }
       await onProfileUpdated?.();

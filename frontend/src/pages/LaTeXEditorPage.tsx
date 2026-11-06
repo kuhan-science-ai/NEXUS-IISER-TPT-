@@ -4,6 +4,7 @@ import type * as pdfjsTypes from 'pdfjs-dist';
 import { MathRenderer } from '../components/MathRenderer';
 import { SideNav } from '../components/SideNav';
 import { UserSummary } from '../services/api';
+import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 import { compileLatex, downloadPdf } from '../services/latex';
 import './LaTeXEditorPage.css';
 
@@ -306,11 +307,10 @@ function readSavedLatexSource(key: string, fallback: string) {
 
 export const LaTeXEditorPage: React.FC<LaTeXEditorPageProps> = ({ currentUser, onLogout }) => {
   const draftPrefix = `nexus-latex-draft:${encodeURIComponent(currentUser?.id ?? 'guest')}`;
+  const preferenceUserId = currentUser?.id ?? 'guest';
   const fastDraftKey = `${draftPrefix}:fast`;
   const fullDraftKey = `${draftPrefix}:full`;
-  const [engineMode, setEngineMode] = useState<LatexEngine>(() => {
-    try { return localStorage.getItem('nexus-latex-engine') === 'tectonic' ? 'tectonic' : 'katex'; } catch { return 'katex'; }
-  });
+  const [engineMode, setEngineMode] = useState<LatexEngine>(() => readUserPreference<LatexEngine>('nexus-latex-engine', preferenceUserId, 'katex') === 'tectonic' ? 'tectonic' : 'katex');
   const [fastContent, setFastContent] = useState(() => readSavedLatexSource(fastDraftKey, FAST_STARTERS.math.source));
   const [fullContent, setFullContent] = useState(() => readSavedLatexSource(fullDraftKey, SAMPLE_LATEX));
   const content = engineMode === 'tectonic' ? fullContent : fastContent;
@@ -336,13 +336,14 @@ export const LaTeXEditorPage: React.FC<LaTeXEditorPageProps> = ({ currentUser, o
   useEffect(() => () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl); }, [pdfUrl]);
   useEffect(() => { try { localStorage.setItem(fastDraftKey, fastContent); } catch { /* Keep editing if browser storage is unavailable. */ } }, [fastDraftKey, fastContent]);
   useEffect(() => { try { localStorage.setItem(fullDraftKey, fullContent); } catch { /* Keep editing if browser storage is unavailable. */ } }, [fullDraftKey, fullContent]);
-  useEffect(() => { try { localStorage.setItem('nexus-latex-engine', engineMode); } catch { /* compiler choice remains available for this session */ } }, [engineMode]);
+  useEffect(() => { setEngineMode(readUserPreference<LatexEngine>('nexus-latex-engine', preferenceUserId, 'katex') === 'tectonic' ? 'tectonic' : 'katex'); }, [preferenceUserId]);
 
   const isFullDocument = /\\documentclass\b/.test(content) && /\\begin\{document\}/.test(content);
   const pdfIsCurrent = !!pdfUrl && compiledSource === content && compiledTheme === documentTheme && compiledEngine === engineMode;
 
   const switchEngine = (next: LatexEngine) => {
     setEngineMode(next);
+    writeUserPreference('nexus-latex-engine', preferenceUserId, next);
   };
 
   const applyStarter = (id: StarterId) => {

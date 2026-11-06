@@ -4,9 +4,10 @@ import { SideNav } from '../components/SideNav';
 import { TopHeader } from '../components/TopHeader';
 import { GlobalSearchModal } from '../components/GlobalSearchModal';
 import { Bell, Palette, ShieldCheck, UserRound, Check, Sparkles, ImagePlus, LayoutDashboard, Trash2, Zap } from 'lucide-react';
-import { CUSTOM_UI_PALETTES_STORAGE_KEY, CustomUiPalette, readCustomUiPalettes, UI_PALETTES, UiPaletteId } from '../services/appearance';
+import { CustomUiPalette, readCustomUiPalettes, UI_PALETTES, UiPaletteId, writeCustomUiPalettes } from '../services/appearance';
 import { analyzePaletteImage, PaletteImageAnalysis } from '../services/paletteImage';
 import { DASHBOARD_WIDGETS, DashboardPreferences, DashboardWidgetId, PersonalTimetable, readDashboardPreferences, readPersonalTimetable, savePersonalTimetable, writeDashboardPreferences, readStickyNotePreferences, writeStickyNotePreferences, StickyNotePreferences } from '../services/dashboard';
+import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 
 interface SettingsPageProps {
   currentUser: UserSummary | null;
@@ -19,11 +20,9 @@ interface SettingsPageProps {
   onUiPalettePreview: (palette: CustomUiPalette | null) => void;
 }
 
-function readPreference(key: string, fallback: boolean): boolean {
-  try {
-    const values = JSON.parse(localStorage.getItem('nexus-settings-preferences') || '{}') as Record<string, unknown>;
-    return typeof values[key] === 'boolean' ? values[key] as boolean : fallback;
-  } catch { return fallback; }
+function readPreference(key: string, userId: string, fallback: boolean): boolean {
+  const values = readUserPreference<Record<string, unknown>>('nexus-settings-preferences', userId, {});
+  return typeof values[key] === 'boolean' ? values[key] as boolean : fallback;
 }
 
 function normalizeProgramme(value: string): string {
@@ -45,11 +44,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
   const [appearanceTab, setAppearanceTab] = useState<'interface' | 'theme' | 'effects' | 'notes'>('interface');
   const [stickyNotePreferences, setStickyNotePreferences] = useState<StickyNotePreferences>(() => readStickyNotePreferences(currentUser?.id || 'guest'));
   const [profileLaunchEffect, setProfileLaunchEffect] = useState<ProfileLaunchEffect>(() => {
-    try { return localStorage.getItem(PROFILE_LAUNCH_EFFECT_KEY) === 'fireball' ? 'fireball' : 'classic'; } catch { return 'classic'; }
+    return readUserPreference<ProfileLaunchEffect>(PROFILE_LAUNCH_EFFECT_KEY, currentUser?.id || 'guest', 'classic') === 'fireball' ? 'fireball' : 'classic';
   });
   const [interfaceSubTab, setInterfaceSubTab] = useState<'presets' | 'builder'>('presets');
   const [dashboardSettingsTab, setDashboardSettingsTab] = useState<'core' | 'study' | 'more' | 'clubs' | 'timetable'>('core');
-  const [customPalettes, setCustomPalettes] = useState<CustomUiPalette[]>(readCustomUiPalettes);
+  const [customPalettes, setCustomPalettes] = useState<CustomUiPalette[]>(() => readCustomUiPalettes(currentUser?.id || 'guest'));
   const [customPaletteName, setCustomPaletteName] = useState('');
   const [customBackground, setCustomBackground] = useState('#17212c');
   const [customSurface, setCustomSurface] = useState('#263747');
@@ -65,15 +64,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
   const [paletteImageBusy, setPaletteImageBusy] = useState(false);
   const [paletteImageError, setPaletteImageError] = useState('');
   const paletteImageInput = useRef<HTMLInputElement>(null);
-  const [onlineStatus, setOnlineStatus] = useState(() => readPreference('onlineStatus', true));
-  const [allowRequests, setAllowRequests] = useState(() => readPreference('allowRequests', true));
-  const [showEmail, setShowEmail] = useState(() => readPreference('showEmail', false));
-  const [messageNotifications, setMessageNotifications] = useState(() => readPreference('messageNotifications', true));
-  const [campusNotifications, setCampusNotifications] = useState(() => readPreference('campusNotifications', true));
-  const [deadlineNotifications, setDeadlineNotifications] = useState(() => readPreference('deadlineNotifications', true));
+  const [onlineStatus, setOnlineStatus] = useState(() => readPreference('onlineStatus', currentUser?.id || 'guest', true));
+  const [allowRequests, setAllowRequests] = useState(() => readPreference('allowRequests', currentUser?.id || 'guest', true));
+  const [showEmail, setShowEmail] = useState(() => readPreference('showEmail', currentUser?.id || 'guest', false));
+  const [messageNotifications, setMessageNotifications] = useState(() => readPreference('messageNotifications', currentUser?.id || 'guest', true));
+  const [campusNotifications, setCampusNotifications] = useState(() => readPreference('campusNotifications', currentUser?.id || 'guest', true));
+  const [deadlineNotifications, setDeadlineNotifications] = useState(() => readPreference('deadlineNotifications', currentUser?.id || 'guest', true));
   const [savedToast, setSavedToast] = useState(false);
   const [assistantName, setAssistantName] = useState(() => {
-    try { return (localStorage.getItem('nexus-ai-name') || 'NEXUS').slice(0, 10); } catch { return 'NEXUS'; }
+    return readUserPreference('nexus-ai-name', currentUser?.id || 'guest', 'NEXUS').slice(0, 10);
   });
   const [assistantNameSaved, setAssistantNameSaved] = useState(false);
   const [dashboardPreferences, setDashboardPreferences] = useState<DashboardPreferences>(() => readDashboardPreferences(currentUser?.id || 'guest'));
@@ -91,6 +90,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
     const userId = currentUser?.id || 'guest';
     setDashboardPreferences(readDashboardPreferences(userId));
     setDashboardTimetable(readPersonalTimetable(userId));
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    const userId = currentUser?.id || 'guest';
+    setOnlineStatus(readPreference('onlineStatus', userId, true));
+    setAllowRequests(readPreference('allowRequests', userId, true));
+    setShowEmail(readPreference('showEmail', userId, false));
+    setMessageNotifications(readPreference('messageNotifications', userId, true));
+    setCampusNotifications(readPreference('campusNotifications', userId, true));
+    setDeadlineNotifications(readPreference('deadlineNotifications', userId, true));
+    setAssistantName(readUserPreference('nexus-ai-name', userId, 'NEXUS').slice(0, 10));
+    setProfileLaunchEffect(readUserPreference<ProfileLaunchEffect>(PROFILE_LAUNCH_EFFECT_KEY, userId, 'classic') === 'fireball' ? 'fireball' : 'classic');
+    setCustomPalettes(readCustomUiPalettes(userId));
   }, [currentUser?.id]);
 
   useEffect(() => {
@@ -160,11 +172,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
 
   useEffect(() => () => onUiPalettePreview(null), [onUiPalettePreview]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('nexus-settings-preferences', JSON.stringify({ onlineStatus, allowRequests, showEmail, messageNotifications, campusNotifications, deadlineNotifications }));
-    } catch { /* storage may be disabled */ }
-  }, [onlineStatus, allowRequests, showEmail, messageNotifications, campusNotifications, deadlineNotifications]);
+  const updateBooleanPreference = (key: string, setter: React.Dispatch<React.SetStateAction<boolean>>, value: boolean) => {
+    setter(value);
+    if (!currentUser) return;
+    const existing = readUserPreference<Record<string, unknown>>('nexus-settings-preferences', currentUser.id, {});
+    writeUserPreference('nexus-settings-preferences', currentUser.id, { ...existing, [key]: value });
+  };
 
   const handleSave = async () => {
     const normalizedName = fullName.trim();
@@ -193,7 +206,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
   const handleSaveAssistantName = () => {
     const name = assistantName.trim().slice(0, 10) || 'NEXUS';
     setAssistantName(name);
-    try { localStorage.setItem('nexus-ai-name', name); } catch { /* storage may be disabled */ }
+    if (currentUser) writeUserPreference('nexus-ai-name', currentUser.id, name);
     window.dispatchEvent(new CustomEvent('nexus-ai-name-updated', { detail: { name } }));
     setAssistantNameSaved(true);
     setTimeout(() => setAssistantNameSaved(false), 3000);
@@ -225,7 +238,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
       ? customPalettes.map(existing => existing.id === editingCustomPaletteId ? palette : existing)
       : [...customPalettes, palette];
     try {
-      localStorage.setItem(CUSTOM_UI_PALETTES_STORAGE_KEY, JSON.stringify(nextPalettes));
+      if (!currentUser) throw new Error('Sign in to save a personal palette.');
+      writeCustomUiPalettes(currentUser.id, nextPalettes);
       setCustomPalettes(nextPalettes);
       setCustomPaletteEditing(false);
       setEditingCustomPaletteId(null);
@@ -353,7 +367,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
               User Settings
             </h1>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Manage the essentials for your NEXUS account.
+              Your colors and personal preferences are saved separately for this account in this browser. Groups and chats remain shared with NEXUS members.
             </p>
           </div>
 
@@ -552,7 +566,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                   <input
                     type="checkbox"
                     checked={onlineStatus}
-                    onChange={(e) => setOnlineStatus(e.target.checked)}
+                    onChange={(e) => updateBooleanPreference('onlineStatus', setOnlineStatus, e.target.checked)}
                     style={{ accentColor: 'var(--primary)', transform: 'scale(1.2)' }}
                   />
                 </div>
@@ -569,7 +583,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                   <input
                     type="checkbox"
                     checked={allowRequests}
-                    onChange={(e) => setAllowRequests(e.target.checked)}
+                    onChange={(e) => updateBooleanPreference('allowRequests', setAllowRequests, e.target.checked)}
                     style={{ accentColor: 'var(--primary)', transform: 'scale(1.2)' }}
                   />
                 </div>
@@ -586,7 +600,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                   <input
                     type="checkbox"
                     checked={showEmail}
-                    onChange={(e) => setShowEmail(e.target.checked)}
+                    onChange={(e) => updateBooleanPreference('showEmail', setShowEmail, e.target.checked)}
                     style={{ accentColor: 'var(--primary)', transform: 'scale(1.2)' }}
                   />
                 </div>
@@ -641,13 +655,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                 {appearanceTab === 'interface' && <section className="discord-settings-card">
                   <div>
                     <h2>User interface colors</h2>
-                    <p>Choose a global background palette. Your student profile colors stay separate.</p>
+                    <p>Choose the workspace palette for your account. Your profile colors stay separate.</p>
                   </div>
                   <div className="discord-settings-subtabs" role="tablist" aria-label="User interface palette sections">
                     <button type="button" role="tab" aria-selected={interfaceSubTab === 'presets'} className={interfaceSubTab === 'presets' ? 'active' : ''} onClick={() => setInterfaceSubTab('presets')}>Choose palette</button>
                     <button type="button" role="tab" aria-selected={interfaceSubTab === 'builder'} className={interfaceSubTab === 'builder' ? 'active' : ''} onClick={() => setInterfaceSubTab('builder')}>Create or edit</button>
                   </div>
-                  {interfaceSubTab === 'presets' && <div className="discord-ui-palette-options" role="group" aria-label="Global user interface color palette">
+                  {interfaceSubTab === 'presets' && <div className="discord-ui-palette-options" role="group" aria-label="Your interface color palette">
                     {(Object.entries(UI_PALETTES) as [keyof typeof UI_PALETTES, (typeof UI_PALETTES)[keyof typeof UI_PALETTES]][]).map(([id, palette]) => (
                       <button key={id} type="button" className={`discord-ui-palette-option${uiPalette === id && !customPaletteEditing ? ' selected' : ''}`} aria-pressed={uiPalette === id && !customPaletteEditing} onClick={() => selectUiPalette(id)}>
                         <span className="discord-ui-palette-swatches">{palette.colors.map(color => <i key={color} style={{ background: color }} />)}</span>
@@ -734,7 +748,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                     ] as const).map(effect => <label key={effect.id} className={`discord-profile-effect-option${profileLaunchEffect === effect.id ? ' selected' : ''}`}>
                       <input type="radio" name="profile-launch-effect" value={effect.id} checked={profileLaunchEffect === effect.id} onChange={() => {
                         setProfileLaunchEffect(effect.id);
-                        try { localStorage.setItem(PROFILE_LAUNCH_EFFECT_KEY, effect.id); } catch { /* effect remains selected for this page */ }
+                        if (currentUser) writeUserPreference(PROFILE_LAUNCH_EFFECT_KEY, currentUser.id, effect.id);
                       }} />
                       <span className="discord-profile-effect-preview"><video src={effect.src} muted playsInline loop autoPlay aria-hidden="true" /></span>
                       <span className="discord-profile-effect-copy"><strong>{effect.name}</strong><small>{effect.detail}</small></span>
@@ -800,13 +814,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                   <p>Keep the updates that help you stay on top of campus life.</p>
                 </div>
                 {[
-                  { label: 'Direct and group messages', description: 'Get notified when someone messages you.', value: messageNotifications, change: setMessageNotifications },
-                  { label: 'Campus updates and events', description: 'Announcements, event changes, and opportunities.', value: campusNotifications, change: setCampusNotifications },
-                  { label: 'Assignment reminders', description: 'Upcoming deadlines for your courses.', value: deadlineNotifications, change: setDeadlineNotifications },
+                  { key: 'messageNotifications', label: 'Direct and group messages', description: 'Get notified when someone messages you.', value: messageNotifications, change: setMessageNotifications },
+                  { key: 'campusNotifications', label: 'Campus updates and events', description: 'Announcements, event changes, and opportunities.', value: campusNotifications, change: setCampusNotifications },
+                  { key: 'deadlineNotifications', label: 'Assignment reminders', description: 'Upcoming deadlines for your courses.', value: deadlineNotifications, change: setDeadlineNotifications },
                 ].map((item) => (
                   <label className="discord-settings-toggle-row" key={item.label}>
                     <span><strong>{item.label}</strong><small>{item.description}</small></span>
-                    <input type="checkbox" checked={item.value} onChange={(event) => item.change(event.target.checked)} />
+                    <input type="checkbox" checked={item.value} onChange={(event) => updateBooleanPreference(item.key, item.change, event.target.checked)} />
                   </label>
                 ))}
               </section>}

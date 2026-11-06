@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CornerUpLeft, Forward, MessagesSquare, MoreHorizontal, Phone, Plus, Rocket, Search, SmilePlus, Trash2, UserRound, Video, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api, UserSummary } from '../services/api';
+import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 import { wsClient } from '../services/websocket';
 import { SideNav } from '../components/SideNav';
 import { TopHeader } from '../components/TopHeader';
@@ -87,7 +88,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   };
   const showMenuNotice = (text: string) => { setMenuNotice(text); window.setTimeout(() => setMenuNotice(''), 1800); };
   const copyMessageValue = async (text: string, label: string) => { await navigator.clipboard?.writeText(text); showMenuNotice(`${label} copied`); };
-  const toggleMessageBookmark = (message: Message) => { const key = 'nexus-message-bookmarks-v1'; const saved = JSON.parse(localStorage.getItem(key) || '[]'); const exists = saved.some((item: any) => item.id === message.id); const conversation = conversations.find(item => item.id === message.conversation_id); localStorage.setItem(key, JSON.stringify(exists ? saved.filter((item: any) => item.id !== message.id) : [...saved, { ...message, conversation: conversation ? displayName(conversation) : 'Conversation' }])); showMenuNotice(exists ? 'Bookmark removed' : 'Message bookmarked in this browser'); };
+  const toggleMessageBookmark = (message: Message) => { const key = 'nexus-message-bookmarks-v1'; const userId = currentUser?.id || 'guest'; const saved = readUserPreference<any[]>(key, userId, []); const exists = saved.some((item: any) => item.id === message.id); const conversation = conversations.find(item => item.id === message.conversation_id); const next = exists ? saved.filter((item: any) => item.id !== message.id) : [...saved, { ...message, conversation: conversation ? displayName(conversation) : 'Conversation' }]; writeUserPreference(key, userId, next); showMenuNotice(exists ? 'Bookmark removed' : 'Message bookmarked in this browser'); };
 
   if (!currentUser) return null;
   const activeConv = conversations.find(conversation => conversation.id === activeConvId);

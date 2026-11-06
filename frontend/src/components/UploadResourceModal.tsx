@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { api } from '../services/api';
+import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 import { uploadMotion } from './figmaUploadMotion';
 import './UploadResourceModal.css';
 
-interface UploadResourceModalProps { isOpen: boolean; onClose: () => void; onUploadSuccess?: () => void; }
+interface UploadResourceModalProps { isOpen: boolean; onClose: () => void; onUploadSuccess?: () => void; currentUserId: string; }
 type FileStatus = 'pending' | 'uploading' | 'success' | 'error';
 interface UploadItem { id: string; file: File; status: FileStatus; message?: string; point?: { x: number; y: number }; }
 
@@ -71,15 +72,16 @@ const readDroppedEntry = async (entry: any): Promise<File[]> => {
   return (await Promise.all(entries.map(readDroppedEntry))).flat();
 };
 
-export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen, onClose, onUploadSuccess }) => {
+export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen, onClose, onUploadSuccess, currentUserId }) => {
   const [scale, setScale] = useState(0.7);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [processing, setProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [activeShotId, setActiveShotId] = useState<string | null>(null);
   const [playShotAnimation, setPlayShotAnimation] = useState(() => {
-    try { return localStorage.getItem('nexus-upload-shot-animation') !== 'off'; } catch { return true; }
+    return readUserPreference<'on' | 'off'>('nexus-upload-shot-animation', currentUserId, 'on') !== 'off';
   });
+  useEffect(() => { setPlayShotAnimation(readUserPreference<'on' | 'off'>('nexus-upload-shot-animation', currentUserId, 'on') !== 'off'); }, [currentUserId]);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const prefersReducedMotion = useReducedMotion();
@@ -197,7 +199,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen
             {!items.length && <div className="figma-picker-actions"><button type="button" className="figma-pick-button" onClick={(event) => { event.stopPropagation(); choose(fileInput); }}>Choose files</button><button type="button" className="figma-pick-button figma-folder-button" onClick={(event) => { event.stopPropagation(); choose(folderInput); }}>Choose folder</button></div>}
           </motion.div>
 
-          {!items.length && <label className="figma-animation-toggle" style={style(80, 190)}><input type="checkbox" checked={playShotAnimation} onChange={(event) => { const enabled = event.target.checked; setPlayShotAnimation(enabled); try { localStorage.setItem('nexus-upload-shot-animation', enabled ? 'on' : 'off'); } catch { /* local preference only */ } }} /><span>Play shot animation</span></label>}
+          {!items.length && <label className="figma-animation-toggle" style={style(80, 190)}><input type="checkbox" checked={playShotAnimation} onChange={(event) => { const enabled = event.target.checked; setPlayShotAnimation(enabled); writeUserPreference('nexus-upload-shot-animation', currentUserId, enabled ? 'on' : 'off'); }} /><span>Play shot animation</span></label>}
 
           {aimNodes.map((aim, index) => <motion.div key={aim.id} className="figma-aim" style={style(aim.x, aim.y, 32, 32)} data-node-id={aim.id} {...motionFor(aim.id)}><span style={{ transform: `scale(${aim.size / 32})` }}><img src={`/assets/upload-figma/aim-${String(index + 1).padStart(2, '0')}.svg`} alt="" /></span></motion.div>)}
           <motion.div className="figma-rim-mount" style={style(522, 628, 36, 14)} data-node-id="60:1143" {...motionFor('60:1143')} />

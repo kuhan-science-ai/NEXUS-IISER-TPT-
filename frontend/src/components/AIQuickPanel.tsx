@@ -2,21 +2,22 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Crosshair, X, Send, Check, Ban, Copy, Move, Plus, Reply, ScanLine, Sparkles, ArrowRight } from 'lucide-react';
 import { api, UserSummary } from '../services/api';
 import { MathRenderer } from './MathRenderer';
+import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 
 type ChatLine = { role: 'user' | 'assistant'; content: string; status?: string };
 const AI_LAUNCHER_POSITION_KEY = 'nexus-ai-launcher-position-v1';
 const AI_LAUNCHER_DOCK_KEY = 'nexus-ai-launcher-dock-v1';
 
-function readLauncherPosition(): { left: number; top: number } | null {
+function readLauncherPosition(userId: string): { left: number; top: number } | null {
   try {
-    const value = JSON.parse(localStorage.getItem(AI_LAUNCHER_POSITION_KEY) || 'null');
+    const value = readUserPreference<{ left: number; top: number } | null>(AI_LAUNCHER_POSITION_KEY, userId, null);
     if (!value || !Number.isFinite(value.left) || !Number.isFinite(value.top)) return null;
     return { left: Math.max(15, Math.min(window.innerWidth - 57, value.left)), top: Math.max(12, Math.min(window.innerHeight - 54, value.top)) };
   } catch { return null; }
 }
 
-function readLauncherDock(): 'left' | 'right' {
-  try { return localStorage.getItem(AI_LAUNCHER_DOCK_KEY) === 'right' ? 'right' : 'left'; }
+function readLauncherDock(userId: string): 'left' | 'right' {
+  try { return readUserPreference<'left' | 'right'>(AI_LAUNCHER_DOCK_KEY, userId, 'left') === 'right' ? 'right' : 'left'; }
   catch { return 'left'; }
 }
 
@@ -29,17 +30,16 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
   const [annotationText, setAnnotationText] = useState('');
   const [annotationRect, setAnnotationRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [panelPosition, setPanelPosition] = useState<{ left: number; top: number } | null>(null);
-  const [launcherPosition, setLauncherPosition] = useState<{ left: number; top: number } | null>(readLauncherPosition);
-  const [launcherDock, setLauncherDock] = useState<'left' | 'right'>(readLauncherDock);
+  const userId = currentUser?.id || 'guest';
+  const [launcherPosition, setLauncherPosition] = useState<{ left: number; top: number } | null>(() => readLauncherPosition(userId));
+  const [launcherDock, setLauncherDock] = useState<'left' | 'right'>(() => readLauncherDock(userId));
   const [launcherIsDragging, setLauncherIsDragging] = useState(false);
   const [input, setInput] = useState('');
   const [lines, setLines] = useState<ChatLine[]>([]);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<any>(null);
   const [error, setError] = useState('');
-  const [assistantName, setAssistantName] = useState(() => {
-    try { return (localStorage.getItem('nexus-ai-name') || 'NEXUS').slice(0, 10); } catch { return 'NEXUS'; }
-  });
+  const [assistantName, setAssistantName] = useState(() => readUserPreference('nexus-ai-name', userId, 'NEXUS').slice(0, 10));
   const launcherDisplayName = assistantName.toUpperCase().endsWith(' AI') ? assistantName : `${assistantName} AI`;
   const convId = useRef<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -48,17 +48,23 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
   const launcherDragging = useRef(false);
   const launcherWasDragged = useRef(false);
 
+  useEffect(() => {
+    setLauncherPosition(readLauncherPosition(userId));
+    setLauncherDock(readLauncherDock(userId));
+    setAssistantName(readUserPreference('nexus-ai-name', userId, 'NEXUS').slice(0, 10));
+  }, [userId]);
+
   const toggle = useCallback(() => { setOpen(value => !value); setPointMode(false); }, []);
   useEffect(() => {
     const updateName = (event?: Event) => {
       const detail = (event as CustomEvent<{ name?: string }> | undefined)?.detail?.name;
-      try { setAssistantName((detail || localStorage.getItem('nexus-ai-name') || 'NEXUS').trim().slice(0, 10) || 'NEXUS'); }
+      try { setAssistantName((detail || readUserPreference('nexus-ai-name', userId, 'NEXUS')).trim().slice(0, 10) || 'NEXUS'); }
       catch { setAssistantName(detail?.trim().slice(0, 10) || 'NEXUS'); }
     };
     window.addEventListener('nexus-ai-name-updated', updateName);
     window.addEventListener('storage', updateName);
     return () => { window.removeEventListener('nexus-ai-name-updated', updateName); window.removeEventListener('storage', updateName); };
-  }, []);
+  }, [userId]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.altKey && event.key.toLowerCase() === 'a') {
@@ -109,8 +115,8 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
           setLauncherDock(dock);
           setLauncherPosition({ left, top });
           try {
-            localStorage.setItem(AI_LAUNCHER_POSITION_KEY, JSON.stringify({ left, top }));
-            localStorage.setItem(AI_LAUNCHER_DOCK_KEY, dock);
+            writeUserPreference(AI_LAUNCHER_POSITION_KEY, userId, { left, top });
+            writeUserPreference(AI_LAUNCHER_DOCK_KEY, userId, dock);
           } catch { /* keep the launcher movable when storage is unavailable */ }
         }
       }
@@ -132,7 +138,7 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
           left: launcherDock === 'right' ? Math.max(15, window.innerWidth - 57) : Math.max(15, Math.min(window.innerWidth - 57, position.left)),
           top: Math.max(12, Math.min(window.innerHeight - 54, position.top)),
         };
-        try { localStorage.setItem(AI_LAUNCHER_POSITION_KEY, JSON.stringify(next)); } catch { /* storage may be unavailable */ }
+        writeUserPreference(AI_LAUNCHER_POSITION_KEY, userId, next);
         return next;
       });
     };
@@ -141,7 +147,7 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
     window.addEventListener('pointercancel', end);
     window.addEventListener('resize', resize);
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end); window.removeEventListener('resize', resize); };
-  }, [launcherDock]);
+  }, [launcherDock, userId]);
 
   useEffect(() => {
     if (!open) return;

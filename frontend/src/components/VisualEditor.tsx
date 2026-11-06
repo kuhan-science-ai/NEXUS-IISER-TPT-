@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { Move, MousePointer2, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { UserSummary } from '../services/api';
+import { readUserPreference, userPreferenceStorageKey, writeUserPreference } from '../services/userPreferences';
 import './VisualEditor.css';
 
 type ElementEdit = {
@@ -12,7 +14,7 @@ type ElementEdit = {
   base?: { translate: string; width: string; height: string };
 };
 
-const storageKey = (pathname: string) => `nexus-visual-edits:${pathname}`;
+const storageKey = (pathname: string, userId: string) => userPreferenceStorageKey(`nexus-visual-edits:${pathname}`, userId);
 
 function getElementSelector(element: HTMLElement): string {
   if (element.dataset.dashboardWidget) return `[data-dashboard-widget="${element.dataset.dashboardWidget}"]`;
@@ -37,22 +39,21 @@ function getElementSelector(element: HTMLElement): string {
   return parts.join(' > ');
 }
 
-function loadEdits(pathname: string): Record<string, ElementEdit> {
-  try { return JSON.parse(localStorage.getItem(storageKey(pathname)) || '{}') as Record<string, ElementEdit>; }
+function loadEdits(pathname: string, userId: string): Record<string, ElementEdit> {
+  try { return JSON.parse(localStorage.getItem(storageKey(pathname, userId)) || '{}') as Record<string, ElementEdit>; }
   catch { return {}; }
 }
 
-function loadDockPosition(): { left: number; top: number } | null {
-  try {
-    const value = JSON.parse(localStorage.getItem('nexus-visual-editor-position') || 'null');
-    return value && Number.isFinite(value.left) && Number.isFinite(value.top)
-      ? { left: value.left, top: value.top }
-      : null;
-  } catch { return null; }
+function loadDockPosition(userId: string): { left: number; top: number } | null {
+  const value = readUserPreference<{ left: number; top: number } | null>('nexus-visual-editor-position', userId, null);
+  return value && Number.isFinite(value.left) && Number.isFinite(value.top)
+    ? { left: value.left, top: value.top }
+    : null;
 }
 
-export const VisualEditor: React.FC = () => {
+export const VisualEditor: React.FC<{ currentUser: UserSummary | null }> = ({ currentUser }) => {
   const { pathname } = useLocation();
+  const userId = currentUser?.id || 'guest';
   const [active, setActive] = useState(false);
   const [selected, setSelected] = useState<HTMLElement | null>(null);
   const [hovered, setHovered] = useState<HTMLElement | null>(null);
@@ -60,13 +61,19 @@ export const VisualEditor: React.FC = () => {
   const [version, setVersion] = useState(0);
   const [edits, setEdits] = useState<Record<string, ElementEdit>>({});
   const draggingRef = useRef(false);
-  const [dockPosition, setDockPosition] = useState<{ left: number; top: number } | null>(loadDockPosition);
+  const [dockPosition, setDockPosition] = useState<{ left: number; top: number } | null>(() => loadDockPosition(userId));
   const [panelPlacement, setPanelPlacement] = useState<'above' | 'below'>('above');
   const [panelAlign, setPanelAlign] = useState<'left' | 'right'>('right');
   const [panelMaxHeight, setPanelMaxHeight] = useState(420);
   const dockPositionRef = useRef(dockPosition);
   const dockDragRef = useRef<{ pointerX: number; pointerY: number; left: number; top: number; width: number; height: number } | null>(null);
   const dockWasDragged = useRef(false);
+
+  useEffect(() => {
+    const next = loadDockPosition(userId);
+    setDockPosition(next);
+    dockPositionRef.current = next;
+  }, [userId]);
 
   const highlighted = hovered || selected;
   const selectedSelector = useMemo(() => selected ? getElementSelector(selected) : '', [selected]);
@@ -87,14 +94,14 @@ export const VisualEditor: React.FC = () => {
       setDockPosition(next);
     };
     const endDock = () => {
-      if (dockDragRef.current && dockWasDragged.current && dockPositionRef.current) localStorage.setItem('nexus-visual-editor-position', JSON.stringify(dockPositionRef.current));
+      if (dockDragRef.current && dockWasDragged.current && dockPositionRef.current) writeUserPreference('nexus-visual-editor-position', userId, dockPositionRef.current);
       dockDragRef.current = null;
     };
     window.addEventListener('pointermove', moveDock);
     window.addEventListener('pointerup', endDock);
     window.addEventListener('pointercancel', endDock);
     return () => { window.removeEventListener('pointermove', moveDock); window.removeEventListener('pointerup', endDock); window.removeEventListener('pointercancel', endDock); };
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (!dockPosition) return;
@@ -112,14 +119,14 @@ export const VisualEditor: React.FC = () => {
         if (Math.abs(next.left - dockPosition.left) > 1 || Math.abs(next.top - dockPosition.top) > 1) {
           dockPositionRef.current = next;
           setDockPosition(next);
-          localStorage.setItem('nexus-visual-editor-position', JSON.stringify(next));
+          writeUserPreference('nexus-visual-editor-position', userId, next);
         }
       });
     };
     clampDock();
     window.addEventListener('resize', clampDock);
     return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', clampDock); };
-  }, [dockPosition]);
+  }, [dockPosition, userId]);
 
   const beginDockDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
@@ -131,7 +138,7 @@ export const VisualEditor: React.FC = () => {
   };
 
   const setEdit = useCallback((selector: string, edit: ElementEdit, element?: HTMLElement) => {
-    const prior = loadEdits(pathname)[selector];
+    const prior = loadEdits(pathname, userId)[selector];
     const base = edit.base || prior?.base || (element ? {
       translate: element.style.translate,
       width: element.style.width,
@@ -145,16 +152,16 @@ export const VisualEditor: React.FC = () => {
     }
     setEdits((current) => {
       const next = { ...current, [selector]: completeEdit };
-      localStorage.setItem(storageKey(pathname), JSON.stringify(next));
+      localStorage.setItem(storageKey(pathname, userId), JSON.stringify(next));
       return next;
     });
     setVersion((value) => value + 1);
-  }, [pathname]);
+  }, [pathname, userId]);
 
   useEffect(() => {
     setSelected(null);
     setHovered(null);
-    const saved = loadEdits(pathname);
+    const saved = loadEdits(pathname, userId);
     setEdits(saved);
     const apply = () => {
       Object.entries(saved).forEach(([selector, edit]) => {
@@ -170,7 +177,7 @@ export const VisualEditor: React.FC = () => {
     const observer = new MutationObserver(apply);
     observer.observe(document.body, { childList: true, subtree: true });
     return () => { cancelAnimationFrame(frame); observer.disconnect(); };
-  }, [pathname]);
+  }, [pathname, userId]);
 
   useEffect(() => {
     if (!active) {
@@ -196,7 +203,7 @@ export const VisualEditor: React.FC = () => {
       setSelected(element);
       setHovered(null);
       const selector = getElementSelector(element);
-      const restored = loadEdits(pathname)[selector];
+      const restored = loadEdits(pathname, userId)[selector];
       if (restored) {
         element.style.translate = `${restored.x}px ${restored.y}px`;
         if (restored.width != null) element.style.width = `${restored.width}px`;
@@ -210,7 +217,7 @@ export const VisualEditor: React.FC = () => {
       document.removeEventListener('pointermove', onPointerMove, true);
       document.removeEventListener('click', onClick, true);
     };
-  }, [active, pathname, selected]);
+  }, [active, pathname, selected, userId]);
 
   useEffect(() => {
     if (!highlighted) { setRect(null); return; }
@@ -271,7 +278,7 @@ export const VisualEditor: React.FC = () => {
       startX = event.clientX;
       startY = event.clientY;
       const bounds = selected.getBoundingClientRect();
-      const storedEdit = loadEdits(pathname)[selectedSelector] || { x: 0, y: 0 };
+      const storedEdit = loadEdits(pathname, userId)[selectedSelector] || { x: 0, y: 0 };
       initial = {
         ...storedEdit,
         base: storedEdit.base || { translate: selected.style.translate, width: selected.style.width, height: selected.style.height },
@@ -301,9 +308,9 @@ export const VisualEditor: React.FC = () => {
       window.removeEventListener('pointermove', pointerMove, true);
       window.removeEventListener('pointerup', pointerUp, true);
       if (operation) {
-        const saved = loadEdits(pathname);
+        const saved = loadEdits(pathname, userId);
         saved[selectedSelector] = latestEdit;
-        localStorage.setItem(storageKey(pathname), JSON.stringify(saved));
+        localStorage.setItem(storageKey(pathname, userId), JSON.stringify(saved));
       }
       draggingRef.current = false;
       operation = null;
@@ -314,7 +321,7 @@ export const VisualEditor: React.FC = () => {
       window.removeEventListener('pointermove', pointerMove, true);
       window.removeEventListener('pointerup', pointerUp, true);
     };
-  }, [active, selected, pathname, selectedSelector]);
+  }, [active, selected, pathname, selectedSelector, userId]);
 
   const updateDimension = (key: 'width' | 'height', value: string) => {
     if (!selected || !selectedSelector) return;
@@ -324,7 +331,7 @@ export const VisualEditor: React.FC = () => {
 
   const resetSelection = () => {
     if (!selected || !selectedSelector) return;
-    const edit = edits[selectedSelector] || loadEdits(pathname)[selectedSelector];
+    const edit = edits[selectedSelector] || loadEdits(pathname, userId)[selectedSelector];
     if (edit?.base?.translate) selected.style.translate = edit.base.translate;
     else selected.style.removeProperty('translate');
     if (edit?.base?.width) selected.style.width = edit.base.width;
@@ -334,7 +341,7 @@ export const VisualEditor: React.FC = () => {
     setEdits((current) => {
       const next = { ...current };
       delete next[selectedSelector];
-      localStorage.setItem(storageKey(pathname), JSON.stringify(next));
+      localStorage.setItem(storageKey(pathname, userId), JSON.stringify(next));
       return next;
     });
     setSelected(null);
@@ -342,7 +349,7 @@ export const VisualEditor: React.FC = () => {
   };
 
   const resetPage = () => {
-    const saved = loadEdits(pathname);
+    const saved = loadEdits(pathname, userId);
     Object.entries(saved).forEach(([selector, edit]) => {
       let element: HTMLElement | null = null;
       try { element = document.querySelector<HTMLElement>(selector); } catch { return; }
@@ -354,7 +361,7 @@ export const VisualEditor: React.FC = () => {
       if (edit.base?.height) element.style.height = edit.base.height;
       else element.style.removeProperty('height');
     });
-    localStorage.removeItem(storageKey(pathname));
+    localStorage.removeItem(storageKey(pathname, userId));
     setEdits({});
     setSelected(null);
     setHovered(null);
@@ -362,7 +369,7 @@ export const VisualEditor: React.FC = () => {
     if (pathname === '/dashboard') window.dispatchEvent(new Event('nexus-reset-dashboard-layout'));
   };
 
-  if (typeof document === 'undefined') return null;
+  if (typeof document === 'undefined' || !currentUser) return null;
   return createPortal(
     <>
       {active && rect && <div className={`nexus-editor-outline${selected ? ' is-selected' : ''}`} style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} aria-hidden="true" />}
