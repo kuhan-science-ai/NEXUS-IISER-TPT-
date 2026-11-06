@@ -58,8 +58,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
             safe_payload = {
                 "model": "gpt-oss:20b",
                 "messages": payload["messages"],
+                # Keep the model warm between requests; loading a 20B model is
+                # much slower than generating short follow-up responses.
+                "keep_alive": "24h",
+                # GPT-OSS can spend time producing a long reasoning trace.
+                # Disable it for quicker conversational answers and keep the
+                # context/output budget bounded for the laptop GPU.
+                "think": False,
                 "stream": False,
-                "options": {"num_ctx": 16384, "num_predict": 2048, "temperature": 0.4},
+                "options": {"num_ctx": 8192, "num_predict": 1024, "temperature": 0.3},
             }
             request = Request(OLLAMA_URL, data=json.dumps(safe_payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
             with urlopen(request, timeout=600) as response:

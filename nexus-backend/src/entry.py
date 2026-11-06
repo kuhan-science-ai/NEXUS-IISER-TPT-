@@ -999,7 +999,7 @@ async def send_ai_message(conv_id: str, payload: AIChatRequest, request: Request
         response = await fetch(endpoint, to_js({
             "method": "POST",
             "headers": {"Content-Type": "application/json", "Authorization": "Bearer " + str(ollama_key)},
-            "body": json.dumps({"model": "gpt-oss:20b", "messages": messages, "stream": False, "options": {"num_ctx": 16384, "num_predict": 2048, "temperature": 0.4}}),
+            "body": json.dumps({"model": "gpt-oss:20b", "messages": messages, "think": False, "keep_alive": "24h", "stream": False, "options": {"num_ctx": 8192, "num_predict": 1024, "temperature": 0.3}}),
         }, dict_converter=Object.fromEntries))
         if not response.ok:
             raise ValueError("Laptop AI proxy returned HTTP " + str(response.status))

@@ -68,6 +68,8 @@ Press `Ctrl+C` in each server window. To leave the Python virtual environment, r
 
 NEXUS can route AI Study Companion and Ask AI chats to OpenAI `gpt-oss:20b` running locally on your laptop's GPU via Ollama, accessible securely from the deployed Cloudflare site anywhere in the world.
 
+The local proxy keeps the model warm for 24 hours between requests, asks Ollama to skip optional reasoning traces for quicker replies, and uses an 8,192-token context with up to 1,024 generated tokens. A cold start after the model has been unloaded can still take longer.
+
 ### Prerequisites
 1. [Ollama](https://ollama.com/) installed with `gpt-oss:20b`:
    ```powershell
