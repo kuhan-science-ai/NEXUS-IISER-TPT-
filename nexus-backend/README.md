@@ -35,6 +35,8 @@ The local worker needs `JWT_SECRET` and `PASSWORD_PEPPER` in `.dev.vars`. Never 
 
 The hosted chat calls Ollama on the owner's laptop through an authenticated localhost proxy and Cloudflare Tunnel. Install Ollama, pull `gpt-oss:20b`, and install `cloudflared`.
 
+The launcher starts Ollama with up to 15 parallel requests, up to 512 queued requests, and a 2,048-token context per request. Requests beyond the active parallel limit wait in Ollama's queue in arrival order. Actual latency depends on available GPU memory and workload; this is not unlimited capacity.
+
 ### Quick Start Commands to Activate AI:
 
 1. **Terminal 1 — Local Proxy**:
@@ -42,7 +44,7 @@ The hosted chat calls Ollama on the owner's laptop through an authenticated loca
    cd C:\NEXUS-iisert_final\nexus-backend
    .\start-local-ai.ps1
    ```
-   Run the launcher, not `python local_ai_proxy.py`: it creates and exports the token the proxy requires. It checks Ollama and `gpt-oss:20b`. Keep this terminal open.
+   Run the launcher, not `python local_ai_proxy.py`: it restarts Ollama with the concurrency settings, creates/exports the proxy token, checks for `gpt-oss:20b`, and starts the authenticated proxy. Keep this terminal open.
 2. **Terminal 2 — Cloudflare Tunnel**:
    ```powershell
    cd C:\NEXUS-iisert_final\nexus-backend

@@ -34,18 +34,40 @@ if ($Tunnel) {
 $env:NEXUS_LOCAL_AI_TOKEN = Get-OrCreateToken
 $env:NEXUS_OLLAMA_URL = 'http://127.0.0.1:11434/api/chat'
 $env:NEXUS_LOCAL_AI_PORT = '18787'
+$env:OLLAMA_NUM_PARALLEL = '15'
+$env:OLLAMA_MAX_QUEUE = '512'
+$env:OLLAMA_CONTEXT_LENGTH = '2048'
 
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue
 if (-not $ollama) { throw 'Ollama is missing from PATH. Install Ollama and reopen PowerShell.' }
+
+# Ollama reads concurrency settings only when its server starts. Restart the
+# tray app/server so the limits below are applied to this local AI instance.
+$runningOllama = Get-Process -Name 'ollama','ollama app' -ErrorAction SilentlyContinue
+if ($runningOllama) {
+  Write-Host 'Restarting Ollama with 15 parallel requests and a 512-request queue...'
+  $runningOllama | Stop-Process -Force
+  Start-Sleep -Seconds 2
+}
+Start-Process -FilePath $ollama.Source -ArgumentList 'serve' -WindowStyle Hidden
+
+$ready = $false
+for ($attempt = 0; $attempt -lt 60; $attempt++) {
+  try {
+    $health = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 2
+    if ($null -ne $health.models) { $ready = $true; break }
+  } catch { Start-Sleep -Seconds 1 }
+}
+if (-not $ready) { throw 'Ollama server did not become ready. Run `ollama serve` manually to inspect the startup error.' }
+
 $model = & $ollama.Source list | Select-String '^gpt-oss:20b\s'
 if (-not $model) {
   throw 'GPT-OSS 20B is missing. Run: ollama pull gpt-oss:20b'
 }
 
-$health = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 5
-if (-not $health.models) { throw 'Ollama is not running. Start Ollama, then run this script again.' }
-
 Write-Host 'Starting the authenticated local AI proxy at http://127.0.0.1:18787'
+Write-Host 'Ollama concurrency: 15 active requests; up to 512 additional requests queued by Ollama.'
+Write-Host 'Per-request context is 2,048 tokens to fit parallel workloads on this laptop GPU.'
 Write-Host "Proxy token file: $tokenPath"
 Write-Host 'Set the Cloudflare Worker OLLAMA_API_KEY secret to the contents of this file.'
 Write-Host 'The token is local-only; do not paste it into chat or commit it.'

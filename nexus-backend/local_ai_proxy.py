@@ -15,6 +15,13 @@ PORT = int(os.environ.get("NEXUS_LOCAL_AI_PORT", "18787"))
 MAX_BODY = 64 * 1024
 
 
+class ConcurrentAIHTTPServer(ThreadingHTTPServer):
+    # Accept a burst of chat requests and let Ollama schedule them in arrival
+    # order. Ollama runs up to 15 requests concurrently and queues the rest.
+    request_queue_size = 512
+    daemon_threads = True
+
+
 class ProxyHandler(BaseHTTPRequestHandler):
     server_version = "NexusLocalAI/1.0"
 
@@ -66,7 +73,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 # context/output budget bounded for the laptop GPU.
                 "think": False,
                 "stream": False,
-                "options": {"num_ctx": 8192, "num_predict": 1024, "temperature": 0.3},
+                "options": {"num_ctx": 2048, "num_predict": 1024, "temperature": 0.3},
             }
             request = Request(OLLAMA_URL, data=json.dumps(safe_payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
             with urlopen(request, timeout=600) as response:
@@ -85,4 +92,4 @@ if __name__ == "__main__":
     if not ACCESS_TOKEN:
         raise SystemExit("NEXUS_LOCAL_AI_TOKEN must be set before starting the proxy.")
     print(f"NEXUS laptop AI proxy listening on http://127.0.0.1:{PORT}; model=gpt-oss:20b")
-    ThreadingHTTPServer(("127.0.0.1", PORT), ProxyHandler).serve_forever()
+    ConcurrentAIHTTPServer(("127.0.0.1", PORT), ProxyHandler).serve_forever()

@@ -68,7 +68,7 @@ Press `Ctrl+C` in each server window. To leave the Python virtual environment, r
 
 NEXUS can route AI Study Companion and Ask AI chats to OpenAI `gpt-oss:20b` running locally on your laptop's GPU via Ollama, accessible securely from the deployed Cloudflare site anywhere in the world.
 
-The local proxy keeps the model warm for 24 hours between requests, asks Ollama to skip optional reasoning traces for quicker replies, and uses an 8,192-token context with up to 1,024 generated tokens. A cold start after the model has been unloaded can still take longer.
+The local proxy keeps the model warm for 24 hours between requests, asks Ollama to skip optional reasoning traces, and configures up to 15 simultaneous model requests. Additional requests wait in Ollama's queue (up to 512) in arrival order. The 2,048-token per-request context helps fit parallel requests on the laptop GPU; a cold start or a full queue can still add latency.
 
 ### Prerequisites
 1. [Ollama](https://ollama.com/) installed with `gpt-oss:20b`:
@@ -84,7 +84,7 @@ The local proxy keeps the model warm for 24 hours between requests, asks Ollama 
 
 The deployed website sends AI requests to Ollama running on this laptop. After Windows restarts, you must start Ollama, the authenticated local proxy, and a Cloudflare Quick Tunnel. Keep the two PowerShell windows open and prevent the laptop from sleeping while you want the website AI available.
 
-1. **Start Ollama**. Open the Ollama app from the Windows Start menu. In PowerShell, confirm Ollama responds and has the model:
+1. **Confirm the Ollama model is installed**. In PowerShell, check:
    ```powershell
    ollama list
    ```
@@ -93,12 +93,12 @@ The deployed website sends AI requests to Ollama running on this laptop. After W
    ollama pull gpt-oss:20b
    ```
 
-2. **Terminal 1 — start the local proxy**. From the project folder run:
+2. **Terminal 1 — start Ollama with parallel capacity and the authenticated proxy**. From the project folder run:
    ```powershell
    cd C:\NEXUS-iisert_final\nexus-backend
    .\start-local-ai.ps1
    ```
-   This checks Ollama and `gpt-oss:20b`, creates the private `.local-ai-token` the first time, and starts the proxy on `127.0.0.1:18787`. Leave this window running. Always use this script; running `python local_ai_proxy.py` directly does not set the proxy token.
+   This restarts Ollama with a maximum of 15 parallel requests, a 512-request FIFO queue, and a 2,048-token context per request; it then checks for `gpt-oss:20b`, creates the private `.local-ai-token` the first time, and starts the proxy on `127.0.0.1:18787`. It closes the Ollama tray/server processes before starting Ollama's server with these settings. Leave this window running. Always use this script; running `python local_ai_proxy.py` directly does not configure Ollama or set the proxy token.
 
 3. **Terminal 2 — start the tunnel**. Open a second PowerShell window and run:
    ```powershell
@@ -123,7 +123,7 @@ The deployed website sends AI requests to Ollama running on this laptop. After W
 
 6. **Check it**. Open [NEXUS AI Study Companion](https://nexus-iisert.pages.dev/ai) and send a message. If it reports the laptop AI is offline, confirm all three local pieces are running (Ollama, proxy, tunnel), then verify that `OLLAMA_BASE_URL` is the current tunnel URL. If the proxy token file was deleted or regenerated, repeat step 5.
 
-Keep `.local-ai-token` private. The laptop, Ollama, proxy, and tunnel must stay online for hosted AI replies. A Quick Tunnel is temporary; update `OLLAMA_BASE_URL` whenever its address changes.
+The 15-request active limit is a configured target, not a guarantee that all replies finish at the same speed; GPU memory and load affect latency, and Ollama may reject requests if its queue fills. Keep `.local-ai-token` private. The laptop, Ollama, proxy, and tunnel must stay online for hosted AI replies. A Quick Tunnel is temporary; update `OLLAMA_BASE_URL` whenever its address changes.
 
 ## Architecture Philosophy
 - **Decoupled Design**: The frontend is built with minimal functional, unstyled components awaiting official Figma UI design handoff.
