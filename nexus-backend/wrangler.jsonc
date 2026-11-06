@@ -5,7 +5,7 @@
 	"compatibility_date": "2026-11-05",
 	"compatibility_flags": ["python_workers"],
 	"vars": {
-		"FIREBASE_PROJECT_ID": "",
+		"FIREBASE_PROJECT_ID": "nexus-iisert",
 		"FIREBASE_ADMIN_EMAIL": ""
 	},
 	"observability": { "enabled": true },
