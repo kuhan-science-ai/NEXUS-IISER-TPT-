@@ -83,9 +83,9 @@ NEXUS can route AI Study Companion and Ask AI chats to OpenAI `gpt-oss:20b` runn
 1. **Terminal 1 — Start the Authenticated Local Proxy**:
    ```powershell
    cd .\nexus-backend
-   python local_ai_proxy.py
+   .\start-local-ai.ps1
    ```
-   This listens on `http://127.0.0.1:18787` and securely bridges requests to Ollama.
+   This checks that Ollama and `gpt-oss:20b` are available, creates `.local-ai-token` if needed, and listens on `http://127.0.0.1:18787`. Keep this terminal open. Do not start `local_ai_proxy.py` directly: it needs the token exported by this script.
 
 2. **Terminal 2 — Start the Cloudflare Tunnel**:
    ```powershell
@@ -96,6 +96,12 @@ NEXUS can route AI Study Companion and Ask AI chats to OpenAI `gpt-oss:20b` runn
    ```text
    https://<generated-name>.trycloudflare.com
    ```
+   Keep this terminal open too. In Terminal 1, the proxy token file path is printed. In another PowerShell terminal, set the deployed Worker's `OLLAMA_API_KEY` secret to the **contents** of that file (run from `nexus-backend`; Wrangler prompts for the value):
+
+   ```powershell
+   cd .\nexus-backend
+   npx wrangler secret put OLLAMA_API_KEY
+   ```
 
 3. **Update the Worker Secret (if the tunnel URL changed)**:
    ```powershell
@@ -104,7 +110,7 @@ NEXUS can route AI Study Companion and Ask AI chats to OpenAI `gpt-oss:20b` runn
    ```
    Paste the tunnel URL (e.g. `https://<generated-name>.trycloudflare.com`) when prompted.
 
-Keep both terminals open while you want the AI active. Users worldwide using the website will now have their AI queries answered directly by your local GPU!
+These are **deployed Worker secrets**, so this connects the uploaded Cloudflare site; it does not require deploying the Worker again. Set `OLLAMA_API_KEY` again only if `.local-ai-token` is deleted/regenerated or rotated. Quick Tunnel URLs change whenever the tunnel restarts, so update `OLLAMA_BASE_URL` after each restart. Keep both proxy and tunnel terminals open, ensure the laptop does not sleep, and try Ask AI from the deployed site. The laptop, Ollama, and tunnel must remain online for replies.
 
 ## Architecture Philosophy
 - **Decoupled Design**: The frontend is built with minimal functional, unstyled components awaiting official Figma UI design handoff.

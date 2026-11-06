@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-05
+- Corrected the hosted laptop AI activation instructions: launch the authenticated proxy through its PowerShell initializer, configure both deployed Worker secrets, and refresh the tunnel URL after Quick Tunnel restarts.
 - Routed persisted AI chats through a bearer-authenticated localhost proxy to GPT‑OSS 20B in the owner's Ollama instance, connected to the deployed Worker by Cloudflare Tunnel. Added setup scripts, bounded local context/output, and updated the AI page to identify the laptop model. The laptop and tunnel must stay online for hosted replies.
 - Added Cloudflare D1-backed AI conversation sessions/threads and QOTD/AOTD question, archive, submission, and discussion APIs. Seeded the initial QOTD question; PDF uploads remain unsupported on the Worker. Group membership is tracked per signed-in browser account, with joined groups still visible in All groups.
 - Corrected the seeded QOTD LaTeX and configured the missing production JWT and password-pepper secrets.

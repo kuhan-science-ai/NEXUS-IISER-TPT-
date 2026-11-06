@@ -39,22 +39,29 @@ The hosted chat calls Ollama on the owner's laptop through an authenticated loca
 
 1. **Terminal 1 — Local Proxy**:
    ```powershell
-   cd nexus-backend
-   python local_ai_proxy.py
+   cd C:\NEXUS-iisert_final\nexus-backend
+   .\start-local-ai.ps1
    ```
+   Run the launcher, not `python local_ai_proxy.py`: it creates and exports the token the proxy requires. It checks Ollama and `gpt-oss:20b`. Keep this terminal open.
 2. **Terminal 2 — Cloudflare Tunnel**:
    ```powershell
-   cd nexus-backend
+   cd C:\NEXUS-iisert_final\nexus-backend
    .\start-local-ai.ps1 -Tunnel
    ```
-3. **Set/Update Worker Secret**:
-   Copy the temporary HTTPS URL printed by cloudflared (`https://<name>.trycloudflare.com`), then:
+   Keep the terminal open. Copy the HTTPS `trycloudflare.com` hostname it prints.
+3. **Set the deployed Worker secrets** (from a third terminal):
+   Open a third PowerShell terminal and run:
+   ```powershell
+   cd C:\NEXUS-iisert_final\nexus-backend
+   npx wrangler secret put OLLAMA_API_KEY
+   ```
+   When prompted, enter the contents of the `.local-ai-token` file printed by Terminal 1. Then set the tunnel URL:
    ```powershell
    npx wrangler secret put OLLAMA_BASE_URL
    ```
-   Paste the tunnel URL when prompted.
+   When prompted, enter the HTTPS hostname (no path or trailing `/`). These `secret put` commands update the already deployed Worker, so do not redeploy for this setup.
 
-Keep both terminals running while you want the laptop AI accessible to users worldwide. The API key must match the token stored in `.local-ai-token`. Quick Tunnels are temporary and intended for development; their hostname changes after restarting. For a stable production setup, replace the Quick Tunnel with a named Cloudflare Tunnel. Ollama remains bound to localhost and is never exposed directly. The proxy is limited to GPT‑OSS 20B and does not log prompts.
+Keep the proxy and tunnel terminals running, keep the laptop awake, then try Ask AI on the deployed site. After every Quick Tunnel restart, update `OLLAMA_BASE_URL`; update `OLLAMA_API_KEY` only if the local token changes. Ollama remains bound to localhost and is never exposed directly. The proxy is limited to GPT‑OSS 20B and does not log prompts. Do not share or commit `.local-ai-token`.
 
 ## Deploy to Cloudflare
 
