@@ -78,41 +78,50 @@ NEXUS can route AI Study Companion and Ask AI chats to OpenAI `gpt-oss:20b` runn
    winget install --id Cloudflare.cloudflared --exact
    ```
 
-### Steps to Activate / Run
+### Start AI after restarting your laptop
 
-Open PowerShell in the project folder, then start each long-running process in its own terminal. The tunnel command below is the one used to start this project's tunnel.
+The deployed website sends AI requests to Ollama running on this laptop. After Windows restarts, you must start Ollama, the authenticated local proxy, and a Cloudflare Quick Tunnel. Keep the two PowerShell windows open and prevent the laptop from sleeping while you want the website AI available.
 
-1. **Terminal 1 — Start the Authenticated Local Proxy**:
+1. **Start Ollama**. Open the Ollama app from the Windows Start menu. In PowerShell, confirm Ollama responds and has the model:
+   ```powershell
+   ollama list
+   ```
+   If `gpt-oss:20b` is missing, download it once:
+   ```powershell
+   ollama pull gpt-oss:20b
+   ```
+
+2. **Terminal 1 — start the local proxy**. From the project folder run:
    ```powershell
    cd C:\NEXUS-iisert_final\nexus-backend
    .\start-local-ai.ps1
    ```
-   This checks that Ollama and `gpt-oss:20b` are available, creates `.local-ai-token` if needed, and listens on `http://127.0.0.1:18787`. Keep this terminal open. Do not start `local_ai_proxy.py` directly: it needs the token exported by this script.
+   This checks Ollama and `gpt-oss:20b`, creates the private `.local-ai-token` the first time, and starts the proxy on `127.0.0.1:18787`. Leave this window running. Always use this script; running `python local_ai_proxy.py` directly does not set the proxy token.
 
-2. **Terminal 2 — Start the Cloudflare Tunnel**:
+3. **Terminal 2 — start the tunnel**. Open a second PowerShell window and run:
    ```powershell
    cd C:\NEXUS-iisert_final\nexus-backend
    .\start-local-ai.ps1 -Tunnel
    ```
-   `cloudflared` generates a secure HTTPS tunnel and outputs a URL such as:
-   ```text
-   https://<generated-name>.trycloudflare.com
-   ```
-   Keep this terminal open too. In another PowerShell terminal, set the deployed Worker's `OLLAMA_API_KEY` secret to the contents of `nexus-backend\.local-ai-token` (Wrangler prompts for the value):
+   Wait for cloudflared to show `Your quick Tunnel has been created!` and copy its `https://...trycloudflare.com` URL. Leave this window running too.
 
-   ```powershell
-   cd C:\NEXUS-iisert_final\nexus-backend
-   npx wrangler secret put OLLAMA_API_KEY
-   ```
-
-3. **Update the Worker Secret (if the tunnel URL changed)**:
+4. **Update the deployed Worker URL after every tunnel restart**. Quick Tunnel addresses change when cloudflared restarts. Open a third PowerShell window, run the command below, and paste the URL from step 3 when Wrangler asks for a secret value:
    ```powershell
    cd C:\NEXUS-iisert_final\nexus-backend
    npx wrangler secret put OLLAMA_BASE_URL
    ```
-   Paste the tunnel URL (e.g. `https://<generated-name>.trycloudflare.com`) when prompted.
+   Wait for `Success! Uploaded secret OLLAMA_BASE_URL`. This updates the Worker used by the already-uploaded website; no site redeploy is needed.
 
-These are **deployed Worker secrets**, so this connects the uploaded Cloudflare site; it does not require deploying the Worker again. Set `OLLAMA_API_KEY` again only if `.local-ai-token` is deleted/regenerated or rotated. Quick Tunnel URLs change whenever the tunnel restarts, so update `OLLAMA_BASE_URL` after each restart. Keep both proxy and tunnel terminals open, ensure the laptop does not sleep, and try Ask AI from the deployed site. The laptop, Ollama, and tunnel must remain online for replies. Keep `.local-ai-token` private and never paste its contents into chat or commit it.
+5. **Set the API key only for first-time setup or after rotating the local token**. The value must exactly match the private contents of `C:\NEXUS-iisert_final\nexus-backend\.local-ai-token`. Run:
+   ```powershell
+   cd C:\NEXUS-iisert_final\nexus-backend
+   npx wrangler secret put OLLAMA_API_KEY
+   ```
+   When Wrangler prompts, open `.local-ai-token` locally and paste its contents into the prompt. Do not paste the token into this README, chat, or any committed file. Wait for `Success! Uploaded secret OLLAMA_API_KEY`. You normally do **not** repeat this on laptop restart because the ignored local token file persists.
+
+6. **Check it**. Open [NEXUS AI Study Companion](https://nexus-iisert.pages.dev/ai) and send a message. If it reports the laptop AI is offline, confirm all three local pieces are running (Ollama, proxy, tunnel), then verify that `OLLAMA_BASE_URL` is the current tunnel URL. If the proxy token file was deleted or regenerated, repeat step 5.
+
+Keep `.local-ai-token` private. The laptop, Ollama, proxy, and tunnel must stay online for hosted AI replies. A Quick Tunnel is temporary; update `OLLAMA_BASE_URL` whenever its address changes.
 
 ## Architecture Philosophy
 - **Decoupled Design**: The frontend is built with minimal functional, unstyled components awaiting official Figma UI design handoff.
