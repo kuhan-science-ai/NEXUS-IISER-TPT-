@@ -404,7 +404,7 @@ export const App: React.FC = () => {
           } />
           <Route path="/settings" element={
             currentUser
-              ? <SettingsPage currentUser={currentUser} onLogout={handleLogout} theme={theme} onThemeChange={setTheme} uiPalette={uiPalette} onUiPaletteChange={setUiPalette} onUiPalettePreview={setUiPalettePreview} />
+              ? <SettingsPage currentUser={currentUser} onLogout={handleLogout} onProfileUpdated={fetchUser} theme={theme} onThemeChange={setTheme} uiPalette={uiPalette} onUiPaletteChange={setUiPalette} onUiPalettePreview={setUiPalettePreview} />
               : <Navigate to="/" />
           } />
           <Route path="/profile" element={<Navigate to="/dashboard" replace />} />

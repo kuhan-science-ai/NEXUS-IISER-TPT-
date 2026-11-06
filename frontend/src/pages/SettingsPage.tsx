@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { UserSummary } from '../services/api';
+import { api, UserSummary } from '../services/api';
 import { SideNav } from '../components/SideNav';
 import { TopHeader } from '../components/TopHeader';
 import { GlobalSearchModal } from '../components/GlobalSearchModal';
@@ -11,6 +11,7 @@ import { DASHBOARD_WIDGETS, DashboardPreferences, DashboardWidgetId, PersonalTim
 interface SettingsPageProps {
   currentUser: UserSummary | null;
   onLogout?: () => void;
+  onProfileUpdated?: () => void | Promise<void>;
   theme: 'dark' | 'light';
   onThemeChange: (theme: 'dark' | 'light') => void;
   uiPalette: UiPaletteId;
@@ -25,11 +26,8 @@ function readPreference(key: string, fallback: boolean): boolean {
   } catch { return fallback; }
 }
 
-function readProfileValue(key: string, fallback: string): string {
-  try {
-    const values = JSON.parse(localStorage.getItem('nexus-settings-profile') || '{}') as Record<string, unknown>;
-    return typeof values[key] === 'string' ? values[key] as string : fallback;
-  } catch { return fallback; }
+function normalizeProgramme(value: string): string {
+  return value.trim().replace(/[–—]/g, '-').toLowerCase() === 'bs-ms' ? 'BS-MS' : value;
 }
 
 const DASHBOARD_WIDGET_GROUPS: Record<'core' | 'study' | 'more', DashboardWidgetId[]> = {
@@ -41,7 +39,7 @@ const DASHBOARD_WIDGET_GROUPS: Record<'core' | 'study' | 'more', DashboardWidget
 const PROFILE_LAUNCH_EFFECT_KEY = 'nexus-profile-launch-effect';
 type ProfileLaunchEffect = 'classic' | 'fireball';
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogout, theme, onThemeChange, uiPalette, onUiPaletteChange, onUiPalettePreview }) => {
+export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogout, onProfileUpdated, theme, onThemeChange, uiPalette, onUiPaletteChange, onUiPalettePreview }) => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('account');
   const [appearanceTab, setAppearanceTab] = useState<'interface' | 'theme' | 'effects' | 'notes'>('interface');
@@ -82,16 +80,27 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
   const [dashboardTimetable, setDashboardTimetable] = useState<PersonalTimetable | null>(() => readPersonalTimetable(currentUser?.id || 'guest'));
   const [timetableMessage, setTimetableMessage] = useState('');
 
-  const [fullName, setFullName] = useState(() => readProfileValue('fullName', currentUser?.full_name || 'Ananya Rao'));
-  const [batch, setBatch] = useState(() => readProfileValue('batch', '2023'));
-  const [programme, setProgramme] = useState(() => readProfileValue('programme', 'BS–MS'));
-  const [major, setMajor] = useState(() => readProfileValue('major', 'Physics'));
+  const [fullName, setFullName] = useState(() => currentUser?.full_name || currentUser?.username || '');
+  const [batch, setBatch] = useState(() => currentUser?.academic_year || '');
+  const [programme, setProgramme] = useState(() => normalizeProgramme(currentUser?.program || ''));
+  const [major, setMajor] = useState(() => currentUser?.department || '');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState('');
 
   useEffect(() => {
     const userId = currentUser?.id || 'guest';
     setDashboardPreferences(readDashboardPreferences(userId));
     setDashboardTimetable(readPersonalTimetable(userId));
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    setFullName(currentUser?.full_name || currentUser?.username || '');
+    setBatch(currentUser?.academic_year || '');
+    setProgramme(normalizeProgramme(currentUser?.program || ''));
+    setMajor(currentUser?.department || '');
+    setProfileSaveError('');
+    setSavedToast(false);
+  }, [currentUser?.id, currentUser?.full_name, currentUser?.academic_year, currentUser?.program, currentUser?.department]);
 
   const updateDashboardPreferences = (next: DashboardPreferences) => {
     if (!currentUser) return;
@@ -157,10 +166,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
     } catch { /* storage may be disabled */ }
   }, [onlineStatus, allowRequests, showEmail, messageNotifications, campusNotifications, deadlineNotifications]);
 
-  const handleSave = () => {
-    try { localStorage.setItem('nexus-settings-profile', JSON.stringify({ fullName, batch, programme, major })); } catch { /* storage may be disabled */ }
-    setSavedToast(true);
-    setTimeout(() => setSavedToast(false), 3000);
+  const handleSave = async () => {
+    const normalizedName = fullName.trim();
+    if (!normalizedName) { setProfileSaveError('Enter your full name before saving.'); return; }
+    setSavingProfile(true);
+    setProfileSaveError('');
+    setSavedToast(false);
+    try {
+      await api.updateProfile({
+        full_name: normalizedName,
+        program: programme,
+        academic_year: batch,
+        department: major,
+      });
+      await onProfileUpdated?.();
+      setFullName(normalizedName);
+      setSavedToast(true);
+      window.setTimeout(() => setSavedToast(false), 3000);
+    } catch (error) {
+      setProfileSaveError(error instanceof Error ? error.message : 'Could not save your account settings. Please try again.');
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleSaveAssistantName = () => {
@@ -292,11 +319,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
   };
 
   const handleCancel = () => {
-    setFullName(readProfileValue('fullName', currentUser?.full_name || 'Ananya Rao'));
-    setBatch(readProfileValue('batch', '2023'));
-    setProgramme(readProfileValue('programme', 'BS–MS'));
-    setMajor(readProfileValue('major', 'Physics'));
+    setFullName(currentUser?.full_name || currentUser?.username || '');
+    setBatch(currentUser?.academic_year || '');
+    setProgramme(normalizeProgramme(currentUser?.program || ''));
+    setMajor(currentUser?.department || '');
     setSavedToast(false);
+    setProfileSaveError('');
   };
 
   if (!currentUser) return null;
@@ -426,6 +454,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                     </label>
                     <input
                       type="text"
+                      maxLength={120}
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       style={{ width: '100%' }}
@@ -436,10 +465,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                       Batch
                     </label>
                     <select value={batch} onChange={(e) => setBatch(e.target.value)} style={{ width: '100%' }}>
+                      {!batch && <option value="">Choose your batch</option>}
+                      {batch && !['2021', '2022', '2023', '2024', '2025', '2026'].includes(batch) && <option value={batch}>{batch}</option>}
                       <option value="2023">2023</option>
                       <option value="2024">2024</option>
                       <option value="2022">2022</option>
                       <option value="2021">2021</option>
+                      <option value="2025">2025</option>
+                      <option value="2026">2026</option>
                     </select>
                   </div>
                 </div>
@@ -450,7 +483,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                       Programme
                     </label>
                     <select value={programme} onChange={(e) => setProgramme(e.target.value)} style={{ width: '100%' }}>
-                      <option value="BS–MS">BS–MS</option>
+                      {!programme && <option value="">Choose your programme</option>}
+                      {programme && !['BS-MS', 'M.Sc.', 'Ph.D.', 'I-Ph.D.'].includes(programme) && <option value={programme}>{programme}</option>}
+                      <option value="BS-MS">BS–MS</option>
                       <option value="M.Sc.">M.Sc.</option>
                       <option value="Ph.D.">Ph.D.</option>
                       <option value="I-Ph.D.">I-Ph.D.</option>
@@ -461,6 +496,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                       Major interest
                     </label>
                     <select value={major} onChange={(e) => setMajor(e.target.value)} style={{ width: '100%' }}>
+                      {!major && <option value="">Choose your major</option>}
+                      {major && !['Physics', 'Chemistry', 'Biology', 'Mathematics', 'Earth Sciences'].includes(major) && <option value={major}>{major}</option>}
                       <option value="Physics">Physics</option>
                       <option value="Chemistry">Chemistry</option>
                       <option value="Biology">Biology</option>
@@ -782,7 +819,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                 paddingTop: '8px',
               }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-subtle)' }}>
-                  {savedToast ? '✓ Changes saved in this browser.' : 'Profile settings are stored in this browser.'}
+                  {profileSaveError ? <span role="alert" style={{ color: 'var(--danger, #e45b5b)' }}>{profileSaveError}</span> : savedToast ? '✓ Changes saved to your NEXUS account.' : 'Profile settings are saved to your NEXUS account.'}
                 </span>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button onClick={handleCancel} style={{
@@ -795,7 +832,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                     Cancel
                   </button>
                   <button
-                    onClick={handleSave}
+                    onClick={() => void handleSave()}
+                    disabled={savingProfile}
                     style={{
                       padding: '8px 22px',
                       borderRadius: 'var(--radius-sm)',
@@ -805,7 +843,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                       fontSize: '13.5px',
                     }}
                   >
-                    Save changes
+                    {savingProfile ? 'Saving…' : 'Save changes'}
                   </button>
                 </div>
               </div>}
