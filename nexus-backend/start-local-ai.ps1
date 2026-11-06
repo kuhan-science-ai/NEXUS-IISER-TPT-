@@ -22,7 +22,8 @@ if ($Tunnel) {
     throw 'cloudflared is missing. Install it with: winget install --id Cloudflare.cloudflared --exact'
   }
   $token = Get-OrCreateToken
-  Write-Host "Configure the deployed Worker secret OLLAMA_API_KEY with this proxy token: $token"
+  Write-Host "Proxy token file: $tokenPath"
+  Write-Host 'Configure the deployed Worker secret OLLAMA_API_KEY with the contents of this file.'
   Write-Host 'Run from nexus-backend in a separate terminal: npx wrangler secret put OLLAMA_API_KEY'
   Write-Host 'Then configure OLLAMA_BASE_URL with the HTTPS hostname printed by cloudflared.'
   & $cloudflared tunnel --url http://127.0.0.1:18787
