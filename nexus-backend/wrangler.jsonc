@@ -5,7 +5,7 @@
 	"compatibility_date": "2026-11-05",
 	"compatibility_flags": ["python_workers"],
 	"vars": {
-		"FIREBASE_PROJECT_ID": "replace-with-your-firebase-project-id",
+		"FIREBASE_PROJECT_ID": "",
 		"FIREBASE_ADMIN_EMAIL": ""
 	},
 	"observability": { "enabled": true },

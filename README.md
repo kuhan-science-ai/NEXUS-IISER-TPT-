@@ -70,8 +70,8 @@ The deployed sign-in page uses Firebase Authentication for email/password and Go
 
 1. Create a Firebase project, add a Web app, and copy its `apiKey`, `authDomain`, `projectId`, and `appId`.
 2. In Firebase Console → Authentication → Sign-in method, enable **Email/Password** and **Google**. In Authentication → Settings → Authorized domains, add `nexus-iisert.pages.dev` and `localhost` for local development.
-3. In Cloudflare Pages project settings → Environment variables, add `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID` with the Web app values.
-4. Set `FIREBASE_PROJECT_ID` in `nexus-backend/wrangler.jsonc` to the same project ID. Apply the D1 migration `0007_firebase_identity.sql`, deploy the Worker, then rebuild and deploy the frontend.
+3. In Cloudflare Pages project settings → Environment variables, add `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID` with the Web app values. Set them for Production, then trigger a new Pages build.
+4. In `nexus-backend/wrangler.jsonc`, replace the empty `FIREBASE_PROJECT_ID` value with the same Firebase project ID. This value belongs to the Worker, not Pages. From `nexus-backend`, run `npx wrangler d1 migrations apply nexus-database --remote`, then `npx wrangler deploy` so the production Worker receives the matching config.
 5. To enable the private developer console, set `FIREBASE_ADMIN_EMAIL` in the Worker config to your exact Google account email. The Worker grants admin only to a Firebase-verified matching email; Alt+C does not grant privileges by itself.
 
 Email sign-up asks for username, display name, email, and password. Institute and personal emails currently get the same access. Google users authenticate with Google first, then choose username and display name. Display names accept Unicode and emoji. Password reset is sent by Firebase. Do not create a Firebase service-account key or put private credentials in frontend variables; the Firebase Web app values are public client configuration.
