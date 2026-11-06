@@ -24,6 +24,8 @@ export interface UserSummary {
   banner_file_id?: string;
   avatar_url?: string | null;
   banner_url?: string | null;
+  avatar_mime_type?: string | null;
+  banner_mime_type?: string | null;
   accent_color?: string;
 }
 

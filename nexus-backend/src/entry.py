@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import time
 import uuid
@@ -303,14 +304,15 @@ def user_summary(row: dict[str, Any]) -> dict[str, Any]:
         "program": row.get("program"), "academic_year": row.get("academic_year"),
         "department": row.get("department"), "status_text": row.get("status_text"),
         "avatar_file_id": None, "banner_file_id": None, "avatar_url": row.get("avatar_url"),
-        "banner_url": row.get("banner_url"), "accent_color": row.get("accent_color"),
+        "banner_url": row.get("banner_url"), "avatar_mime_type": row.get("avatar_mime_type"),
+        "banner_mime_type": row.get("banner_mime_type"), "accent_color": row.get("accent_color"),
     }
 
 
 async def load_user(db: Any, user_id: str) -> dict[str, Any] | None:
     return await first(db, """SELECT u.id,u.username,u.email,u.role,u.is_active,u.is_verified,
         p.full_name,p.display_name,p.bio,p.program,p.academic_year,p.department,p.status_text,
-        p.avatar_url,p.banner_url,p.accent_color
+        p.avatar_url,p.banner_url,p.avatar_mime_type,p.banner_mime_type,p.accent_color
         FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?""", user_id)
 
 
@@ -436,6 +438,65 @@ async def me(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends
     if not row:
         raise HTTPException(status_code=401, detail="Account no longer exists")
     return user_summary(row)
+
+
+PROFILE_MEDIA_MIMES = {"image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm"}
+
+
+def profile_media_bucket(request: Request) -> Any:
+    env = request.scope.get("env")
+    bucket = getattr(env, "PROFILE_MEDIA", None) if env is not None else None
+    if bucket is None:
+        raise HTTPException(status_code=503, detail="Profile media storage is not configured")
+    return bucket
+
+
+@app.post("/api/v1/users/profile/{kind}")
+async def upload_profile_media(kind: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if kind not in {"avatar", "banner"}:
+        raise HTTPException(status_code=404, detail="Profile media type not found")
+    form = await request.form()
+    file = form.get("file")
+    if file is None or not hasattr(file, "read"):
+        raise HTTPException(status_code=400, detail="Choose a profile image, GIF or video")
+    mime = str(getattr(file, "content_type", "") or "application/octet-stream").lower()
+    if mime not in PROFILE_MEDIA_MIMES:
+        raise HTTPException(status_code=400, detail="Unsupported profile media type")
+    max_size = (8 if kind == "avatar" else 10) * 1024 * 1024
+    content = await file.read(max_size + 1)
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty files cannot be uploaded")
+    if len(content) > max_size:
+        raise HTTPException(status_code=413, detail=f"{kind.title()} files must be {max_size // (1024 * 1024)} MB or smaller")
+    media_id = new_id()
+    suffix = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "video/mp4": ".mp4", "video/webm": ".webm"}[mime]
+    object_key = f"{user['sub']}/{kind}/{media_id}{suffix}"
+    bucket = profile_media_bucket(request)
+    await bucket.put(object_key, Uint8Array.new(content).buffer, to_js({"httpMetadata": {"contentType": mime}}, dict_converter=Object.fromEntries))
+    url = f"/api/v1/profile-media/{object_key}"
+    await execute(db, f"UPDATE user_profiles SET {kind}_url=?,{kind}_mime_type=? WHERE user_id=?", url, mime, user["sub"])
+    return {"message": f"{kind.title()} uploaded successfully", f"{kind}_url": url, f"{kind}_mime_type": mime}
+
+
+@app.delete("/api/v1/users/profile/{kind}")
+async def delete_profile_media(kind: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if kind not in {"avatar", "banner"}:
+        raise HTTPException(status_code=404, detail="Profile media type not found")
+    await execute(db, f"UPDATE user_profiles SET {kind}_url=NULL,{kind}_mime_type=NULL WHERE user_id=?", user["sub"])
+    return {"message": f"{kind.title()} removed"}
+
+
+@app.get("/api/v1/profile-media/{object_key:path}")
+async def serve_profile_media(object_key: str, request: Request):
+    if not re.fullmatch(r"[a-f0-9-]{36}/(?:avatar|banner)/[a-f0-9-]{36}\.(?:jpg|png|webp|gif|mp4|webm)", object_key):
+        raise HTTPException(status_code=404, detail="Profile media not found")
+    obj = await profile_media_bucket(request).get(object_key)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Profile media not found")
+    data = await obj.arrayBuffer()
+    body = bytes(Uint8Array.new(data).to_py())
+    mime = obj.httpMetadata.contentType if obj.httpMetadata else "application/octet-stream"
+    return Response(content=body, media_type=str(mime), headers={"Cache-Control": "public, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff"})
 
 
 @app.post("/api/v1/auth/logout")

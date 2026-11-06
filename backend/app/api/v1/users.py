@@ -61,6 +61,8 @@ async def get_profile(
     b_res = await db.execute(b_stmt)
     is_blocked = b_res.scalar_one_or_none() is not None
 
+    avatar_file = await db.get(FileMetadata, profile.avatar_file_id) if profile.avatar_file_id else None
+    banner_file = await db.get(FileMetadata, profile.banner_file_id) if profile.banner_file_id else None
     avatar_url = f"/api/v1/files/{profile.avatar_file_id}/download" if profile.avatar_file_id else None
     banner_url = f"/api/v1/files/{profile.banner_file_id}/download" if profile.banner_file_id else None
 
@@ -76,6 +78,8 @@ async def get_profile(
         status_text=profile.status_text,
         avatar_url=avatar_url,
         banner_url=banner_url,
+        avatar_mime_type=avatar_file.mime_type if avatar_file else None,
+        banner_mime_type=banner_file.mime_type if banner_file else None,
         accent_color=profile.accent_color,
         is_friend=is_friend,
         is_blocked=is_blocked,
@@ -114,7 +118,7 @@ async def upload_avatar(
         file=file,
         category="avatars",
         allowed_mimes=ALLOWED_PROFILE_MEDIA_MIMES,
-        max_size=25 * 1024 * 1024,  # Animated media retains source quality
+        max_size=8 * 1024 * 1024,
         delivery_type="upload",
     )
 
@@ -163,7 +167,7 @@ async def upload_banner(
         file=file,
         category="banners",
         allowed_mimes=ALLOWED_PROFILE_MEDIA_MIMES,
-        max_size=25 * 1024 * 1024,  # Animated media retains source quality
+        max_size=10 * 1024 * 1024,
         delivery_type="upload",
     )
 

@@ -352,7 +352,9 @@ export const SideNav: React.FC<SideNavProps> = ({ currentUser, onLogout, onOpenS
             flexShrink: 0,
           }}>
             {currentUser.avatar_file_id || currentUser.avatar_url
-              ? <img src={currentUser.avatar_url || `/api/v1/files/${currentUser.avatar_file_id}/download`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+              ? currentUser.avatar_mime_type?.startsWith('video/')
+                ? <video src={currentUser.avatar_url || `/api/v1/files/${currentUser.avatar_file_id}/download`} autoPlay loop muted playsInline aria-label="Profile avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+                : <img src={currentUser.avatar_url || `/api/v1/files/${currentUser.avatar_file_id}/download`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
               : initials}
           </div>
           {!collapsed && (

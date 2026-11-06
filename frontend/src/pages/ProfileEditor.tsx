@@ -46,8 +46,8 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
   const updateThemeColorB = (color: string) => setThemeColorB(color);
   const mediaStorageKey = `nexus-profile-media-${currentUser.id}`;
   const storedMedia = (() => { try { return JSON.parse(localStorage.getItem(mediaStorageKey) || '{}'); } catch { return {}; } })();
-  const [avatarIsVideo, setAvatarIsVideo] = useState(Boolean(storedMedia.avatarIsVideo));
-  const [bannerIsVideo, setBannerIsVideo] = useState(Boolean(storedMedia.bannerIsVideo));
+  const [avatarIsVideo, setAvatarIsVideo] = useState(currentUser.avatar_mime_type?.startsWith('video/') ?? Boolean(storedMedia.avatarIsVideo));
+  const [bannerIsVideo, setBannerIsVideo] = useState(currentUser.banner_mime_type?.startsWith('video/') ?? Boolean(storedMedia.bannerIsVideo));
   const [avatarEffect, setAvatarEffect] = useState<'none' | 'rotate' | 'shine' | 'pulse'>(storedMedia.avatarEffect || 'none');
   const [avatarUrl, setAvatarUrl] = useState(currentUser.avatar_url || (currentUser.avatar_file_id ? `/api/v1/files/${currentUser.avatar_file_id}/download` : ''));
   const [bannerUrl, setBannerUrl] = useState(currentUser.banner_url || (currentUser.banner_file_id ? `/api/v1/files/${currentUser.banner_file_id}/download` : ''));
@@ -102,13 +102,13 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
 
   const openImageEditor = async (kind: ImageKind, file?: File) => {
     if (!file) return;
-    const limit = 25;
+    const limit = kind === 'avatar' ? 8 : 10;
     const isVideo = file.type === 'video/mp4' || file.type === 'video/webm';
     const isGif = file.type === 'image/gif';
     if (!file.type.startsWith('image/') && !isVideo) { setError('Choose an image, GIF, MP4 or WebM file.'); return; }
-    if (file.size > limit * 1024 * 1024) { setError(`Profile media must be ${limit} MB or smaller.`); return; }
+    if (file.size > limit * 1024 * 1024) { setError(`${kind === 'avatar' ? 'Profile photos' : 'Profile banners'} must be ${limit} MB or smaller, including GIFs and videos.`); return; }
     if (isVideo) {
-      const duration = await new Promise<number>((resolve, reject) => { const media = document.createElement('video'); media.preload = 'metadata'; media.onloadedmetadata = () => resolve(media.duration); media.onerror = () => reject(new Error('Could not read video metadata.')); media.src = URL.createObjectURL(file); });
+      const duration = await new Promise<number>((resolve, reject) => { const media = document.createElement('video'); const source = URL.createObjectURL(file); media.preload = 'metadata'; media.onloadedmetadata = () => { URL.revokeObjectURL(source); resolve(media.duration); }; media.onerror = () => { URL.revokeObjectURL(source); reject(new Error('Could not read video metadata.')); }; media.src = source; });
       if (!Number.isFinite(duration) || duration > 15) { setError('Animated videos must be 15 seconds or shorter.'); return; }
     }
     setError('');
@@ -188,25 +188,29 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
 
   const resetChanges = () => {
     setDisplayName(initialValues.current.displayName); setBio(initialValues.current.bio); setPronouns(initialValues.current.pronouns); setAccentColor(initialValues.current.accentColor); setThemeColorA(initialValues.current.themeColorA); setThemeColorB(initialValues.current.themeColorB);
-    setPendingAvatar(null); setPendingBanner(null); setRemoveAvatar(false); setRemoveBanner(false); setBannerMode(originalBannerMode); setAvatarUrl(originalAvatarUrl); setBannerUrl(originalBannerUrl); setAvatarIsVideo(Boolean(storedMedia.avatarIsVideo)); setBannerIsVideo(Boolean(storedMedia.bannerIsVideo)); setAvatarEffect(initialValues.current.avatarEffect); setIsCloseBlocked(false);
+    setPendingAvatar(null); setPendingBanner(null); setRemoveAvatar(false); setRemoveBanner(false); setBannerMode(originalBannerMode); setAvatarUrl(originalAvatarUrl); setBannerUrl(originalBannerUrl); setAvatarIsVideo(currentUser.avatar_mime_type?.startsWith('video/') ?? Boolean(storedMedia.avatarIsVideo)); setBannerIsVideo(currentUser.banner_mime_type?.startsWith('video/') ?? Boolean(storedMedia.bannerIsVideo)); setAvatarEffect(initialValues.current.avatarEffect); setIsCloseBlocked(false);
   };
 
-  const saveProfile = async () => {
+  const saveProfile = async (closeAfterSave = true) => {
     setSaving(true); setError('');
     try {
       if (removeAvatar && !pendingAvatar) {
         await api.deleteAvatar();
         setAvatarUrl('');
       } else if (pendingAvatar) {
+        if (pendingAvatar.size > 8 * 1024 * 1024) throw new Error('Profile photos must be 8 MB or smaller, including GIFs and videos.');
         const result = await api.uploadAvatar(pendingAvatar);
         setAvatarUrl(result.avatar_url || `/api/v1/files/${result.avatar_file_id}/download`);
+        setAvatarIsVideo(pendingAvatar.type.startsWith('video/'));
       }
       if (removeBanner && !pendingBanner) {
         await api.deleteBanner();
         setBannerUrl('');
       } else if (pendingBanner) {
+        if (pendingBanner.size > 10 * 1024 * 1024) throw new Error('Profile banners must be 10 MB or smaller, including GIFs and videos.');
         const result = await api.uploadBanner(pendingBanner);
         setBannerUrl(result.banner_url || `/api/v1/files/${result.banner_file_id}/download`);
+        setBannerIsVideo(pendingBanner.type.startsWith('video/'));
       }
       await api.updateProfile({ display_name: displayName.trim(), bio: bio.trim(), accent_color: accentColor });
       writeUserPreference('nexus-profile-pronouns', currentUser.id, pronouns === 'Prefer not to say' ? '' : pronouns);
@@ -216,7 +220,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
       initialValues.current = { displayName: displayName.trim(), bio, pronouns, accentColor, themeColorA, themeColorB, avatarEffect };
       setPendingAvatar(null); setPendingBanner(null); setRemoveAvatar(false); setRemoveBanner(false);
       setIsCloseBlocked(false);
-      onClose();
+      if (closeAfterSave) onClose();
     } catch (saveError: any) {
       setError(saveError?.message || 'Could not save the profile.');
     } finally { setSaving(false); }
@@ -324,6 +328,6 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
       </section>
     </div>}
   </div>
-  {hasUnsavedChanges && <div className={`profile-editor-change-bar${isCloseBlocked ? ' is-warning' : ''}`} role="status"><div><strong>Unsaved profile changes</strong><span>{isCloseBlocked ? 'Save or reset your changes before closing.' : 'Review your changes before closing the profile.'}</span></div><div><button type="button" className="profile-editor-secondary" onClick={resetChanges}>Reset</button><button type="button" className="profile-editor-save" onClick={() => void saveProfile()} disabled={saving}>{saving ? 'Saving…' : <><Check size={15} /> Save changes</>}</button></div></div>}
+  {hasUnsavedChanges && <div className={`profile-editor-change-bar${isCloseBlocked ? ' is-warning' : ''}`} role="status"><div><strong>Unsaved profile changes</strong><span>{isCloseBlocked ? 'Save, discard, or keep editing before closing.' : 'Review your changes before closing the profile.'}</span></div><div><button type="button" className="profile-editor-secondary" onClick={resetChanges}>Reset</button><button type="button" className="profile-editor-secondary" onClick={onClose} disabled={saving}>Discard &amp; close</button><button type="button" className="profile-editor-save" onClick={() => void saveProfile()} disabled={saving}>{saving ? 'Saving…' : <><Check size={15} /> Save changes</>}</button></div></div>}
   </div>;
 };

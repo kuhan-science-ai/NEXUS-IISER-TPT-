@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.app.db.session import get_db
 from backend.app.models.user import User, UserProfile, UserSettings, UserRole
+from backend.app.models.file import FileMetadata
 from backend.app.schemas.auth import (
     UserRegisterRequest,
     UserLoginRequest,
@@ -117,8 +118,10 @@ async def login(req: UserLoginRequest, request: Request, db: AsyncSession = Depe
     )
 
 @router.get("/me", response_model=UserSummary)
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     profile = current_user.profile
+    avatar_file = await db.get(FileMetadata, profile.avatar_file_id) if profile and profile.avatar_file_id else None
+    banner_file = await db.get(FileMetadata, profile.banner_file_id) if profile and profile.banner_file_id else None
     return UserSummary(
         id=current_user.id,
         username=current_user.username,
@@ -135,6 +138,10 @@ async def get_me(current_user: User = Depends(get_current_user)):
         status_text=profile.status_text if profile else None,
         avatar_file_id=profile.avatar_file_id if profile else None,
         banner_file_id=profile.banner_file_id if profile else None,
+        avatar_url=f"/api/v1/files/{profile.avatar_file_id}/download" if profile and profile.avatar_file_id else None,
+        banner_url=f"/api/v1/files/{profile.banner_file_id}/download" if profile and profile.banner_file_id else None,
+        avatar_mime_type=avatar_file.mime_type if avatar_file else None,
+        banner_mime_type=banner_file.mime_type if banner_file else None,
         accent_color=profile.accent_color if profile else None,
     )
 

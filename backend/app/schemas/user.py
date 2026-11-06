@@ -30,6 +30,8 @@ class UserPublicProfile(BaseModel):
     status_text: Optional[str] = None
     avatar_url: Optional[str] = None
     banner_url: Optional[str] = None
+    avatar_mime_type: Optional[str] = None
+    banner_mime_type: Optional[str] = None
     accent_color: Optional[str] = None
     is_friend: bool = False
     is_blocked: bool = False

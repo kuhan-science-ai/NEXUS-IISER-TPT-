@@ -39,6 +39,10 @@ class UserSummary(BaseModel):
     status_text: Optional[str] = None
     avatar_file_id: Optional[str] = None
     banner_file_id: Optional[str] = None
+    avatar_url: Optional[str] = None
+    banner_url: Optional[str] = None
+    avatar_mime_type: Optional[str] = None
+    banner_mime_type: Optional[str] = None
     accent_color: Optional[str] = None
 
 class PasswordResetRequest(BaseModel):

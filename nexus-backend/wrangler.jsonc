@@ -16,6 +16,12 @@
 			"database_id": "2dfcfa0c-0f00-4865-a484-0e0a5e74877f"
 		}
 	],
+	"r2_buckets": [
+		{
+			"binding": "PROFILE_MEDIA",
+			"bucket_name": "nexus-profile-media"
+		}
+	],
 	"assets": {
 		"directory": "../frontend/dist",
 		"binding": "ASSETS",
