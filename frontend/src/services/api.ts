@@ -88,6 +88,17 @@ class ApiService {
     return res;
   }
 
+  async firebaseSession(idToken: string, profile?: { username: string; display_name: string }): Promise<TokenData | { profile_required: true; email: string }> {
+    const response = await this.request('/auth/firebase', { method: 'POST', body: JSON.stringify({ id_token: idToken, ...profile }) });
+    if (!response.profile_required) this.setToken(response.access_token);
+    return response;
+  }
+
+  async adminListGroups(): Promise<any[]> { return this.request('/admin/groups'); }
+  async adminDeleteGroup(groupId: string): Promise<void> { return this.request(`/admin/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' }); }
+  async adminListMessages(query = ''): Promise<any[]> { return this.request(`/admin/messages?q=${encodeURIComponent(query)}`); }
+  async adminDeleteMessage(messageId: string): Promise<void> { return this.request(`/admin/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' }); }
+
   async requestPasswordReset(email: string): Promise<any> {
     return this.request('/auth/request-password-reset', { method: 'POST', body: JSON.stringify({ email }) });
   }
@@ -183,6 +194,7 @@ class ApiService {
   async createCampusGroup(group: any): Promise<any> { return this.request('/groups', { method: 'POST', body: JSON.stringify(group) }); }
   async joinCampusGroup(groupId: string): Promise<any> { return this.request(`/groups/${groupId}/join`, { method: 'POST' }); }
   async updateCampusGroup(groupId: string, group: any): Promise<any> { return this.request(`/groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(group) }); }
+  async deleteCampusGroup(groupId: string): Promise<any> { return this.request(`/groups/${groupId}`, { method: 'DELETE' }); }
   async addCampusGroupChannel(groupId: string, name: string): Promise<any> { return this.request(`/groups/${groupId}/channels`, { method: 'POST', body: JSON.stringify({ name }) }); }
   async deleteCampusGroupChannel(groupId: string, channelId: string): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}`, { method: 'DELETE' }); }
   async listCampusGroupMessages(groupId: string, channelId: string): Promise<any[]> { return this.request(`/groups/${groupId}/channels/${channelId}/messages`); }

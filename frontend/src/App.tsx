@@ -28,28 +28,16 @@ import { HistoryPage } from './pages/HistoryPage';
 import { EventsArchivePage } from './pages/EventsArchivePage';
 import { VisualEditor } from './components/VisualEditor';
 import { AIQuickPanel } from './components/AIQuickPanel';
+import { DeveloperConsole } from './components/DeveloperConsole';
+import { firebaseAuth } from './services/firebase';
+import { signOut } from 'firebase/auth';
 import { customPaletteStyle, CustomUiPalette, readCustomUiPalettes, readUiPalette, UI_PALETTE_STORAGE_KEY, UiPaletteId } from './services/appearance';
 import { recordDashboardHistory } from './services/dashboard';
 
 const queryClient = new QueryClient();
 
-// Explicit local Courses preview credentials
-const GUEST_USERNAME = 'student1';
-const GUEST_PASSWORD = 'NexusPass123!';
-const COURSE_PREVIEW_KEY = 'nexus-course-preview-session';
 const PROFILE_LAUNCH_EFFECT_KEY = 'nexus-profile-launch-effect';
 type ProfileLaunchEffect = 'classic' | 'fireball';
-const COURSE_PREVIEW_USER: UserSummary = {
-  id: 'course-preview-user',
-  username: 'arjun_sharma',
-  email: 'arjun.sharma@students.iisertirupati.ac.in',
-  role: 'student',
-  full_name: 'Arjun Sharma',
-  program: 'BS–MS',
-  academic_year: '2023',
-  department: 'Physics',
-};
-
 interface ProfileLaunchAnimation {
   layer: HTMLDivElement;
   ghost: HTMLElement;
@@ -219,6 +207,7 @@ const RouteShell: React.FC<React.PropsWithChildren<{ theme: 'dark' | 'light'; ui
     {isInterior && currentUser && profileEditorOpen && <ProfileEditor currentUser={currentUser} onProfileUpdated={onProfileUpdated} onClose={closeProfileEditor} />}
     {isInterior && <VisualEditor />}
     {isInterior && <AIQuickPanel currentUser={currentUser} />}
+    {isInterior && <DeveloperConsole currentUser={currentUser} />}
   </div>;
 };
 
@@ -270,27 +259,9 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('nexus-ai-action-completed', onAIActionCompleted);
   }, []);
 
-  const startCoursePreview = async () => {
-    // Keep the quick preview path, but obtain a real demo token so API-backed
-    // features such as file uploads work instead of failing as a fake profile.
-    setCurrentUser(COURSE_PREVIEW_USER);
-    setLoading(false);
-    localStorage.setItem(COURSE_PREVIEW_KEY, 'active');
-    try {
-      await api.login({ username_or_email: GUEST_USERNAME, password: GUEST_PASSWORD });
-      localStorage.removeItem(COURSE_PREVIEW_KEY);
-      await fetchUser();
-    } catch {
-      // Keep the local preview usable if the API is offline; API actions will
-      // show their real connection error until the backend is available.
-    }
-  };
-
   useEffect(() => {
     if (api.getToken()) {
       fetchUser();
-    } else if (localStorage.getItem(COURSE_PREVIEW_KEY) === 'active') {
-      void startCoursePreview();
     } else {
       setLoading(false);
     }
@@ -299,7 +270,7 @@ export const App: React.FC = () => {
   const handleLogout = () => {
     setCurrentUser(null);
     api.setToken(null);
-    localStorage.removeItem(COURSE_PREVIEW_KEY);
+    if (firebaseAuth) void signOut(firebaseAuth);
   };
 
   if (loading) {
@@ -333,7 +304,7 @@ export const App: React.FC = () => {
           <Route path="/landing" element={<LandingPage />} />
 
           {/* Auth page supports switching accounts even when the guest session is active */}
-          <Route path="/auth" element={<AuthPage onLoginSuccess={fetchUser} onSkipSignIn={() => { void startCoursePreview(); }} />} />
+          <Route path="/auth" element={<AuthPage onLoginSuccess={fetchUser} />} />
 
           {/* Inner pages — currentUser is always set (guest auto-login) */}
           <Route path="/dashboard" element={

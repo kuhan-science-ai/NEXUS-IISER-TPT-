@@ -29,7 +29,17 @@ cd ..\nexus-backend
 uv run pywrangler dev
 ```
 
-The local worker needs `JWT_SECRET` and `PASSWORD_PEPPER` in `.dev.vars`. Never commit `.dev.vars`; generate separate random secrets for each environment. Passwords use Workers Web Crypto PBKDF2-SHA256 at the platform's 100,000-iteration limit, mixed with the private pepper for new accounts. The migrations seed student1–student4 with the shared beta password distributed to testers; their initial hashes are unpeppered and are upgraded after their first successful login. Replace/remove these publicly selectable beta credentials before opening a production sign-up flow.
+The local worker needs `JWT_SECRET`, `PASSWORD_PEPPER`, and `FIREBASE_PROJECT_ID` configured for development. Never commit populated local secret files. Firebase signs users in; the Worker verifies Firebase ID tokens and issues the NEXUS API session token used by the existing services. Apply migration `0007_firebase_identity.sql` before using Firebase accounts.
+
+## Firebase Authentication setup
+
+1. Create a Firebase project and register a Web app. In Authentication → Sign-in method, enable Email/Password and Google. Add `nexus-iisert.pages.dev` and your local Vite host (`localhost`) under Authorized domains.
+2. Copy the Firebase Web app `apiKey`, `authDomain`, `projectId`, and `appId` into Cloudflare Pages build environment variables `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID`. These are public web-client settings, not Admin SDK credentials.
+3. Set the Worker variable `FIREBASE_PROJECT_ID` to the same project ID in `wrangler.jsonc` (or a deployment environment variable), then deploy the Worker and rebuild/redeploy the frontend.
+4. Apply D1 migration `0007_firebase_identity.sql` to local/production D1.
+5. To enable the developer console, set `FIREBASE_ADMIN_EMAIL` to the exact Google account email for the developer. The Worker grants the admin role only after Firebase verifies that same email; Alt+C only opens the console for an account that already has the server-side role.
+
+Email/password accounts choose an email, password, username, and display name. Google users authenticate first, then complete username and display name. Personal emails are currently accepted with the same access as institute emails. Password reset is handled by Firebase.
 
 ## Laptop-hosted AI
 

@@ -19,6 +19,8 @@ from workers import WorkerEntrypoint, asgi
 
 app = FastAPI(title="NEXUS API", version="1.0.0")
 
+_firebase_jwks: dict[str, Any] = {"keys": [], "expires_at": 0}
+
 
 class AIConversationCreate(BaseModel):
     title: str | None = Field(default="New AI Conversation", max_length=150)
@@ -225,6 +227,57 @@ def decode_token(token: str, secret: str) -> dict[str, Any] | None:
         return None
 
 
+async def verify_firebase_id_token(request: Request, token: str) -> dict[str, Any]:
+    env = request.scope.get("env")
+    project_id = getattr(env, "FIREBASE_PROJECT_ID", None) if env is not None else None
+    if not project_id:
+        raise HTTPException(status_code=503, detail="Firebase authentication is not configured on the Worker")
+    try:
+        header_text, payload_text, signature_text = token.split(".")
+        header = json.loads(base64.urlsafe_b64decode(header_text + "=" * (-len(header_text) % 4)))
+        claims = json.loads(base64.urlsafe_b64decode(payload_text + "=" * (-len(payload_text) % 4)))
+        if header.get("alg") != "RS256" or not header.get("kid"):
+            raise ValueError("Unsupported Firebase token signature")
+
+        global _firebase_jwks
+        if _firebase_jwks.get("expires_at", 0) <= int(time.time()):
+            response = await fetch("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com")
+            if not response.ok:
+                raise ValueError("Firebase signing keys are unavailable")
+            keys = await response.json()
+            if hasattr(keys, "to_py"):
+                keys = keys.to_py()
+            _firebase_jwks = {"keys": keys.get("keys", []), "expires_at": int(time.time()) + 3600}
+        jwk = next((key for key in _firebase_jwks["keys"] if key.get("kid") == header["kid"]), None)
+        if not jwk:
+            _firebase_jwks["expires_at"] = 0
+            raise ValueError("Firebase signing key was not found")
+        public_key = await crypto.subtle.importKey(
+            "jwk", to_js(jwk, dict_converter=Object.fromEntries),
+            to_js({"name": "RSASSA-PKCS1-v1_5", "hash": "SHA-256"}, dict_converter=Object.fromEntries),
+            False, to_js(["verify"]),
+        )
+        signed = f"{header_text}.{payload_text}".encode()
+        signature = base64.urlsafe_b64decode(signature_text + "=" * (-len(signature_text) % 4))
+        valid = await crypto.subtle.verify(
+            "RSASSA-PKCS1-v1_5", public_key, Uint8Array.new(signature).buffer, Uint8Array.new(signed).buffer,
+        )
+        now_ts = int(time.time())
+        if not valid or claims.get("aud") != project_id or claims.get("iss") != f"https://securetoken.google.com/{project_id}":
+            raise ValueError("Firebase token audience, issuer, or signature is invalid")
+        if not claims.get("sub") or int(claims.get("exp", 0)) <= now_ts or int(claims.get("iat", 0)) > now_ts + 60:
+            raise ValueError("Firebase token is expired or invalid")
+        if not claims.get("email"):
+            raise ValueError("Firebase account has no email address")
+        if claims.get("email_verified") is not True:
+            raise ValueError("Firebase email is not verified")
+        return claims
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Firebase sign-in could not be verified") from exc
+
+
 def get_current_user(request: Request, authorization: str | None = Header(default=None), db: Any = Depends(get_db)) -> dict[str, Any]:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -264,6 +317,12 @@ async def load_user(db: Any, user_id: str) -> dict[str, Any] | None:
 class LoginRequest(BaseModel):
     username_or_email: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=1, max_length=256)
+
+
+class FirebaseSessionRequest(BaseModel):
+    id_token: str = Field(min_length=1, max_length=12000)
+    username: str | None = Field(default=None, min_length=3, max_length=30, pattern=r"^[a-zA-Z0-9_]+$")
+    display_name: str | None = Field(default=None, max_length=80)
 
 
 class RegisterRequest(BaseModel):
@@ -340,6 +399,37 @@ async def login(req: LoginRequest, request: Request, db: Any = Depends(get_db)):
     return {"access_token": create_token(user, get_secret(request)), "refresh_token": create_token(user, get_secret(request), "refresh", 604800), "token_type": "bearer", "user_id": user["id"], "username": user["username"], "role": user["role"]}
 
 
+@app.post("/api/v1/auth/firebase")
+async def firebase_session(req: FirebaseSessionRequest, request: Request, db: Any = Depends(get_db)):
+    claims = await verify_firebase_id_token(request, req.id_token)
+    firebase_uid, email = str(claims["sub"]), str(claims["email"]).strip().lower()
+    user = await first(db, "SELECT id,username,email,role,is_active FROM users WHERE firebase_uid=?", firebase_uid)
+    if user:
+        if not user["is_active"]:
+            raise HTTPException(status_code=403, detail="Account is disabled")
+        admin_email = str(getattr(request.scope.get("env"), "FIREBASE_ADMIN_EMAIL", "") or "").strip().lower()
+        if admin_email and email == admin_email and claims.get("email_verified"):
+            await execute(db, "UPDATE users SET role='admin' WHERE id=?", user["id"])
+            user["role"] = "admin"
+        await execute(db, "UPDATE users SET last_login_at=? WHERE id=?", now(), user["id"])
+    else:
+        if not req.username or not req.display_name or not req.display_name.strip():
+            return {"profile_required": True, "email": email}
+        if await first(db, "SELECT 1 AS ok FROM users WHERE username=?", req.username.lower()):
+            raise HTTPException(status_code=409, detail="That username is already taken")
+        if await first(db, "SELECT 1 AS ok FROM users WHERE email=?", email):
+            raise HTTPException(status_code=409, detail="This email is already linked to an existing NEXUS account. Sign in to that account first.")
+        user_id, stamp = new_id(), now()
+        synthetic_password = await hash_password(secrets.token_urlsafe(32), get_password_pepper(request))
+        admin_email = str(getattr(request.scope.get("env"), "FIREBASE_ADMIN_EMAIL", "") or "").strip().lower()
+        role = "admin" if admin_email and email == admin_email and claims.get("email_verified") is True else "student"
+        await execute(db, "INSERT INTO users(id,username,email,hashed_password,role,is_active,is_verified,created_at,last_login_at,firebase_uid) VALUES(?,?,?,?,?,1,?,?,?,?)", user_id, req.username.lower(), email, synthetic_password, role, 1 if claims.get("email_verified") else 0, stamp, stamp, firebase_uid)
+        display_name = req.display_name.strip()
+        await execute(db, "INSERT INTO user_profiles(user_id,full_name,display_name) VALUES(?,?,?)", user_id, display_name, display_name)
+        user = {"id": user_id, "username": req.username.lower(), "email": email, "role": role, "is_active": 1}
+    return {"access_token": create_token(user, get_secret(request)), "refresh_token": create_token(user, get_secret(request), "refresh", 604800), "token_type": "bearer", "user_id": user["id"], "username": user["username"], "role": user["role"]}
+
+
 @app.get("/api/v1/auth/me")
 async def me(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     row = await load_user(db, user["sub"])
@@ -355,7 +445,7 @@ async def logout(_: dict[str, Any] = Depends(get_current_user)):
 
 @app.get("/api/v1/auth/demo-accounts")
 async def demo_accounts():
-    return [{"role": "student", "username": f"student{i}", "email": f"student{i}@iisertirupati.ac.in"} for i in range(1, 5)]
+    raise HTTPException(status_code=404, detail="Demo accounts are disabled")
 
 
 @app.get("/api/v1/friends/search")
@@ -547,6 +637,46 @@ async def join_campus_group(group_id: str, user: dict[str, Any] = Depends(get_cu
     return {"message": "Joined group", "group_id": group_id}
 
 
+def require_admin(user: dict[str, Any]) -> None:
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Developer access required")
+
+
+@app.get("/api/v1/admin/groups")
+async def admin_list_groups(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    require_admin(user)
+    return await query(db, "SELECT id,name,owner_id,created_at FROM campus_groups ORDER BY created_at DESC LIMIT 200")
+
+
+@app.delete("/api/v1/admin/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_group(group_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    require_admin(user)
+    if not await first(db, "SELECT 1 AS ok FROM campus_groups WHERE id=?", group_id):
+        raise HTTPException(status_code=404, detail="Group not found")
+    await execute(db, "DELETE FROM campus_groups WHERE id=?", group_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.get("/api/v1/admin/messages")
+async def admin_list_messages(q: str = Query(default="", max_length=100), user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    require_admin(user)
+    needle = f"%{q.strip()[:80]}%"
+    return await query(db, """SELECT m.id,m.content,m.created_at,u.username,c.title AS conversation_title
+        FROM messages m LEFT JOIN users u ON u.id=m.sender_id
+        LEFT JOIN conversations c ON c.id=m.conversation_id
+        WHERE m.is_deleted=0 AND (?='' OR m.content LIKE ? OR u.username LIKE ?)
+        ORDER BY m.created_at DESC LIMIT 100""", q.strip(), needle, needle)
+
+
+@app.delete("/api/v1/admin/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_message(message_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    require_admin(user)
+    if not await first(db, "SELECT 1 AS ok FROM messages WHERE id=? AND is_deleted=0", message_id):
+        raise HTTPException(status_code=404, detail="Message not found")
+    await execute(db, "UPDATE messages SET is_deleted=1,content='',updated_at=? WHERE id=? AND is_deleted=0", now(), message_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @app.patch("/api/v1/groups/{group_id}")
 async def update_campus_group(group_id: str, payload: CampusGroupUpdate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     group = await first(db, "SELECT owner_id FROM campus_groups WHERE id=?", group_id)
@@ -557,6 +687,18 @@ async def update_campus_group(group_id: str, payload: CampusGroupUpdate, user: d
     is_pub = 1 if payload.is_public else 0
     await execute(db, "UPDATE campus_groups SET name=?,description=?,icon=?,banner=?,is_public=?,updated_at=? WHERE id=?", payload.name.strip(), payload.description.strip(), payload.icon, payload.banner, is_pub, now(), group_id)
     return next(item for item in await list_campus_groups(user, db) if item["id"] == group_id)
+
+
+@app.delete("/api/v1/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_campus_group(group_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    group = await first(db, "SELECT owner_id FROM campus_groups WHERE id=?", group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    if group["owner_id"] != user["sub"]:
+        raise HTTPException(status_code=403, detail="Only the group owner can delete this group")
+    # Child channels and messages cascade from the group foreign key in D1.
+    await execute(db, "DELETE FROM campus_groups WHERE id=?", group_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.post("/api/v1/groups/{group_id}/channels", status_code=status.HTTP_201_CREATED)

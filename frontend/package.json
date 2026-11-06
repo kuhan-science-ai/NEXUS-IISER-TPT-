@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.7",
+    "firebase": "^13.2.0",
     "katex": "^0.16.11",
     "lucide-react": "^1.66.0",
     "motion": "^14.9.0",
