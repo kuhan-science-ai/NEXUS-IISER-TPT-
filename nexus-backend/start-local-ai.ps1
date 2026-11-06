@@ -14,7 +14,8 @@ function Get-OrCreateToken {
 }
 
 if ($Tunnel) {
-  $cloudflared = (Get-Command cloudflared -ErrorAction SilentlyContinue)?.Source
+  $cloudflaredCommand = Get-Command cloudflared -ErrorAction SilentlyContinue
+  $cloudflared = if ($cloudflaredCommand) { $cloudflaredCommand.Source } else { $null }
   if (-not $cloudflared) {
     $cloudflared = Join-Path $env:LOCALAPPDATA 'Programs\cloudflared\cloudflared.exe'
   }
