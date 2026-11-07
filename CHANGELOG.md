@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-05
+- Cleared all production D1 website accounts and user-owned content (profiles, friend links, groups, conversations/messages, AI history, profile media, and user QOTD submissions) while retaining Firebase Auth identities and configuration so returning Firebase users can create fresh NEXUS profiles.
 - Replaced custom Firebase ID-token JWK verification with Firebase Identity Toolkit account lookup, which validates the token and supplies verified Firebase account identity before the Worker issues a NEXUS session.
 - Fixed Firebase email sign-in failures for unverified accounts by sending verification links during signup and on login retries; added specific Worker responses for project, key, expiration, and email-verification failures.
 - Added 25-second timeouts with retry guidance for stalled Firebase and NEXUS API auth requests, mapped common network/rate-limit errors, and documented login recovery in the root README.
