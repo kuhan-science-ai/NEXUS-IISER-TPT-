@@ -89,6 +89,8 @@ If sign-in stalls or fails:
 5. If the page reports a NEXUS session/API error, open `https://nexus-iisert.pages.dev/api/v1/auth/me`. A `401` response is expected when signed out and confirms the Worker route is reachable. A timeout or `5xx` response indicates a deployment or service issue; check Cloudflare Pages and the `nexus-backend` Worker deployment.
 6. Use **Forgot password?** for a password error. If the same issue continues after the checks above, note the exact error text and time, then review the latest Pages/Worker logs before changing Firebase settings.
 
+If Google/Firebase sign-in succeeds but profile completion fails, retry the same sign-in. The Worker repairs a missing profile row for an account created during an interrupted attempt. If an error remains, note its full text, including any HTTP status or profile setup stage, for the site maintainer.
+
 ### Account reset status
 
 On 2026-11-07, all NEXUS website accounts and user-owned D1 data were cleared. Firebase Authentication identities and sign-in configuration were retained so users can sign in with their existing Firebase credentials and create a fresh NEXUS username/profile. The reset preserved application configuration and shared system data. A private pre-reset D1 export was saved in the machine's local temporary directory; it is not part of the repository.

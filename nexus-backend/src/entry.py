@@ -395,30 +395,46 @@ async def login(req: LoginRequest, request: Request, db: Any = Depends(get_db)):
 async def firebase_session(req: FirebaseSessionRequest, request: Request, db: Any = Depends(get_db)):
     claims = await verify_firebase_id_token(request, req.id_token)
     firebase_uid, email = str(claims["sub"]), str(claims["email"]).strip().lower()
-    user = await first(db, "SELECT id,username,email,role,is_active FROM users WHERE firebase_uid=?", firebase_uid)
-    if user:
-        if not user["is_active"]:
-            raise HTTPException(status_code=403, detail="Account is disabled")
-        admin_email = str(getattr(request.scope.get("env"), "FIREBASE_ADMIN_EMAIL", "") or "").strip().lower()
-        if admin_email and email == admin_email and claims.get("email_verified"):
-            await execute(db, "UPDATE users SET role='admin' WHERE id=?", user["id"])
-            user["role"] = "admin"
-        await execute(db, "UPDATE users SET last_login_at=? WHERE id=?", now(), user["id"])
-    else:
-        if not req.username or not req.display_name or not req.display_name.strip():
-            return {"profile_required": True, "email": email}
-        if await first(db, "SELECT 1 AS ok FROM users WHERE username=?", req.username.lower()):
-            raise HTTPException(status_code=409, detail="That username is already taken")
-        if await first(db, "SELECT 1 AS ok FROM users WHERE email=?", email):
-            raise HTTPException(status_code=409, detail="This email is already linked to an existing NEXUS account. Sign in to that account first.")
-        user_id, stamp = new_id(), now()
-        synthetic_password = await hash_password(secrets.token_urlsafe(32), get_password_pepper(request))
-        admin_email = str(getattr(request.scope.get("env"), "FIREBASE_ADMIN_EMAIL", "") or "").strip().lower()
-        role = "admin" if admin_email and email == admin_email and claims.get("email_verified") is True else "student"
-        await execute(db, "INSERT INTO users(id,username,email,hashed_password,role,is_active,is_verified,created_at,last_login_at,firebase_uid) VALUES(?,?,?,?,?,1,?,?,?,?)", user_id, req.username.lower(), email, synthetic_password, role, 1 if claims.get("email_verified") else 0, stamp, stamp, firebase_uid)
-        display_name = req.display_name.strip()
-        await execute(db, "INSERT INTO user_profiles(user_id,full_name,display_name) VALUES(?,?,?)", user_id, display_name, display_name)
-        user = {"id": user_id, "username": req.username.lower(), "email": email, "role": role, "is_active": 1}
+    stage = "finding your NEXUS account"
+    try:
+        user = await first(db, "SELECT id,username,email,role,is_active FROM users WHERE firebase_uid=?", firebase_uid)
+        if user:
+            if not user["is_active"]:
+                raise HTTPException(status_code=403, detail="Account is disabled")
+            admin_email = str(getattr(request.scope.get("env"), "FIREBASE_ADMIN_EMAIL", "") or "").strip().lower()
+            if admin_email and email == admin_email and claims.get("email_verified"):
+                await execute(db, "UPDATE users SET role='admin' WHERE id=?", user["id"])
+                user["role"] = "admin"
+            stage = "restoring your NEXUS profile"
+            profile_name = (req.display_name or user["username"]).strip() or user["username"]
+            await execute(db, "INSERT OR IGNORE INTO user_profiles(user_id,full_name,display_name) VALUES(?,?,?)", user["id"], profile_name, profile_name)
+            await execute(db, "UPDATE users SET last_login_at=? WHERE id=?", now(), user["id"])
+        else:
+            if not req.username or not req.display_name or not req.display_name.strip():
+                return {"profile_required": True, "email": email}
+            stage = "checking your username"
+            if await first(db, "SELECT 1 AS ok FROM users WHERE username=?", req.username.lower()):
+                raise HTTPException(status_code=409, detail="That username is already taken")
+            stage = "checking your account email"
+            if await first(db, "SELECT 1 AS ok FROM users WHERE email=?", email):
+                raise HTTPException(status_code=409, detail="This email is already linked to an existing NEXUS account. Sign in to that account first.")
+            user_id, stamp = new_id(), now()
+            stage = "creating your NEXUS account"
+            synthetic_password = await hash_password(secrets.token_urlsafe(32), get_password_pepper(request))
+            admin_email = str(getattr(request.scope.get("env"), "FIREBASE_ADMIN_EMAIL", "") or "").strip().lower()
+            role = "admin" if admin_email and email == admin_email and claims.get("email_verified") is True else "student"
+            await execute(db, "INSERT INTO users(id,username,email,hashed_password,role,is_active,is_verified,created_at,last_login_at,firebase_uid) VALUES(?,?,?,?,?,1,?,?,?,?)", user_id, req.username.lower(), email, synthetic_password, role, 1 if claims.get("email_verified") else 0, stamp, stamp, firebase_uid)
+            stage = "saving your profile"
+            display_name = req.display_name.strip()
+            await execute(db, "INSERT OR IGNORE INTO user_profiles(user_id,full_name,display_name) VALUES(?,?,?)", user_id, display_name, display_name)
+            user = {"id": user_id, "username": req.username.lower(), "email": email, "role": role, "is_active": 1}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Keep credentials and account data out of logs; this stage is enough
+        # to diagnose/retry a partial account setup safely.
+        print(f"Firebase NEXUS profile setup failed at {stage}: {type(exc).__name__}")
+        raise HTTPException(status_code=503, detail=f"NEXUS profile setup failed while {stage}. Please retry sign-in.") from exc
     return {"access_token": create_token(user, get_secret(request)), "refresh_token": create_token(user, get_secret(request), "refresh", 604800), "token_type": "bearer", "user_id": user["id"], "username": user["username"], "role": user["role"]}
 
 

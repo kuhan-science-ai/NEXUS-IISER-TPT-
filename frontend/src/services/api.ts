@@ -68,8 +68,9 @@ class ApiService {
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || 'Request failed');
+      const err = await res.json().catch(() => ({}));
+      const detail = typeof err.detail === 'string' ? err.detail : '';
+      throw new Error(detail || `Request failed (HTTP ${res.status}${res.statusText ? `: ${res.statusText}` : ''})`);
     }
 
     // Return empty for 204 or void
