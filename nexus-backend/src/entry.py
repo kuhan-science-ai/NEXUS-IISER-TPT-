@@ -419,10 +419,13 @@ async def firebase_session(req: FirebaseSessionRequest, request: Request, db: An
             if await first(db, "SELECT 1 AS ok FROM users WHERE email=?", email):
                 raise HTTPException(status_code=409, detail="This email is already linked to an existing NEXUS account. Sign in to that account first.")
             user_id, stamp = new_id(), now()
-            stage = "creating your NEXUS account"
-            synthetic_password = await hash_password(secrets.token_urlsafe(32), get_password_pepper(request))
+            # Firebase owns this account's credentials. Store an opaque marker
+            # the legacy password verifier intentionally cannot accept instead
+            # of running PBKDF2 for a password the user never created here.
+            synthetic_password = f"firebase_only${secrets.token_urlsafe(32)}"
             admin_email = str(getattr(request.scope.get("env"), "FIREBASE_ADMIN_EMAIL", "") or "").strip().lower()
             role = "admin" if admin_email and email == admin_email and claims.get("email_verified") is True else "student"
+            stage = "writing your account to D1"
             await execute(db, "INSERT INTO users(id,username,email,hashed_password,role,is_active,is_verified,created_at,last_login_at,firebase_uid) VALUES(?,?,?,?,?,1,?,?,?,?)", user_id, req.username.lower(), email, synthetic_password, role, 1 if claims.get("email_verified") else 0, stamp, stamp, firebase_uid)
             stage = "saving your profile"
             display_name = req.display_name.strip()
