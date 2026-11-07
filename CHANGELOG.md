@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-05
+- Fixed Firebase email sign-in failures for unverified accounts by sending verification links during signup and on login retries; added specific Worker responses for project, key, expiration, and email-verification failures.
 - Added 25-second timeouts with retry guidance for stalled Firebase and NEXUS API auth requests, mapped common network/rate-limit errors, and documented login recovery in the root README.
 - Added persistent profile photo/banner uploads to the deployed Worker with 8 MB avatar and 10 MB banner limits, content-type signature checks, MIME-aware GIF/video rendering, D1 chunk storage, and save/discard close handling.
 - Scoped appearance, notification/privacy choices, assistant naming, navigation and editor layout, and other browser preferences by signed-in account so one account's choices do not affect another. Shared groups and chats remain shared.

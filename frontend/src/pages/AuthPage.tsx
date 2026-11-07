@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Eye, EyeOff, KeyRound, LockKeyhole, Mail } from 'lucide-react';
-import { createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, updateProfile } from 'firebase/auth';
 import { api } from '../services/api';
 import { firebaseAuth, firebaseConfigured, googleProvider } from '../services/firebase';
 import './AuthPage.css';
@@ -55,6 +55,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
         finishLogin();
       } else if (mode === 'login') {
         const credential = await withAuthTimeout(signInWithEmailAndPassword(firebaseAuth, email.trim(), password), 'Firebase sign-in');
+        if (!credential.user.emailVerified) {
+          await withAuthTimeout(sendEmailVerification(credential.user), 'Verification email delivery');
+          setNotice('Your email is not verified yet. Firebase sent a verification link. Open it, then return here and log in again.');
+          return;
+        }
         const token = await withAuthTimeout(credential.user.getIdToken(true), 'Firebase token refresh');
         const result = await withAuthTimeout(api.firebaseSession(token), 'NEXUS session setup');
         if ('profile_required' in result) { setGoogleProfileRequired(true); setNotice('Finish setting up your NEXUS username and display name.'); }
@@ -64,10 +69,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
         if (!displayName.trim()) throw new Error('Enter a display name.');
         const credential = await withAuthTimeout(createUserWithEmailAndPassword(firebaseAuth, email.trim(), password), 'Firebase account creation');
         await withAuthTimeout(updateProfile(credential.user, { displayName: displayName.trim() }), 'Firebase profile update');
-        const token = await withAuthTimeout(credential.user.getIdToken(true), 'Firebase token refresh');
-        const result = await withAuthTimeout(api.firebaseSession(token, { username, display_name: displayName.trim() }), 'NEXUS profile setup');
-        if ('profile_required' in result) throw new Error('Could not finish creating the NEXUS profile. Please try again.');
-        finishLogin();
+        await withAuthTimeout(sendEmailVerification(credential.user), 'Verification email delivery');
+        setParams({});
+        setGoogleProfileRequired(false);
+        setNotice('Your account was created. Check your email and verify the address, then log in here to finish your NEXUS profile.');
       }
     } catch (err) { setError(firebaseError(err)); }
     finally { setLoading(false); }
@@ -78,6 +83,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
     try {
       if (!firebaseConfigured || !firebaseAuth) throw new Error('Sign-in is not configured yet. The site owner must finish Firebase setup.');
       const credential = await signInWithPopup(firebaseAuth, googleProvider);
+      if (!credential.user.emailVerified) {
+        await withAuthTimeout(sendEmailVerification(credential.user), 'Verification email delivery');
+        setNotice('Your Google account email is not verified yet. Firebase sent a verification link. Verify it, then sign in again.');
+        return;
+      }
         const token = await withAuthTimeout(credential.user.getIdToken(true), 'Firebase token refresh');
         const result = await withAuthTimeout(api.firebaseSession(token), 'NEXUS session setup');
       if ('profile_required' in result) {
@@ -148,6 +158,7 @@ function firebaseError(error: unknown): string {
     'auth/operation-not-allowed': 'Enable this sign-in method in Firebase Authentication settings.',
     'auth/network-request-failed': 'Could not reach Firebase. Check your internet connection and try again.',
     'auth/too-many-requests': 'Firebase temporarily limited sign-in attempts. Wait a few minutes, then try again.',
+    'auth/invalid-action-code': 'That verification link is invalid or expired. Request another by trying to log in again.',
   };
   return known[code] || message;
 }

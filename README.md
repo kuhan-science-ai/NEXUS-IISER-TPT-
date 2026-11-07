@@ -74,7 +74,7 @@ The deployed sign-in page uses Firebase Authentication for email/password and Go
 4. In `nexus-backend/wrangler.jsonc`, replace the empty `FIREBASE_PROJECT_ID` value with the same Firebase project ID. This value belongs to the Worker, not Pages. From `nexus-backend`, run `npx wrangler d1 migrations apply nexus-database --remote`, then `npx wrangler deploy` so the production Worker receives the matching config.
 5. To enable the private developer console, set `FIREBASE_ADMIN_EMAIL` in the Worker config to your exact Google account email. The Worker grants admin only to a Firebase-verified matching email; Alt+C does not grant privileges by itself.
 
-Email sign-up asks for username, display name, email, and password. Institute and personal emails currently get the same access. Google users authenticate with Google first, then choose username and display name. Display names accept Unicode and emoji. Password reset is sent by Firebase. Do not create a Firebase service-account key or put private credentials in frontend variables; the Firebase Web app values are public client configuration.
+Email sign-up asks for username, display name, email, and password, then sends a Firebase verification link. Verify the email and log in again to finish creating the NEXUS profile. Unverified existing accounts are sent a verification link when they try to log in. Institute and personal emails currently get the same access. Google users authenticate with Google first, then choose username and display name. Display names accept Unicode and emoji. Password reset is sent by Firebase. Do not create a Firebase service-account key or put private credentials in frontend variables; the Firebase Web app values are public client configuration.
 
 ### Login troubleshooting
 
@@ -85,8 +85,9 @@ If sign-in stalls or fails:
 1. Wait for the timeout message, then retry once. If the page still shows **Please wait…**, reload `https://nexus-iisert.pages.dev/auth?mode=login` with `Ctrl+Shift+R` and submit again; avoid repeatedly clicking while one request is running.
 2. Check that your internet connection is working. For Google sign-in, allow pop-ups for `nexus-iisert.pages.dev` and complete or close the Google account picker.
 3. If Firebase reports **unauthorized-domain** or the site says sign-in is not configured, open Firebase Console → Authentication → Settings → Authorized domains and confirm `nexus-iisert.pages.dev` is listed. Under Authentication → Sign-in method, confirm Email/Password and Google are enabled.
-4. If the page reports a NEXUS session/API error, open `https://nexus-iisert.pages.dev/api/v1/auth/me`. A `401` response is expected when signed out and confirms the Worker route is reachable. A timeout or `5xx` response indicates a deployment or service issue; check Cloudflare Pages and the `nexus-backend` Worker deployment.
-5. Use **Forgot password?** for a password error. If the same issue continues after the checks above, note the exact error text and time, then review the latest Pages/Worker logs before changing Firebase settings.
+4. If the error says **Verify your email address**, open the verification email sent by Firebase, follow its link, then return and log in again. Check spam/junk if it is not in your inbox. A newly created account does not finish its NEXUS profile until this verification step is complete.
+5. If the page reports a NEXUS session/API error, open `https://nexus-iisert.pages.dev/api/v1/auth/me`. A `401` response is expected when signed out and confirms the Worker route is reachable. A timeout or `5xx` response indicates a deployment or service issue; check Cloudflare Pages and the `nexus-backend` Worker deployment.
+6. Use **Forgot password?** for a password error. If the same issue continues after the checks above, note the exact error text and time, then review the latest Pages/Worker logs before changing Firebase settings.
 
 ## Running Laptop GPU AI (GPT-OSS 20B) for All Users Worldwide
 

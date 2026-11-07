@@ -244,7 +244,7 @@ async def verify_firebase_id_token(request: Request, token: str) -> dict[str, An
         if _firebase_jwks.get("expires_at", 0) <= int(time.time()):
             response = await fetch("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com")
             if not response.ok:
-                raise ValueError("Firebase signing keys are unavailable")
+                raise HTTPException(status_code=503, detail="Firebase signing keys are temporarily unavailable. Please retry sign-in.")
             keys = await response.json()
             if hasattr(keys, "to_py"):
                 keys = keys.to_py()
@@ -252,7 +252,7 @@ async def verify_firebase_id_token(request: Request, token: str) -> dict[str, An
         jwk = next((key for key in _firebase_jwks["keys"] if key.get("kid") == header["kid"]), None)
         if not jwk:
             _firebase_jwks["expires_at"] = 0
-            raise ValueError("Firebase signing key was not found")
+            raise HTTPException(status_code=401, detail="Firebase signing key could not be matched. Refresh and try again.")
         public_key = await crypto.subtle.importKey(
             "jwk", to_js(jwk, dict_converter=Object.fromEntries),
             to_js({"name": "RSASSA-PKCS1-v1_5", "hash": "SHA-256"}, dict_converter=Object.fromEntries),
@@ -264,14 +264,16 @@ async def verify_firebase_id_token(request: Request, token: str) -> dict[str, An
             "RSASSA-PKCS1-v1_5", public_key, Uint8Array.new(signature).buffer, Uint8Array.new(signed).buffer,
         )
         now_ts = int(time.time())
-        if not valid or claims.get("aud") != project_id or claims.get("iss") != f"https://securetoken.google.com/{project_id}":
-            raise ValueError("Firebase token audience, issuer, or signature is invalid")
+        if claims.get("aud") != project_id or claims.get("iss") != f"https://securetoken.google.com/{project_id}":
+            raise HTTPException(status_code=401, detail="Firebase token belongs to a different project. Check the Worker Firebase project ID.")
+        if not valid:
+            raise HTTPException(status_code=401, detail="Firebase token signature is invalid. Refresh the page and try again.")
         if not claims.get("sub") or int(claims.get("exp", 0)) <= now_ts or int(claims.get("iat", 0)) > now_ts + 60:
-            raise ValueError("Firebase token is expired or invalid")
+            raise HTTPException(status_code=401, detail="Firebase sign-in expired. Refresh the page and try again.")
         if not claims.get("email"):
-            raise ValueError("Firebase account has no email address")
+            raise HTTPException(status_code=401, detail="This Firebase account has no email address.")
         if claims.get("email_verified") is not True:
-            raise ValueError("Firebase email is not verified")
+            raise HTTPException(status_code=403, detail="Verify your email address, then sign in again.")
         return claims
     except HTTPException:
         raise
