@@ -233,6 +233,7 @@ async def verify_firebase_id_token(request: Request, token: str) -> dict[str, An
     project_id = getattr(env, "FIREBASE_PROJECT_ID", None) if env is not None else None
     if not project_id:
         raise HTTPException(status_code=503, detail="Firebase authentication is not configured on the Worker")
+    stage = "token parsing"
     try:
         header_text, payload_text, signature_text = token.split(".")
         header = json.loads(base64.urlsafe_b64decode(header_text + "=" * (-len(header_text) % 4)))
@@ -240,29 +241,34 @@ async def verify_firebase_id_token(request: Request, token: str) -> dict[str, An
         if header.get("alg") != "RS256" or not header.get("kid"):
             raise ValueError("Unsupported Firebase token signature")
 
+        stage = "Firebase signing-key download"
         global _firebase_jwks
         if _firebase_jwks.get("expires_at", 0) <= int(time.time()):
             response = await fetch("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com")
             if not response.ok:
                 raise HTTPException(status_code=503, detail="Firebase signing keys are temporarily unavailable. Please retry sign-in.")
             keys = await response.json()
-            if hasattr(keys, "to_py"):
-                keys = keys.to_py()
-            _firebase_jwks = {"keys": keys.get("keys", []), "expires_at": int(time.time()) + 3600}
+            # Keep the JWK objects as JavaScript proxies. Converting them to
+            # Python and back can produce values WebCrypto cannot import.
+            _firebase_jwks = {"keys": keys.keys, "expires_at": int(time.time()) + 3600}
+        stage = "Firebase signing-key selection"
         jwk = next((key for key in _firebase_jwks["keys"] if key.get("kid") == header["kid"]), None)
         if not jwk:
             _firebase_jwks["expires_at"] = 0
             raise HTTPException(status_code=401, detail="Firebase signing key could not be matched. Refresh and try again.")
+        stage = "Firebase signing-key import"
         public_key = await crypto.subtle.importKey(
             "jwk", to_js(jwk, dict_converter=Object.fromEntries),
             to_js({"name": "RSASSA-PKCS1-v1_5", "hash": "SHA-256"}, dict_converter=Object.fromEntries),
             False, to_js(["verify"]),
         )
+        stage = "Firebase token signature check"
         signed = f"{header_text}.{payload_text}".encode()
         signature = base64.urlsafe_b64decode(signature_text + "=" * (-len(signature_text) % 4))
         valid = await crypto.subtle.verify(
             "RSASSA-PKCS1-v1_5", public_key, Uint8Array.new(signature).buffer, Uint8Array.new(signed).buffer,
         )
+        stage = "Firebase token claims check"
         now_ts = int(time.time())
         if claims.get("aud") != project_id or claims.get("iss") != f"https://securetoken.google.com/{project_id}":
             raise HTTPException(status_code=401, detail="Firebase token belongs to a different project. Check the Worker Firebase project ID.")
@@ -278,7 +284,9 @@ async def verify_firebase_id_token(request: Request, token: str) -> dict[str, An
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=401, detail="Firebase sign-in could not be verified") from exc
+        # Log only the stage and exception type; never log the ID token or claims.
+        print(f"Firebase ID token verification failed at {stage}: {type(exc).__name__}")
+        raise HTTPException(status_code=401, detail=f"Firebase sign-in verification failed during {stage}. Refresh and try again.") from exc
 
 
 def get_current_user(request: Request, authorization: str | None = Header(default=None), db: Any = Depends(get_db)) -> dict[str, Any]:
