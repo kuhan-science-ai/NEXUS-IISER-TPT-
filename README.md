@@ -76,6 +76,18 @@ The deployed sign-in page uses Firebase Authentication for email/password and Go
 
 Email sign-up asks for username, display name, email, and password. Institute and personal emails currently get the same access. Google users authenticate with Google first, then choose username and display name. Display names accept Unicode and emoji. Password reset is sent by Firebase. Do not create a Firebase service-account key or put private credentials in frontend variables; the Firebase Web app values are public client configuration.
 
+### Login troubleshooting
+
+The login form now times out stalled Firebase or NEXUS API requests and shows a retryable error instead of leaving the button on **Please wait…** indefinitely. A Google account picker remains open until you finish or close it.
+
+If sign-in stalls or fails:
+
+1. Wait for the timeout message, then retry once. If the page still shows **Please wait…**, reload `https://nexus-iisert.pages.dev/auth?mode=login` with `Ctrl+Shift+R` and submit again; avoid repeatedly clicking while one request is running.
+2. Check that your internet connection is working. For Google sign-in, allow pop-ups for `nexus-iisert.pages.dev` and complete or close the Google account picker.
+3. If Firebase reports **unauthorized-domain** or the site says sign-in is not configured, open Firebase Console → Authentication → Settings → Authorized domains and confirm `nexus-iisert.pages.dev` is listed. Under Authentication → Sign-in method, confirm Email/Password and Google are enabled.
+4. If the page reports a NEXUS session/API error, open `https://nexus-iisert.pages.dev/api/v1/auth/me`. A `401` response is expected when signed out and confirms the Worker route is reachable. A timeout or `5xx` response indicates a deployment or service issue; check Cloudflare Pages and the `nexus-backend` Worker deployment.
+5. Use **Forgot password?** for a password error. If the same issue continues after the checks above, note the exact error text and time, then review the latest Pages/Worker logs before changing Firebase settings.
+
 ## Running Laptop GPU AI (GPT-OSS 20B) for All Users Worldwide
 
 NEXUS can route AI Study Companion and Ask AI chats to OpenAI `gpt-oss:20b` running locally on your laptop's GPU via Ollama, accessible securely from the deployed Cloudflare site anywhere in the world.

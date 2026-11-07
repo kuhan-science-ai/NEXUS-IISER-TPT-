@@ -10,6 +10,15 @@ type Mode = 'login' | 'signup' | 'forgot';
 interface AuthPageProps { onLoginSuccess: () => void; }
 const asset = (mode: Mode, name: string, ext: 'svg' | 'png' = 'svg') => `/assets/nexus-figma/${mode}_${name}.${ext}`;
 const usernamePattern = /^[a-zA-Z0-9_]{3,30}$/;
+const AUTH_REQUEST_TIMEOUT_MS = 25_000;
+
+function withAuthTimeout<T>(request: Promise<T>, label: string): Promise<T> {
+  let timeoutId = 0;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(`${label} timed out. Check your internet connection and try again. If it keeps happening, follow the Login troubleshooting steps in the main README.`)), AUTH_REQUEST_TIMEOUT_MS);
+  });
+  return Promise.race([request, timeout]).finally(() => window.clearTimeout(timeoutId));
+}
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
   const navigate = useNavigate();
@@ -33,27 +42,30 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
     try {
       if (!firebaseConfigured || !firebaseAuth) throw new Error('Sign-in is not configured yet. The site owner must finish Firebase setup.');
       if (mode === 'forgot') {
-        await sendPasswordResetEmail(firebaseAuth, email.trim());
+        await withAuthTimeout(sendPasswordResetEmail(firebaseAuth, email.trim()), 'Password reset');
         setNotice('If this email has a NEXUS account, Firebase has sent a password reset email.');
       } else if (googleProfileRequired) {
         if (!usernamePattern.test(username)) throw new Error('Username must be 3–30 characters using letters, numbers, or underscores.');
         const firebaseUser = firebaseAuth.currentUser;
         if (!firebaseUser) throw new Error('Google sign-in expired. Please sign in again.');
-        const result = await api.firebaseSession(await firebaseUser.getIdToken(true), { username, display_name: displayName });
+        const token = await withAuthTimeout(firebaseUser.getIdToken(true), 'Firebase token refresh');
+        const result = await withAuthTimeout(api.firebaseSession(token, { username, display_name: displayName }), 'NEXUS session setup');
         if ('profile_required' in result) throw new Error('Username and display name are required to finish setup.');
         await updateProfile(firebaseUser, { displayName });
         finishLogin();
       } else if (mode === 'login') {
-        const credential = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
-        const result = await api.firebaseSession(await credential.user.getIdToken(true));
+        const credential = await withAuthTimeout(signInWithEmailAndPassword(firebaseAuth, email.trim(), password), 'Firebase sign-in');
+        const token = await withAuthTimeout(credential.user.getIdToken(true), 'Firebase token refresh');
+        const result = await withAuthTimeout(api.firebaseSession(token), 'NEXUS session setup');
         if ('profile_required' in result) { setGoogleProfileRequired(true); setNotice('Finish setting up your NEXUS username and display name.'); }
         else finishLogin();
       } else {
         if (!usernamePattern.test(username)) throw new Error('Username must be 3–30 characters using letters, numbers, or underscores.');
         if (!displayName.trim()) throw new Error('Enter a display name.');
-        const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
-        await updateProfile(credential.user, { displayName: displayName.trim() });
-        const result = await api.firebaseSession(await credential.user.getIdToken(true), { username, display_name: displayName.trim() });
+        const credential = await withAuthTimeout(createUserWithEmailAndPassword(firebaseAuth, email.trim(), password), 'Firebase account creation');
+        await withAuthTimeout(updateProfile(credential.user, { displayName: displayName.trim() }), 'Firebase profile update');
+        const token = await withAuthTimeout(credential.user.getIdToken(true), 'Firebase token refresh');
+        const result = await withAuthTimeout(api.firebaseSession(token, { username, display_name: displayName.trim() }), 'NEXUS profile setup');
         if ('profile_required' in result) throw new Error('Could not finish creating the NEXUS profile. Please try again.');
         finishLogin();
       }
@@ -66,7 +78,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
     try {
       if (!firebaseConfigured || !firebaseAuth) throw new Error('Sign-in is not configured yet. The site owner must finish Firebase setup.');
       const credential = await signInWithPopup(firebaseAuth, googleProvider);
-      const result = await api.firebaseSession(await credential.user.getIdToken(true));
+        const token = await withAuthTimeout(credential.user.getIdToken(true), 'Firebase token refresh');
+        const result = await withAuthTimeout(api.firebaseSession(token), 'NEXUS session setup');
       if ('profile_required' in result) {
         setEmail(result.email);
         setDisplayName(credential.user.displayName || '');
@@ -94,6 +107,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
       <div className="nexus-auth-form-wrap">
         {mode === 'forgot' ? <div className="nexus-auth-icon"><KeyRound size={21} /></div> : <div className="nexus-auth-kicker"><LockKeyhole size={13} /> {mode === 'signup' ? 'CREATE YOUR NEXUS ACCOUNT' : 'YOUR CAMPUS, ONE SIGN-IN AWAY'}</div>}
         <h2>{title}</h2><p className="nexus-auth-subtitle">{subtitle}</p>
+        {loading && <div className="nexus-auth-message success" role="status">Connecting securely to Firebase and NEXUS… This request will time out with retry steps if the connection stalls.</div>}
         {!firebaseConfigured && <div className="nexus-auth-message error" role="status">Firebase setup is not complete yet. The site owner needs to add the Firebase web app configuration.</div>}
         {error && <div className="nexus-auth-message error" role="alert">{error}</div>}
         {notice && <div className="nexus-auth-message success" role="status"><Check size={17} />{notice}</div>}
@@ -132,6 +146,8 @@ function firebaseError(error: unknown): string {
     'auth/popup-closed-by-user': 'Google sign-in was closed before it finished.',
     'auth/unauthorized-domain': 'This website domain has not been authorized in Firebase Authentication settings.',
     'auth/operation-not-allowed': 'Enable this sign-in method in Firebase Authentication settings.',
+    'auth/network-request-failed': 'Could not reach Firebase. Check your internet connection and try again.',
+    'auth/too-many-requests': 'Firebase temporarily limited sign-in attempts. Wait a few minutes, then try again.',
   };
   return known[code] || message;
 }
