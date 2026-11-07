@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-05
+- Added persistent profile photo/banner uploads to the deployed Worker with 8 MB avatar and 10 MB banner limits, content-type signature checks, MIME-aware GIF/video rendering, D1 chunk storage, and save/discard close handling.
 - Scoped appearance, notification/privacy choices, assistant naming, navigation and editor layout, and other browser preferences by signed-in account so one account's choices do not affect another. Shared groups and chats remain shared.
 - Added a confirmation-protected Delete group action to group settings; only the group owner sees it, and the API verifies ownership before deletion.
 - Added an Alt+C developer console with server-enforced admin authorization and controls to remove server groups or direct messages.

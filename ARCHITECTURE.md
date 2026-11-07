@@ -49,6 +49,8 @@ NEXUS is designed following a clean, modular, layered architecture to ensure sep
 
 `backend/app/services/storage.py` keeps the existing four-value upload contract and `FileMetadata` table. Local disk remains the default when the three `CLOUDINARY_*` settings are blank. When all Cloudinary settings are configured, new uploads go to Cloudinary; public avatars, banners, and academic resources use public delivery, while private uploads use authenticated delivery and short-lived signed download redirects. Cloudinary identifiers and delivery metadata are stored in the existing `file_path` column, so no migration is needed. Existing local files continue to be served from disk; this does not automatically migrate previously uploaded files. The `/files/{id}/download` and authorized daily-answer attachment routes handle both storage backends.
 
+The deployed Cloudflare Worker stores profile image/GIF/video uploads in D1 as base64 chunks (`profile_media_chunks`) to reuse the existing production storage binding without requiring another Cloudflare service. Avatar uploads are limited to 8 MB and banners to 10 MB; the Worker checks allowed MIME types and file signatures, then updates the profile URL and MIME type. Public profile and current-user responses include MIME metadata so the client can render video and animated image media after reload. Migration `nexus-backend/migrations/0008_profile_media.sql` adds these fields and the chunk table.
+
 ## Frontend Layer Responsibilities
 1. **Pages (`frontend/src/pages/`)**: Unstyled/minimally styled functional test screens for each subsystem (Auth, Messaging, Profiles, AI Studio, LaTeX preview, Academic Repository).
 2. **Components (`frontend/src/components/`)**:

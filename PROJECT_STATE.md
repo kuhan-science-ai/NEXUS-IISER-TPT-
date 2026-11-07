@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Last reviewed: 2026-11-05
+Last reviewed: 2026-11-07
 
 ## Overview
 
@@ -12,9 +12,10 @@ NEXUS is a student community and academic platform for IISER Tirupati. The activ
 - The Alt+C developer console is visible only to accounts granted `admin` by the Worker after matching the configured, verified `FIREBASE_ADMIN_EMAIL`; admin group deletion and direct-message soft deletion are server-authorized.
 - Appearance choices, custom palettes, settings toggles, and local UI preferences are scoped to the signed-in account in browser storage. Shared groups and chats remain server-wide; browser preferences do not currently sync across devices.
 - Group owners can delete their group from its settings after confirming; the Worker checks the owner ID and cascades deletion to the group's channels and messages.
+- Profile photos and banners upload through the deployed Worker, with server-side 8 MB/10 MB limits and media signature checks. New media is stored as D1 chunks, profile endpoints return MIME types, and the UI renders GIF/video media in profile surfaces. D1 migration `0008_profile_media.sql` is applied remotely.
 
 - Cloudflare Pages proxies same-origin `/api/*` requests to the deployed `nexus-backend` Worker. The browser keeps using `/api/v1` without cross-origin requests. The Worker currently supports beta authentication, profiles, friends, and direct/group messaging; other APIs and WebSockets are not yet served by this Cloudflare backend.
-- The Cloudflare Worker persists AI conversations, threads, and messages and can call the authenticated laptop Ollama proxy for GPT‑OSS 20B. The laptop must remain online with Ollama and a Cloudflare Tunnel running; the local helper is in `nexus-backend/local_ai_proxy.py`. QOTD/AOTD APIs are available, with one starter physics question seeded. PDF attachments are not supported by this Worker.
+- The Cloudflare Worker persists AI conversations, threads, messages, and profile media chunks in D1 and can call the authenticated laptop Ollama proxy for GPT‑OSS 20B. The laptop must remain online with Ollama and a Cloudflare Tunnel running; the local helper is in `nexus-backend/local_ai_proxy.py`. QOTD/AOTD APIs are available, with one starter physics question seeded. PDF attachments are not supported by this Worker.
 - Laptop AI calls keep GPT‑OSS warm for 24 hours and request `think: false` with a 2,048-token context and 1,024-token generation limit to reduce latency; cold model starts can still take longer.
 - The laptop AI launcher configures Ollama for up to 15 parallel GPT‑OSS requests, followed by an arrival-ordered queue of up to 512 requests, using a 2,048-token per-request context. This is a hardware-dependent target, not unlimited throughput.
 - Local AI activation instructions now start the proxy with `start-local-ai.ps1` (which generates/exports its required shared token) and configure both deployed Worker secrets, `OLLAMA_API_KEY` and `OLLAMA_BASE_URL`; direct `python local_ai_proxy.py` launch does not initialize the token.

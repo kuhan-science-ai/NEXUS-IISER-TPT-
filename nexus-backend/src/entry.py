@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, EmailStr, Field
-from js import Object, Uint8Array, crypto, fetch
+from js import Object, crypto, fetch
 from pyodide.ffi import to_js
 from workers import WorkerEntrypoint, asgi
 
@@ -443,14 +443,6 @@ async def me(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends
 PROFILE_MEDIA_MIMES = {"image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm"}
 
 
-def profile_media_bucket(request: Request) -> Any:
-    env = request.scope.get("env")
-    bucket = getattr(env, "PROFILE_MEDIA", None) if env is not None else None
-    if bucket is None:
-        raise HTTPException(status_code=503, detail="Profile media storage is not configured")
-    return bucket
-
-
 @app.post("/api/v1/users/profile/{kind}")
 async def upload_profile_media(kind: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     if kind not in {"avatar", "banner"}:
@@ -468,12 +460,22 @@ async def upload_profile_media(kind: str, request: Request, user: dict[str, Any]
         raise HTTPException(status_code=400, detail="Empty files cannot be uploaded")
     if len(content) > max_size:
         raise HTTPException(status_code=413, detail=f"{kind.title()} files must be {max_size // (1024 * 1024)} MB or smaller")
+    signatures = {
+        "image/jpeg": content.startswith(b"\xff\xd8\xff"),
+        "image/png": content.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/webp": len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP",
+        "image/gif": content.startswith((b"GIF87a", b"GIF89a")),
+        "video/mp4": len(content) >= 12 and content[4:8] == b"ftyp",
+        "video/webm": content.startswith(b"\x1a\x45\xdf\xa3"),
+    }
+    if not signatures.get(mime, False):
+        raise HTTPException(status_code=400, detail="The file contents do not match the selected media type")
     media_id = new_id()
-    suffix = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "video/mp4": ".mp4", "video/webm": ".webm"}[mime]
-    object_key = f"{user['sub']}/{kind}/{media_id}{suffix}"
-    bucket = profile_media_bucket(request)
-    await bucket.put(object_key, Uint8Array.new(content).buffer, to_js({"httpMetadata": {"contentType": mime}}, dict_converter=Object.fromEntries))
-    url = f"/api/v1/profile-media/{object_key}"
+    chunk_size = 512 * 1024
+    for chunk_index, offset in enumerate(range(0, len(content), chunk_size)):
+        chunk = base64.b64encode(content[offset:offset + chunk_size]).decode("ascii")
+        await execute(db, "INSERT INTO profile_media_chunks(media_id,owner_id,kind,mime_type,chunk_index,data_base64,created_at) VALUES(?,?,?,?,?,?,?)", media_id, user["sub"], kind, mime, chunk_index, chunk, now())
+    url = f"/api/v1/profile-media/{media_id}"
     await execute(db, f"UPDATE user_profiles SET {kind}_url=?,{kind}_mime_type=? WHERE user_id=?", url, mime, user["sub"])
     return {"message": f"{kind.title()} uploaded successfully", f"{kind}_url": url, f"{kind}_mime_type": mime}
 
@@ -487,15 +489,14 @@ async def delete_profile_media(kind: str, user: dict[str, Any] = Depends(get_cur
 
 
 @app.get("/api/v1/profile-media/{object_key:path}")
-async def serve_profile_media(object_key: str, request: Request):
-    if not re.fullmatch(r"[a-f0-9-]{36}/(?:avatar|banner)/[a-f0-9-]{36}\.(?:jpg|png|webp|gif|mp4|webm)", object_key):
+async def serve_profile_media(object_key: str, db: Any = Depends(get_db)):
+    if not re.fullmatch(r"[a-f0-9-]{36}", object_key):
         raise HTTPException(status_code=404, detail="Profile media not found")
-    obj = await profile_media_bucket(request).get(object_key)
-    if obj is None:
+    chunks = await query(db, "SELECT mime_type,data_base64 FROM profile_media_chunks WHERE media_id=? ORDER BY chunk_index", object_key)
+    if not chunks:
         raise HTTPException(status_code=404, detail="Profile media not found")
-    data = await obj.arrayBuffer()
-    body = bytes(Uint8Array.new(data).to_py())
-    mime = obj.httpMetadata.contentType if obj.httpMetadata else "application/octet-stream"
+    body = b"".join(base64.b64decode(chunk["data_base64"]) for chunk in chunks)
+    mime = chunks[0]["mime_type"]
     return Response(content=body, media_type=str(mime), headers={"Cache-Control": "public, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff"})
 
 
@@ -1103,7 +1104,7 @@ async def public_profile(username: str, user: dict[str, Any] = Depends(get_curre
     request = await first(db, "SELECT id,sender_id,receiver_id FROM friend_requests WHERE status='pending' AND ((sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?))", current_id, other_id, other_id, current_id) if current_id != other_id else None
     blocked = bool(await first(db, "SELECT 1 AS ok FROM blocked_users WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)", current_id, other_id, other_id, current_id)) if current_id != other_id else False
     relationship = "self" if current_id == other_id else "blocked" if blocked else "friends" if friendship else "outgoing_pending" if request and request["sender_id"] == current_id else "incoming_pending" if request else "none"
-    return {"id": row["id"], "username": row["username"], "full_name": row.get("full_name") or row["username"], "display_name": row.get("display_name"), "bio": row.get("bio") or "", "program": row.get("program"), "academic_year": row.get("academic_year"), "department": row.get("department"), "status_text": row.get("status_text"), "avatar_url": row.get("avatar_url"), "banner_url": row.get("banner_url"), "accent_color": row.get("accent_color"), "member_since": row.get("created_at"), "friends_since": friendship["created_at"] if friendship else None, "is_friend": bool(friendship), "is_blocked": blocked, "relationship_status": relationship, "friend_request_id": request["id"] if request else None, "mutual_friends_count": 0}
+    return {"id": row["id"], "username": row["username"], "full_name": row.get("full_name") or row["username"], "display_name": row.get("display_name"), "bio": row.get("bio") or "", "program": row.get("program"), "academic_year": row.get("academic_year"), "department": row.get("department"), "status_text": row.get("status_text"), "avatar_url": row.get("avatar_url"), "banner_url": row.get("banner_url"), "avatar_mime_type": row.get("avatar_mime_type"), "banner_mime_type": row.get("banner_mime_type"), "accent_color": row.get("accent_color"), "member_since": row.get("created_at"), "friends_since": friendship["created_at"] if friendship else None, "is_friend": bool(friendship), "is_blocked": blocked, "relationship_status": relationship, "friend_request_id": request["id"] if request else None, "mutual_friends_count": 0}
 
 
 @app.put("/api/v1/users/profile")

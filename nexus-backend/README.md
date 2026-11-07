@@ -111,12 +111,11 @@ npx wrangler d1 migrations apply nexus-database --local
 ```
 # Profile photo and banner storage
 
-Profile photos (including GIFs and videos) are limited to 8 MB; banners are limited to 10 MB. The Worker stores each upload as a new R2 object and records its URL and MIME type on the profile, so media can render correctly after reloads and in profile views.
+Profile photos (including GIFs and videos) are limited to 8 MB; banners are limited to 10 MB. The Worker stores each upload as new chunks in the existing D1 database and records its URL and MIME type on the profile, so media can render correctly after reloads and in profile views. No additional Cloudflare storage service is required.
 
-Before deploying this feature, enable **R2** for the Cloudflare account in the Cloudflare dashboard. Then, from this `nexus-backend` folder, run these one time:
+Apply the profile-media schema migration to production D1 once:
 
 ```powershell
-npx wrangler r2 bucket create nexus-profile-media
 npx wrangler d1 execute nexus-database --remote --file migrations/0008_profile_media.sql
 ```
 
@@ -126,4 +125,4 @@ Deploy the Worker and frontend assets with:
 npx wrangler deploy
 ```
 
-The D1 migration adds the MIME type columns used to identify video avatars and banners. Do not re-run that SQL migration after it has succeeded.
+The D1 migration adds MIME type columns and a chunk table for media uploads. Do not re-run that SQL migration after it has succeeded.
