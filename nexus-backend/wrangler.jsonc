@@ -6,6 +6,7 @@
 	"compatibility_flags": ["python_workers"],
 	"vars": {
 		"FIREBASE_PROJECT_ID": "nexus-iisert",
+		"FIREBASE_API_KEY": "AIzaSyAHJub2Whm60rjzjFKNCR8ZHcQeocznvUE",
 		"FIREBASE_ADMIN_EMAIL": ""
 	},
 	"observability": { "enabled": true },

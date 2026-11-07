@@ -20,9 +20,6 @@ from workers import WorkerEntrypoint, asgi
 
 app = FastAPI(title="NEXUS API", version="1.0.0")
 
-_firebase_jwks: dict[str, Any] = {"keys": [], "expires_at": 0}
-
-
 class AIConversationCreate(BaseModel):
     title: str | None = Field(default="New AI Conversation", max_length=150)
 
@@ -231,64 +228,45 @@ def decode_token(token: str, secret: str) -> dict[str, Any] | None:
 async def verify_firebase_id_token(request: Request, token: str) -> dict[str, Any]:
     env = request.scope.get("env")
     project_id = getattr(env, "FIREBASE_PROJECT_ID", None) if env is not None else None
-    if not project_id:
-        raise HTTPException(status_code=503, detail="Firebase authentication is not configured on the Worker")
-    stage = "token parsing"
+    api_key = getattr(env, "FIREBASE_API_KEY", None) if env is not None else None
+    if not project_id or not api_key:
+        raise HTTPException(status_code=503, detail="Firebase authentication is not fully configured on the Worker")
     try:
-        header_text, payload_text, signature_text = token.split(".")
-        header = json.loads(base64.urlsafe_b64decode(header_text + "=" * (-len(header_text) % 4)))
-        claims = json.loads(base64.urlsafe_b64decode(payload_text + "=" * (-len(payload_text) % 4)))
-        if header.get("alg") != "RS256" or not header.get("kid"):
-            raise ValueError("Unsupported Firebase token signature")
-
-        stage = "Firebase signing-key download"
-        global _firebase_jwks
-        if _firebase_jwks.get("expires_at", 0) <= int(time.time()):
-            response = await fetch("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com")
-            if not response.ok:
-                raise HTTPException(status_code=503, detail="Firebase signing keys are temporarily unavailable. Please retry sign-in.")
-            keys = await response.json()
-            # Normalize the JS response once so cached-key lookup uses ordinary
-            # Python dictionaries, then convert the selected JWK to plain JS.
-            if hasattr(keys, "to_py"):
-                keys = keys.to_py()
-            _firebase_jwks = {"keys": keys.get("keys", []), "expires_at": int(time.time()) + 3600}
-        stage = "Firebase signing-key selection"
-        jwk = next((key for key in _firebase_jwks["keys"] if key.get("kid") == header["kid"]), None)
-        if not jwk:
-            _firebase_jwks["expires_at"] = 0
-            raise HTTPException(status_code=401, detail="Firebase signing key could not be matched. Refresh and try again.")
-        stage = "Firebase signing-key import"
-        public_key = await crypto.subtle.importKey(
-            "jwk", to_js(jwk, dict_converter=Object.fromEntries, create_pyproxies=False),
-            to_js({"name": "RSASSA-PKCS1-v1_5", "hash": "SHA-256"}, dict_converter=Object.fromEntries),
-            False, to_js(["verify"]),
+        response = await fetch(
+            f"https://identitytoolkit.googleapis.com/v1/accounts:lookup?key={api_key}",
+            to_js({
+                "method": "POST",
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"idToken": token}),
+            }, dict_converter=Object.fromEntries, create_pyproxies=False),
         )
-        stage = "Firebase token signature check"
-        signed = f"{header_text}.{payload_text}".encode()
-        signature = base64.urlsafe_b64decode(signature_text + "=" * (-len(signature_text) % 4))
-        valid = await crypto.subtle.verify(
-            "RSASSA-PKCS1-v1_5", public_key, Uint8Array.new(signature).buffer, Uint8Array.new(signed).buffer,
-        )
-        stage = "Firebase token claims check"
-        now_ts = int(time.time())
-        if claims.get("aud") != project_id or claims.get("iss") != f"https://securetoken.google.com/{project_id}":
-            raise HTTPException(status_code=401, detail="Firebase token belongs to a different project. Check the Worker Firebase project ID.")
-        if not valid:
-            raise HTTPException(status_code=401, detail="Firebase token signature is invalid. Refresh the page and try again.")
-        if not claims.get("sub") or int(claims.get("exp", 0)) <= now_ts or int(claims.get("iat", 0)) > now_ts + 60:
-            raise HTTPException(status_code=401, detail="Firebase sign-in expired. Refresh the page and try again.")
-        if not claims.get("email"):
-            raise HTTPException(status_code=401, detail="This Firebase account has no email address.")
-        if claims.get("email_verified") is not True:
+        result = await response.json()
+        if hasattr(result, "to_py"):
+            result = result.to_py()
+        users = result.get("users", []) if isinstance(result, dict) else []
+        if not response.ok or not users:
+            # Identity Toolkit validates the token and returns account claims;
+            # never include its response because it can contain private data.
+            raise HTTPException(status_code=401, detail="Firebase rejected this sign-in. Refresh the page and log in again.")
+        firebase_user = users[0]
+        if firebase_user.get("disabled"):
+            raise HTTPException(status_code=403, detail="This Firebase account is disabled")
+        claims = {
+            "sub": firebase_user.get("localId"),
+            "email": firebase_user.get("email"),
+            "email_verified": firebase_user.get("emailVerified") is True,
+        }
+        if not claims["sub"] or not claims["email"]:
+            raise HTTPException(status_code=401, detail="Firebase account is missing its user ID or email address.")
+        if claims["email_verified"] is not True:
             raise HTTPException(status_code=403, detail="Verify your email address, then sign in again.")
         return claims
     except HTTPException:
         raise
     except Exception as exc:
-        # Log only the stage and exception type; never log the ID token or claims.
-        print(f"Firebase ID token verification failed at {stage}: {type(exc).__name__}")
-        raise HTTPException(status_code=401, detail=f"Firebase sign-in verification failed during {stage}. Refresh and try again.") from exc
+        # Do not log tokens, request bodies, provider errors, or account claims.
+        print(f"Firebase account lookup failed: {type(exc).__name__}")
+        raise HTTPException(status_code=503, detail="Firebase could not verify this sign-in right now. Please retry.") from exc
 
 
 def get_current_user(request: Request, authorization: str | None = Header(default=None), db: Any = Depends(get_db)) -> dict[str, Any]:
