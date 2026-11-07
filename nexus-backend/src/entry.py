@@ -248,9 +248,11 @@ async def verify_firebase_id_token(request: Request, token: str) -> dict[str, An
             if not response.ok:
                 raise HTTPException(status_code=503, detail="Firebase signing keys are temporarily unavailable. Please retry sign-in.")
             keys = await response.json()
-            # Keep the JWK objects as JavaScript proxies. Converting them to
-            # Python and back can produce values WebCrypto cannot import.
-            _firebase_jwks = {"keys": keys.keys, "expires_at": int(time.time()) + 3600}
+            # Normalize the JS response once so cached-key lookup uses ordinary
+            # Python dictionaries, then convert the selected JWK to plain JS.
+            if hasattr(keys, "to_py"):
+                keys = keys.to_py()
+            _firebase_jwks = {"keys": keys.get("keys", []), "expires_at": int(time.time()) + 3600}
         stage = "Firebase signing-key selection"
         jwk = next((key for key in _firebase_jwks["keys"] if key.get("kid") == header["kid"]), None)
         if not jwk:
@@ -258,7 +260,7 @@ async def verify_firebase_id_token(request: Request, token: str) -> dict[str, An
             raise HTTPException(status_code=401, detail="Firebase signing key could not be matched. Refresh and try again.")
         stage = "Firebase signing-key import"
         public_key = await crypto.subtle.importKey(
-            "jwk", to_js(jwk, dict_converter=Object.fromEntries),
+            "jwk", to_js(jwk, dict_converter=Object.fromEntries, create_pyproxies=False),
             to_js({"name": "RSASSA-PKCS1-v1_5", "hash": "SHA-256"}, dict_converter=Object.fromEntries),
             False, to_js(["verify"]),
         )
