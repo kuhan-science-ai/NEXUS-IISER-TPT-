@@ -12,8 +12,9 @@ interface ProfileEditorProps {
 }
 
 const pronounOptions = ['Prefer not to say', 'she / her', 'he / him', 'they / them', 'Add custom…'];
+const formatMediaSize = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : `${(bytes / 1024).toFixed(0)} KB`;
 type ImageKind = 'avatar' | 'banner';
-type ImageEditorState = { kind: ImageKind; file: File; url: string; isVideo: boolean; scale: number; rotation: number; x: number; y: number };
+type ImageEditorState = { kind: ImageKind; file: File; url: string; sourceSize: number; isVideo: boolean; scale: number; rotation: number; x: number; y: number; trimStart: number; trimEnd: number };
 
 const hexToHsv = (hex: string) => {
   const parsed = hex.replace('#', '');
@@ -111,23 +112,29 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
     let mediaFile = file;
     let isVideo = file.type === 'video/mp4' || file.type === 'video/webm';
     if (!file.type.startsWith('image/') && !isVideo) { setError('Choose an image, GIF, MP4 or WebM file.'); return; }
-    if (file.size > limit * 1024 * 1024) {
+    const oversizeAnimatedBanner = kind === 'banner' && (isVideo || file.type === 'image/gif') && file.size > limit * 1024 * 1024;
+    if (file.size > limit * 1024 * 1024 && !oversizeAnimatedBanner) {
       const message = `${kind === 'avatar' ? 'Profile photos' : 'Profile banners'} must be ${limit} MB or smaller, including GIFs and videos.`;
       setError(message);
-      if (kind === 'banner') window.alert(`This banner is larger than 20 MB. Choose a smaller file.`);
+      if (kind === 'banner') window.alert('This banner is larger than 20 MB. Choose a smaller file.');
       return;
     }
+    if (oversizeAnimatedBanner) setError('This video is over 20 MB. Trim it in the preview to reduce the saved size.');
     if (file.type === 'image/gif') {
       try { setError('Preparing animated preview…'); mediaFile = await gifToVideo(file, kind); isVideo = true; }
       catch { setError('This browser could not prepare the GIF preview. Try a video or still image.'); return; }
     }
+    let duration = 0;
     if (isVideo) {
-      const duration = await new Promise<number>((resolve, reject) => { const media = document.createElement('video'); const source = URL.createObjectURL(mediaFile); media.preload = 'metadata'; media.onloadedmetadata = () => { URL.revokeObjectURL(source); resolve(media.duration); }; media.onerror = () => { URL.revokeObjectURL(source); reject(new Error('Could not read video metadata.')); }; media.src = source; });
-      if (!Number.isFinite(duration) || duration > 15) { setError('Animated videos must be 15 seconds or shorter.'); return; }
+      duration = await getVideoDuration(mediaFile);
+      if (!Number.isFinite(duration) || (kind === 'avatar' && duration > 15)) { setError('Animated profile photos must be 15 seconds or shorter.'); return; }
     }
-    setError('');
-    setImageEditor({ kind, file: mediaFile, url: URL.createObjectURL(mediaFile), isVideo, scale: 1, rotation: 0, x: 0, y: 0 });
+    if (oversizeAnimatedBanner) setError('This video is over 20 MB. Trim it in the preview to reduce the saved size.'); else setError('');
+    setCropDuration(duration); setCropTime(0); setCropPlaying(true);
+    setImageEditor({ kind, file: mediaFile, url: URL.createObjectURL(mediaFile), sourceSize: file.size, isVideo, scale: 1, rotation: 0, x: 0, y: 0, trimStart: 0, trimEnd: Math.min(duration, 15) });
   };
+
+  const getVideoDuration = (file: File) => new Promise<number>((resolve, reject) => { const media = document.createElement('video'); const source = URL.createObjectURL(file); media.preload = 'metadata'; media.onloadedmetadata = () => { URL.revokeObjectURL(source); resolve(media.duration); }; media.onerror = () => { URL.revokeObjectURL(source); reject(new Error('Could not read video metadata.')); }; media.src = source; });
 
   const gifToVideo = async (file: File, kind: ImageKind): Promise<File> => {
     if (!('MediaRecorder' in window) || !HTMLCanvasElement.prototype.captureStream) throw new Error('Animated recording is unavailable');
@@ -180,6 +187,26 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
     if (imageDrag.current?.pointerId === event.pointerId) imageDrag.current = null;
   };
 
+  const onCropVideoMetadata = (event: React.SyntheticEvent<HTMLVideoElement>) => {
+    const duration = event.currentTarget.duration;
+    setCropDuration(duration);
+    setImageEditor(current => current ? { ...current, trimEnd: Math.min(current.trimEnd || duration, duration) } : null);
+  };
+
+  const onCropVideoTime = (event: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = event.currentTarget;
+    if (imageEditor && video.currentTime >= imageEditor.trimEnd) video.currentTime = imageEditor.trimStart;
+    setCropTime(video.currentTime);
+  };
+
+  const changeTrimStart = (value: number) => {
+    setImageEditor(current => current ? { ...current, trimStart: value, trimEnd: Math.max(value + .25, current.trimEnd) } : null);
+    if (cropVideoRef.current) cropVideoRef.current.currentTime = value;
+  };
+
+  const changeTrimEnd = (value: number) => setImageEditor(current => current ? { ...current, trimEnd: value } : null);
+  const seekCropVideo = (value: number) => { if (cropVideoRef.current) { cropVideoRef.current.currentTime = value; setCropTime(value); } };
+
   const pickThemeColor = (target: 'a' | 'b', event: React.PointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     const saturation = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
@@ -194,7 +221,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
     const { kind, file, url, isVideo, scale, rotation, x, y } = imageEditor;
     if (isVideo) {
       try {
-        const adjusted = await cropVideo(file, url, kind, { scale, rotation, x, y });
+        const adjusted = await cropVideo(file, url, kind, { scale, rotation, x, y, trimStart: imageEditor.trimStart, trimEnd: imageEditor.trimEnd });
         const adjustedUrl = URL.createObjectURL(adjusted);
         if (kind === 'avatar') { setPendingAvatar(adjusted); setAvatarUrl(adjustedUrl); setAvatarIsVideo(true); setRemoveAvatar(false); }
         else { setPendingBanner(adjusted); setBannerUrl(adjustedUrl); setBannerIsVideo(true); setRemoveBanner(false); setBannerMode('image'); }
@@ -232,7 +259,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
     setImageEditor(null);
   };
 
-  const cropVideo = async (file: File, sourceUrl: string, kind: ImageKind, crop: { scale: number; rotation: number; x: number; y: number }): Promise<File> => {
+  const cropVideo = async (file: File, sourceUrl: string, kind: ImageKind, crop: { scale: number; rotation: number; x: number; y: number; trimStart: number; trimEnd: number }): Promise<File> => {
     if (!('MediaRecorder' in window) || !HTMLCanvasElement.prototype.captureStream) throw new Error('This browser cannot export edited video.');
     const video = document.createElement('video'); video.src = sourceUrl; video.muted = true; video.playsInline = true;
     await new Promise<void>((resolve, reject) => { video.onloadedmetadata = () => resolve(); video.onerror = () => reject(new Error('Could not load this video.')); });
@@ -246,9 +273,11 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
     if (!mimeType) throw new Error('WebM recording unavailable.');
     const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1_500_000 }); const chunks: BlobPart[] = [];
     const output = new Promise<File>((resolve, reject) => { recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); }; recorder.onerror = () => reject(new Error('Video crop export failed.')); recorder.onstop = () => resolve(new File([new Blob(chunks, { type: 'video/webm' })], `${file.name.replace(/\.[^.]+$/, '')}-edited.webm`, { type: 'video/webm' })); });
-    let animationFrame = 0; const paint = () => { drawFrame(); animationFrame = requestAnimationFrame(paint); };
-    video.currentTime = 0; await video.play(); drawFrame(); recorder.start(); animationFrame = requestAnimationFrame(paint);
-    await new Promise<void>(resolve => { video.onended = () => resolve(); window.setTimeout(resolve, Math.min(video.duration, 15) * 1000 + 500); });
+    let animationFrame = 0;
+    video.currentTime = crop.trimStart;
+    await new Promise<void>(resolve => { if (Math.abs(video.currentTime - crop.trimStart) < .01) resolve(); else video.onseeked = () => resolve(); });
+    await video.play(); drawFrame(); recorder.start();
+    await new Promise<void>(resolve => { const monitor = () => { if (video.currentTime >= crop.trimEnd) { resolve(); return; } drawFrame(); animationFrame = requestAnimationFrame(monitor); }; animationFrame = requestAnimationFrame(monitor); });
     cancelAnimationFrame(animationFrame); if (recorder.state !== 'inactive') recorder.stop(); video.pause(); stream.getTracks().forEach(track => track.stop());
     const edited = await output;
     if (edited.size > (kind === 'avatar' ? 8 : 20) * 1024 * 1024) throw new Error('Edited animation is too large. Reduce its duration or resolution.');
@@ -392,8 +421,11 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
     {imageEditor && createPortal(<div className="profile-image-editor-backdrop" role="presentation" style={{ '--pe-panel': 'var(--bg-navigation, #2f3136)', '--pe-card': 'var(--bg-surface, #2f3136)', '--pe-raised': 'var(--bg-elevated, #40444b)', '--pe-border': 'var(--border, #202225)', '--pe-text': 'var(--text-primary, #f2f3f5)', '--pe-muted': 'var(--text-muted, #b9bbbe)', '--profile-accent': accentColor } as React.CSSProperties}>
       <section className="profile-image-editor" role="dialog" aria-modal="true" aria-labelledby="profile-image-editor-title">
         <div className="profile-image-editor-head"><div><h2 id="profile-image-editor-title">Preview and edit {imageEditor.kind === 'avatar' ? 'profile photo' : 'banner'}</h2><p>{imageEditor.isVideo ? 'Edits are rendered into the saved animation.' : 'Your image is uploaded only after you save profile changes.'}</p></div><button type="button" className="profile-editor-icon-button" onClick={() => { URL.revokeObjectURL(imageEditor.url); setImageEditor(null); }} aria-label="Cancel image edit"><X size={17} /></button></div>
-        <div className={`profile-image-crop ${imageEditor.kind === 'avatar' ? 'is-avatar' : 'is-banner'}`} onPointerDown={beginImageDrag} onPointerMove={moveImageDrag} onPointerUp={endImageDrag} onPointerCancel={endImageDrag} role="application" aria-label="Drag image to reposition it">{imageEditor.isVideo ? <video ref={cropVideoRef} draggable={false} src={imageEditor.url} autoPlay loop muted playsInline onLoadedMetadata={event => setCropDuration(event.currentTarget.duration)} onTimeUpdate={event => setCropTime(event.currentTarget.currentTime)} onPlay={() => setCropPlaying(true)} onPause={() => setCropPlaying(false)} style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} /> : <img draggable={false} src={imageEditor.url} alt="Image preview" style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} />}<span className="profile-image-crop-guide">Drag to position</span></div>
-        {imageEditor.isVideo && <div className="profile-image-timeline"><button type="button" className="profile-editor-secondary" aria-label={cropPlaying ? 'Pause preview' : 'Play preview'} onClick={() => { const video = cropVideoRef.current; if (!video) return; if (video.paused) void video.play(); else video.pause(); }}>{cropPlaying ? <Pause size={15} /> : <Play size={15} />}</button><input aria-label="Preview timeline" type="range" min="0" max={cropDuration || 0.1} step="0.01" value={Math.min(cropTime, cropDuration || 0)} onChange={event => { const video = cropVideoRef.current; if (video) { video.currentTime = Number(event.target.value); setCropTime(video.currentTime); } }} /><span>{cropTime.toFixed(1)}s / {Number.isFinite(cropDuration) ? cropDuration.toFixed(1) : '0.0'}s</span></div>}
+        <div className={`profile-image-crop ${imageEditor.kind === 'avatar' ? 'is-avatar' : 'is-banner'}`} onPointerDown={beginImageDrag} onPointerMove={moveImageDrag} onPointerUp={endImageDrag} onPointerCancel={endImageDrag} role="application" aria-label="Drag image to reposition it">{imageEditor.isVideo ? <video ref={cropVideoRef} draggable={false} src={imageEditor.url} autoPlay muted playsInline onLoadedMetadata={onCropVideoMetadata} onTimeUpdate={onCropVideoTime} onPlay={() => setCropPlaying(true)} onPause={() => setCropPlaying(false)} style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} /> : <img draggable={false} src={imageEditor.url} alt="Image preview" style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} />}<span className="profile-image-crop-guide">Drag to position</span></div>
+        {imageEditor.isVideo && <>
+          <div className="profile-image-timeline"><button type="button" className="profile-editor-secondary" aria-label={cropPlaying ? 'Pause preview' : 'Play preview'} onClick={() => { const video = cropVideoRef.current; if (!video) return; if (video.paused) void video.play(); else video.pause(); }}>{cropPlaying ? <Pause size={15} /> : <Play size={15} />}</button><input aria-label="Preview timeline" type="range" min={imageEditor.trimStart} max={Math.max(imageEditor.trimStart + .05, imageEditor.trimEnd)} step="0.01" value={Math.min(Math.max(cropTime, imageEditor.trimStart), imageEditor.trimEnd)} onChange={event => seekCropVideo(Number(event.target.value))} /><span>{cropTime.toFixed(1)}s / {imageEditor.trimEnd.toFixed(1)}s</span></div>
+          <div className="profile-video-trim"><strong>Trim clip</strong><label>Start <input type="range" min="0" max={Math.max(0, imageEditor.trimEnd - .25)} step=".05" value={imageEditor.trimStart} onChange={event => changeTrimStart(Number(event.target.value))} />{imageEditor.trimStart.toFixed(1)}s</label><label>End <input type="range" min={Math.min(cropDuration, imageEditor.trimStart + .25)} max={Math.min(cropDuration, imageEditor.trimStart + 15)} step=".05" value={Math.min(imageEditor.trimEnd, cropDuration)} onChange={event => changeTrimEnd(Number(event.target.value))} />{imageEditor.trimEnd.toFixed(1)}s</label><p>Original file: <b>{formatMediaSize(imageEditor.sourceSize)}</b><span> · </span>Estimated cropped export: <b>{formatMediaSize((imageEditor.trimEnd - imageEditor.trimStart) * 1_500_000 / 8 + 100_000)}</b></p>{imageEditor.kind === 'banner' && imageEditor.sourceSize > 20 * 1024 * 1024 && <small role="alert">This file is over 20 MB. Trim the clip and apply it to create a smaller video.</small>}</div>
+        </>}
         <div className="profile-image-editor-controls"><label><ZoomIn size={15} /> Zoom <input type="range" min="1" max="3" step=".01" value={imageEditor.scale} onChange={event => setImageEditor({ ...imageEditor, scale: Number(event.target.value) })} /></label><button type="button" className="profile-editor-secondary" onClick={() => setImageEditor({ ...imageEditor, rotation: imageEditor.rotation + 90 })}><RotateCcw size={15} /> Rotate</button><button type="button" className="profile-editor-text-button" onClick={() => setImageEditor({ ...imageEditor, scale: 1, rotation: 0, x: 0, y: 0 })}>Reset crop</button></div>
         <div className="profile-image-editor-actions"><button type="button" className="profile-editor-secondary" onClick={() => { URL.revokeObjectURL(imageEditor.url); setImageEditor(null); }}>Cancel</button><button type="button" className="profile-editor-save" onClick={() => void applyImageEdit()}><Check size={15} /> Apply image</button></div>
       </section>

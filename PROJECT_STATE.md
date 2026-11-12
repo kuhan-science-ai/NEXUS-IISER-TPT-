@@ -16,6 +16,8 @@ Profile photos/banners and Academic Repository thumbnails/banners open crop prev
 
 The profile media crop dialog is portaled above the clipped profile editor, keeping playback and timeline controls visible. Oversized banner selections show an immediate 20 MB warning.
 
+Animated profile previews provide trim start/end handles, loop playback within the selected segment, and show original file size plus estimated cropped WebM size. Oversized video banners can be trimmed and re-encoded before upload.
+
 Academic Repository resources can be edited by their uploader only. Editing supports title, subject code, publisher, page count, optional PDF replacement with automatic page recount, and replacing artwork. Worker and FastAPI APIs enforce ownership.
 
 Last reviewed: 2026-11-13
