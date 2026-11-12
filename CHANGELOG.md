@@ -2,7 +2,10 @@
 
 All notable changes to the NEXUS core architecture will be documented here.
 
-## [Unreleased] - 2026-11-12
+## [Unreleased] - 2026-11-13
+- Rebuilt Academic Repository around empty-by-default resource lists, authenticated saved/my/recent views, account-scoped history clearing, and backend download counts. Added PDF verification/page extraction animation, staged metadata entry, discard-before-save behavior, D1 chunk storage, and matching Worker/Alembic migrations (`0011_academic_resources.sql`, `39a6d814b2f1`).
+
+## [2026-11-12]
 - Added KaTeX and full LaTeX starter examples, account-specific D1 draft autosave, and clear hosted-worker messaging for PDF compilation; added the `0010_latex_drafts.sql` migration (apply before deploying the Worker).
 - Kept AI requests running across tab and route changes, added manual request cancellation, and reused the rainbow tab glow to mark a completed reply until the assistant tab is opened.
 - Fixed hosted LaTeX Studio previews to render KaTeX snippets and supported full-document bodies in-browser; hid PDF compile controls from production builds where the Worker has no compiler route.

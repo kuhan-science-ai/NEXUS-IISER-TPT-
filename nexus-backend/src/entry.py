@@ -29,6 +29,13 @@ class LatexDraftUpdate(BaseModel):
     source: str = Field(max_length=200_000)
 
 
+class AcademicResourceInput(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    subject_code: str = Field(min_length=1, max_length=40)
+    publisher_name: str = Field(min_length=1, max_length=120)
+    pages: int = Field(ge=1, le=100_000)
+
+
 class AIChatRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
     page_context: dict[str, Any] | None = None
@@ -377,6 +384,125 @@ async def save_latex_draft(payload: LatexDraftUpdate, user: dict[str, Any] = Dep
     stamp = now()
     await execute(db, "INSERT INTO latex_drafts(user_id,engine,source,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id,engine) DO UPDATE SET source=excluded.source,updated_at=excluded.updated_at", user["sub"], payload.engine, payload.source, stamp)
     return {"engine": payload.engine, "source": payload.source, "updated_at": stamp}
+
+
+def academic_resource_view(row: dict[str, Any], saved: bool = False) -> dict[str, Any]:
+    return {
+        "id": row["id"], "title": row["title"], "subject_code": row["subject_code"],
+        "publisher_name": row["publisher_name"], "original_filename": row["original_filename"],
+        "mime_type": row["mime_type"], "size_bytes": int(row["size_bytes"]), "pages": int(row["pages"]),
+        "download_count": int(row["download_count"]), "uploader_id": row["uploader_id"],
+        "uploader_name": row.get("uploader_name") or row["publisher_name"],
+        "created_at": row["created_at"], "is_saved": bool(saved),
+        "download_url": f"/api/v1/academics/resources/{row['id']}/download",
+    }
+
+
+async def academic_resource_rows(db: Any, user_id: str, collection: str = "all") -> list[dict[str, Any]]:
+    where = ""
+    if collection == "mine":
+        where = "WHERE r.uploader_id=?"
+        params = (user_id, user_id)
+    elif collection == "saved":
+        where = "JOIN saved_academic_resources s ON s.resource_id=r.id AND s.user_id=? WHERE 1=1"
+        params = (user_id, user_id)
+    elif collection == "recent":
+        where = "JOIN academic_resource_views v ON v.resource_id=r.id AND v.user_id=? WHERE 1=1"
+        params = (user_id, user_id)
+    else:
+        params = (user_id,)
+    order = "v.viewed_at DESC" if collection == "recent" else "r.created_at DESC"
+    rows = await query(db, f"""SELECT r.*,u.username AS uploader_name,
+        EXISTS(SELECT 1 FROM saved_academic_resources s WHERE s.resource_id=r.id AND s.user_id=?) AS is_saved
+        FROM academic_resources r LEFT JOIN users u ON u.id=r.uploader_id {where}
+        ORDER BY {order} LIMIT 300""", *params)
+    return rows
+
+
+@app.get("/api/v1/academics/resources")
+async def list_academic_resources(query_text: str | None = Query(default=None, alias="query"), user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    rows = await academic_resource_rows(db, user["sub"])
+    term = (query_text or "").strip().casefold()
+    return [academic_resource_view(row, row["is_saved"]) for row in rows if not term or term in row["title"].casefold() or term in row["subject_code"].casefold() or term in row["publisher_name"].casefold()]
+
+
+@app.get("/api/v1/academics/resources/mine")
+async def my_academic_resources(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    return [academic_resource_view(row, row["is_saved"]) for row in await academic_resource_rows(db, user["sub"], "mine")]
+
+
+@app.get("/api/v1/academics/resources/saved")
+async def saved_academic_resources(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    return [academic_resource_view(row, True) for row in await academic_resource_rows(db, user["sub"], "saved")]
+
+
+@app.get("/api/v1/academics/resources/recent")
+async def recent_academic_resources(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    return [academic_resource_view(row, row["is_saved"]) for row in await academic_resource_rows(db, user["sub"], "recent")]
+
+
+@app.post("/api/v1/academics/resources", status_code=status.HTTP_201_CREATED)
+async def upload_academic_resource(request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    form = await request.form()
+    file = form.get("file")
+    if file is None or not hasattr(file, "read"):
+        raise HTTPException(status_code=400, detail="Choose a PDF file")
+    try:
+        payload = AcademicResourceInput(title=str(form.get("title", "")).strip(), subject_code=str(form.get("subject_code", "")).strip(), publisher_name=str(form.get("publisher_name", "")).strip(), pages=int(str(form.get("pages", "0"))))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Complete the resource details and provide a valid page count") from exc
+    filename = str(getattr(file, "filename", "") or "resource.pdf")
+    mime = str(getattr(file, "content_type", "") or "").lower()
+    content = await file.read(50 * 1024 * 1024 + 1)
+    if not content or len(content) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="PDF files must be between 1 byte and 50 MB")
+    if mime != "application/pdf" or not filename.lower().endswith(".pdf") or not content.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="The uploaded file is not a valid PDF")
+    resource_id, stamp = new_id(), now()
+    await execute(db, "INSERT INTO academic_resources(id,title,subject_code,publisher_name,original_filename,mime_type,size_bytes,pages,uploader_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)", resource_id, payload.title, payload.subject_code, payload.publisher_name, filename[:255], "application/pdf", len(content), payload.pages, user["sub"], stamp)
+    # Keep each base64 D1 value below its 2 MB row/value cap while using
+    # fewer than 50 statements for a maximum-size upload on the D1 Free plan.
+    chunk_size = 1_400_000
+    for index, offset in enumerate(range(0, len(content), chunk_size)):
+        encoded = base64.b64encode(content[offset:offset + chunk_size]).decode("ascii")
+        await execute(db, "INSERT INTO academic_resource_chunks(resource_id,chunk_index,data_base64) VALUES(?,?,?)", resource_id, index, encoded)
+    await execute(db, "INSERT INTO saved_academic_resources(resource_id,user_id,created_at) VALUES(?,?,?)", resource_id, user["sub"], stamp)
+    row = await first(db, "SELECT r.*,u.username AS uploader_name,1 AS is_saved FROM academic_resources r LEFT JOIN users u ON u.id=r.uploader_id WHERE r.id=?", resource_id)
+    return academic_resource_view(row, True)
+
+
+@app.put("/api/v1/academics/resources/{resource_id}/saved")
+async def save_academic_resource(resource_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if not await first(db, "SELECT 1 AS ok FROM academic_resources WHERE id=?", resource_id):
+        raise HTTPException(status_code=404, detail="Resource not found")
+    await execute(db, "INSERT OR IGNORE INTO saved_academic_resources(resource_id,user_id,created_at) VALUES(?,?,?)", resource_id, user["sub"], now())
+    return {"saved": True}
+
+
+@app.delete("/api/v1/academics/resources/{resource_id}/saved", status_code=status.HTTP_204_NO_CONTENT)
+async def unsave_academic_resource(resource_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await execute(db, "DELETE FROM saved_academic_resources WHERE resource_id=? AND user_id=?", resource_id, user["sub"])
+
+
+@app.delete("/api/v1/academics/resources/history", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_academic_resource_history(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await execute(db, "DELETE FROM academic_resource_views WHERE user_id=?", user["sub"])
+
+
+@app.get("/api/v1/academics/resources/{resource_id}/download")
+async def download_academic_resource(resource_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    row = await first(db, "SELECT * FROM academic_resources WHERE id=?", resource_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    stamp = now()
+    await execute(db, "UPDATE academic_resources SET download_count=download_count+1 WHERE id=?", resource_id)
+    await execute(db, "INSERT INTO academic_resource_views(resource_id,user_id,viewed_at) VALUES(?,?,?) ON CONFLICT(resource_id,user_id) DO UPDATE SET viewed_at=excluded.viewed_at", resource_id, user["sub"], stamp)
+    chunks = await query(db, "SELECT data_base64 FROM academic_resource_chunks WHERE resource_id=? ORDER BY chunk_index", resource_id)
+    if not chunks:
+        raise HTTPException(status_code=404, detail="Resource file is unavailable")
+    body = b"".join(base64.b64decode(chunk["data_base64"]) for chunk in chunks)
+    safe_name = re.sub(r"[^A-Za-z0-9._ -]", "_", row["original_filename"]) or "resource.pdf"
+    return Response(content=body, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{safe_name}"', "Content-Length": str(len(body)), "X-Content-Type-Options": "nosniff"})
 
 
 @app.post("/api/v1/auth/register", status_code=status.HTTP_201_CREATED)

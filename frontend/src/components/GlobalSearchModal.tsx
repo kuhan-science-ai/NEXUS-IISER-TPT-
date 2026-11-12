@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
+import { api } from '../services/api';
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface GlobalSearchModalProps {
 
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose }) => {
   const [query, setQuery] = useState('');
+  const [resources, setResources] = useState<any[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -28,23 +30,20 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    api.listResources(query.trim() || undefined).then(results => { if (active) setResources(Array.isArray(results) ? results : []); }).catch(() => { if (active) setResources([]); });
+    return () => { active = false; };
+  }, [isOpen, query]);
 
-  const mockResources = [
-    { title: 'Quantum Mechanics — Complete Notes', meta: 'PHY 301 · Meera Iyer · 42 pages', type: 'PDF', path: '/repository' },
-    { title: 'Perturbation theory · Worked examples', meta: 'PHY 301 · Ananya Rao · 18 pages', type: 'Tutorial', path: '/repository' },
-    { title: 'Linear Algebra · Mid-semester 2025', meta: 'MAT 201 · Arjun Nair · 8 pages', type: 'Past paper', path: '/repository' },
-  ];
+  if (!isOpen) return null;
 
   const mockPeopleGroups = [
     { name: 'Quantum Collective', desc: 'Study group · 12 students · PHY 301', type: 'Group', path: '/studygroups' },
     { name: 'Meera Iyer', desc: 'Physics · BS–MS 2023 · IISER Tirupati', type: 'Student', path: '/messaging' },
     { name: 'Skywatchers Club', desc: 'Campus club · 148 students · Astronomy night Fri', type: 'Club', path: '/campus?tab=events' },
   ];
-
-  const filteredResources = query
-    ? mockResources.filter(r => r.title.toLowerCase().includes(query.toLowerCase()) || r.meta.toLowerCase().includes(query.toLowerCase()))
-    : mockResources;
 
   const filteredPeople = query
     ? mockPeopleGroups.filter(p => p.name.toLowerCase().includes(query.toLowerCase()) || p.desc.toLowerCase().includes(query.toLowerCase()))
@@ -141,11 +140,11 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
             }}>
               Academic Resources
             </div>
-            {filteredResources.map((res, i) => (
+            {resources.map((res, i) => (
               <div
                 key={i}
                 onClick={() => {
-                  navigate(res.path);
+                  navigate(`/repository?resourceId=${encodeURIComponent(res.id)}`);
                   onClose();
                 }}
                 style={{
@@ -165,7 +164,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                     {res.title}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    {res.meta}
+                    {res.subject_code || res.subject || 'Academic resource'} · {res.publisher_name || res.uploader_name || 'Publisher'} · {res.pages || 1} pages
                   </div>
                 </div>
                 <span style={{
@@ -176,10 +175,11 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                   padding: '2px 8px',
                   borderRadius: '4px',
                 }}>
-                  {res.type}
+                  PDF
                 </span>
               </div>
             ))}
+            {!resources.length && <p style={{ padding: '8px 12px', color: 'var(--text-subtle)', fontSize: 12 }}>{query ? 'No matching academic resources.' : 'No academic resources have been uploaded yet.'}</p>}
           </div>
 
           {/* Groups & People Section */}

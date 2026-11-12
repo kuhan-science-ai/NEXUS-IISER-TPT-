@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Last reviewed: 2026-11-12
+Last reviewed: 2026-11-13
 
 ## Overview
 
@@ -8,7 +8,10 @@ NEXUS is a student community and academic platform for IISER Tirupati. The activ
 
 ## Current status
 
-- LaTeX Studio seeds separate KaTeX and full LaTeX examples and saves each signed-in account's drafts in D1 (`0010_latex_drafts.sql`, pending migration/deployment); KaTeX rendering is browser-local, while full PDF compilation remains a local FastAPI capability until a hosted compiler is added.
+- Academic Repository starts empty and reads resources from authenticated Worker/D1 APIs. PDF uploads run through the existing animated verification flow, extract page count in-browser, then stage title/subject code/publisher metadata before the final save. The Worker validates PDF signatures and size (50 MB maximum), stores file chunks and metadata in D1, tracks downloads server-side, and scopes saved, owned, and recently viewed resources per account. The SQLAlchemy FastAPI API supports the same resource actions with file storage. Production D1 migrations `0010_latex_drafts.sql` and `0011_academic_resources.sql` are applied; local D1 and the FastAPI database still need their corresponding migrations.
+- Repository recently viewed history has an account-scoped delete action with the same warning and bomb animation used by browsing history; records clear at the animation flash.
+
+- LaTeX Studio seeds separate KaTeX and full LaTeX examples and saves each signed-in account's drafts in D1 (`0010_latex_drafts.sql`, applied to production on 2026-11-13); KaTeX rendering is browser-local, while full PDF compilation remains a local FastAPI capability until a hosted compiler is added.
 - Both KaTeX snippets and supported full-document LaTeX bodies now render locally in the browser; hosted builds hide PDF compiler controls because the Worker does not provide that endpoint.
 - AI requests continue while navigating between tabs/routes; users can cancel from the active assistant UI. Completed replies mark the account-scoped AI Assistant settings tab with the existing rainbow glow until opened.
 

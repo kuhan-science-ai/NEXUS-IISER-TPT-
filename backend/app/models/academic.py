@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Text, Integer, Float, Boolean, DateTime, ForeignKey, Index
+from sqlalchemy import Column, String, Text, Integer, Float, Boolean, DateTime, ForeignKey, Index, BigInteger
 from sqlalchemy.orm import relationship
 from backend.app.db.base import Base
 
@@ -54,6 +54,10 @@ class AcademicResource(Base):
     course_id = Column(String(36), ForeignKey("courses.id", ondelete="SET NULL"), nullable=True, index=True)
     category = Column(String(50), nullable=False)  # Lecture Notes, Exam Paper, Lab Manual, Reference Book, Assignment Solution
     subject = Column(String(100), nullable=True)
+    subject_code = Column(String(40), nullable=True)
+    publisher_name = Column(String(120), nullable=True)
+    pages = Column(Integer, nullable=False, default=1)
+    size_bytes = Column(BigInteger, nullable=False, default=0)
     academic_year = Column(String(20), nullable=True)
     semester = Column(String(20), nullable=True)
     file_id = Column(String(36), ForeignKey("file_metadata.id", ondelete="RESTRICT"), nullable=False)
@@ -83,6 +87,13 @@ class ResourceBookmark(Base):
     __table_args__ = (
         Index("idx_resource_bookmark_unique", "resource_id", "user_id", unique=True),
     )
+
+class ResourceView(Base):
+    __tablename__ = "resource_views"
+
+    resource_id = Column(String(36), ForeignKey("academic_resources.id", ondelete="CASCADE"), primary_key=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    viewed_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 class ResourceRating(Base):
     __tablename__ = "resource_ratings"

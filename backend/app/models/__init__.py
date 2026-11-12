@@ -19,6 +19,7 @@ from backend.app.models.academic import (
     AcademicResource,
     ResourceBookmark,
     ResourceRating,
+    ResourceView,
 )
 from backend.app.models.forum import ForumPost, ForumComment, ForumVote, StudyGroup, VoteType
 from backend.app.models.calendar import CalendarEvent, Task, Note, EventType
@@ -68,6 +69,7 @@ __all__ = [
     "AcademicResource",
     "ResourceBookmark",
     "ResourceRating",
+    "ResourceView",
     "ForumPost",
     "ForumComment",
     "ForumVote",

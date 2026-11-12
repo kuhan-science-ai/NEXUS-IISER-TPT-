@@ -112,4 +112,6 @@
 .figma-close-button:hover { background:#fff;color:#111923; }
 .figma-plus-one { position:absolute;z-index:6;white-space:nowrap;pointer-events:none; }
 @keyframes figma-upload-spin { to { transform:rotate(360deg); } }
+.figma-upload-countdown { position:absolute;z-index:10;left:50%;bottom:34px;display:grid;gap:8px;transform:translateX(-50%);padding:16px 24px;border:1px solid #a4e4c6;border-radius:14px;background:rgba(239,255,247,.97);color:#16724f;text-align:center;font:700 21px Inter,Arial,sans-serif;box-shadow:0 12px 32px rgba(20,35,28,.15); }
+.figma-upload-countdown span { color:#53615a;font-size:15px;font-weight:550; }
 @media (max-width:700px) { .figma-results { left:60px;width:960px; } }

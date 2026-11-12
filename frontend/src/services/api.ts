@@ -284,6 +284,23 @@ class ApiService {
     return this.request(url);
   }
 
+  async listMyResources(): Promise<any[]> { return this.request('/academics/resources/mine'); }
+  async listSavedResources(): Promise<any[]> { return this.request('/academics/resources/saved'); }
+  async listRecentResources(): Promise<any[]> { return this.request('/academics/resources/recent'); }
+  async saveResource(resourceId: string): Promise<void> { await this.request(`/academics/resources/${resourceId}/saved`, { method: 'PUT' }); }
+  async unsaveResource(resourceId: string): Promise<void> { await this.request(`/academics/resources/${resourceId}/saved`, { method: 'DELETE' }); }
+  async clearRecentResources(): Promise<void> { await this.request('/academics/resources/history', { method: 'DELETE' }); }
+  async downloadResource(resourceId: string): Promise<Blob> {
+    const headers: Record<string, string> = {};
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+    const response = await fetch(`${API_BASE}/academics/resources/${resourceId}/download`, { headers });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(typeof error.detail === 'string' ? error.detail : `Download failed (HTTP ${response.status})`);
+    }
+    return response.blob();
+  }
+
   async uploadResource(formData: FormData): Promise<any> {
     return this.request('/academics/resources', { method: 'POST', body: formData });
   }

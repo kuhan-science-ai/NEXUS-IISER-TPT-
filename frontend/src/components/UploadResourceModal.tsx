@@ -1,22 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { api } from '../services/api';
 import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 import { uploadMotion } from './figmaUploadMotion';
 import './UploadResourceModal.css';
 
-interface UploadResourceModalProps { isOpen: boolean; onClose: () => void; onUploadSuccess?: () => void; currentUserId: string; }
+interface UploadResourceModalProps { isOpen: boolean; onClose: () => void; onUploadSuccess?: () => void; onStage?: (file: File, pages: number) => void; currentUserId: string; }
 type FileStatus = 'pending' | 'uploading' | 'success' | 'error';
 interface UploadItem { id: string; file: File; status: FileStatus; message?: string; point?: { x: number; y: number }; }
 
 const FIGMA_W = 1080;
 const FIGMA_H = 1350;
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = new Set(['pdf', 'docx', 'pptx', 'zip', 'txt']);
-const MIME_BY_EXTENSION: Record<string, string> = {
-  pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', zip: 'application/zip', txt: 'text/plain',
-};
+const ALLOWED_EXTENSIONS = new Set(['pdf']);
 const PROJECTILE_END = 0.2463;
 const PROJECTILE_DURATION = 2.1;
 const FIGMA_PROJECTILE_MOTION = (() => {
@@ -72,7 +67,7 @@ const readDroppedEntry = async (entry: any): Promise<File[]> => {
   return (await Promise.all(entries.map(readDroppedEntry))).flat();
 };
 
-export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen, onClose, onUploadSuccess, currentUserId }) => {
+export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen, onClose, onUploadSuccess, onStage, currentUserId }) => {
   const [scale, setScale] = useState(0.7);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [processing, setProcessing] = useState(false);
@@ -81,9 +76,11 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen
   const [playShotAnimation, setPlayShotAnimation] = useState(() => {
     return readUserPreference<'on' | 'off'>('nexus-upload-shot-animation', currentUserId, 'on') !== 'off';
   });
+  const [countdown, setCountdown] = useState<number | null>(null);
   useEffect(() => { setPlayShotAnimation(readUserPreference<'on' | 'off'>('nexus-upload-shot-animation', currentUserId, 'on') !== 'off'); }, [currentUserId]);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
+  const countdownTimer = useRef<number | null>(null);
   const prefersReducedMotion = useReducedMotion();
   const successCount = items.filter((item) => item.status === 'success').length;
   const completed = items.length > 0 && !processing;
@@ -101,12 +98,16 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen
   }, []);
   useEffect(() => {
     if (!isOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape' && !processing) onClose(); };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape' && !processing && countdown === null) onClose(); };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isOpen, onClose, processing]);
+  }, [isOpen, onClose, processing, countdown]);
   useEffect(() => {
-    if (!isOpen) { setItems([]); setProcessing(false); }
+    if (!isOpen) {
+      if (countdownTimer.current !== null) window.clearInterval(countdownTimer.current);
+      countdownTimer.current = null;
+      setItems([]); setProcessing(false); setCountdown(null);
+    }
   }, [isOpen]);
   useEffect(() => {
     folderInput.current?.setAttribute('webkitdirectory', '');
@@ -117,11 +118,11 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen
 
   const updateItem = (id: string, update: Partial<UploadItem>) => setItems((current) => current.map((item) => item.id === id ? { ...item, ...update } : item));
   const startUpload = async (files: File[]) => {
-    const uniqueFiles = files.filter((file, index) => files.findIndex((candidate) => candidate.name === file.name && candidate.size === file.size && candidate.lastModified === file.lastModified) === index);
+    const uniqueFiles = files.filter((file, index) => fileExtension(file.name) === 'pdf' && files.findIndex((candidate) => candidate.name === file.name && candidate.size === file.size && candidate.lastModified === file.lastModified) === index).slice(0, 1);
     if (!uniqueFiles.length || processing) return;
     const batch: UploadItem[] = uniqueFiles.map((file, index) => ({ id: `${file.name}-${file.lastModified}-${index}`, file, status: 'pending' }));
     setItems(batch); setProcessing(true);
-    let anySucceeded = false;
+    let staged: { file: File; pages: number } | null = null;
 
     for (const item of batch) {
       const { file } = item;
@@ -129,22 +130,19 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen
       setActiveShotId(animateThisShot ? item.id : null);
       const shotDuration = animateThisShot ? new Promise<void>((resolve) => window.setTimeout(resolve, PROJECTILE_DURATION * 1000 + 100)) : Promise.resolve();
       let failure: string | undefined;
-      let success = false;
-
       if (file.size > MAX_FILE_BYTES) failure = 'File exceeds the 50 MB limit';
       else if (!ALLOWED_EXTENSIONS.has(fileExtension(file.name))) failure = 'Unsupported file type';
       else {
         updateItem(item.id, { status: 'uploading' });
         try {
-          const body = new FormData();
-          body.append('title', file.name.replace(/\.[^.]+$/, ''));
-          body.append('category', 'Lecture Notes');
-          body.append('description', '');
-          const normalizedFile = new File([file], file.name, { type: MIME_BY_EXTENSION[fileExtension(file.name)] });
-          body.append('file', normalizedFile, file.name);
-          const [uploaded] = await Promise.all([api.uploadResource(body), shotDuration]);
-          success = true;
-          window.dispatchEvent(new CustomEvent('nexus-resource-uploaded', { detail: { title: file.name, resourceId: uploaded?.resource_id } }));
+          const bytes = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+          if (new TextDecoder().decode(bytes) !== '%PDF-') throw new Error('This file does not contain a valid PDF header');
+          const [pdfjs, worker] = await Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]);
+          pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+          const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+          staged = { file, pages: pdf.numPages };
+          await pdf.destroy();
+          await shotDuration;
         } catch (error) {
           await shotDuration;
           failure = error instanceof Error ? error.message : 'Upload failed';
@@ -154,7 +152,6 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen
         await shotDuration;
         updateItem(item.id, { status: 'error', message: failure });
       } else {
-        anySucceeded = anySucceeded || success;
         const point = BASKET_POINT_SPOTS[Math.floor(Math.random() * BASKET_POINT_SPOTS.length)];
         updateItem(item.id, { status: 'success', point });
       }
@@ -162,7 +159,20 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen
     }
     setActiveShotId(null);
     setProcessing(false);
-    if (anySucceeded) onUploadSuccess?.();
+    if (staged) {
+      onUploadSuccess?.();
+      let remaining = 3;
+      setCountdown(remaining);
+      countdownTimer.current = window.setInterval(() => {
+        remaining -= 1;
+        if (remaining <= 0) {
+          if (countdownTimer.current !== null) window.clearInterval(countdownTimer.current);
+          countdownTimer.current = null;
+          onStage?.(staged!.file, staged!.pages);
+          onClose();
+        } else setCountdown(remaining);
+      }, 1000);
+    }
   };
 
   const choose = (input: React.RefObject<HTMLInputElement | null>) => input.current?.click();
@@ -181,22 +191,22 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen
     <div className="nexus-upload-overlay nexus-upload-overlay-faithful" role="presentation" onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }} onDragLeave={(event) => { if (event.currentTarget === event.target) setIsDragging(false); }} onDrop={onFilesDropped}>
       <div className="nexus-upload-frame-holder" style={{ width: FIGMA_W * scale, height: FIGMA_H * scale }} onClick={(event) => event.stopPropagation()}>
         <div className="nexus-upload-canvas" style={{ transform: `scale(${scale})` }} role="dialog" aria-modal="true" aria-label="Upload files">
-          <button type="button" className="figma-close-button" onClick={onClose} aria-label="Close upload">×</button>
+          <button type="button" className="figma-close-button" onClick={onClose} disabled={processing || countdown !== null} aria-label="Close upload">×</button>
           <p className="figma-upload-title" style={style(80, 88)} data-node-id="60:758">Upload files</p>
-          <p className="figma-upload-subtitle" style={style(80, 150)} data-node-id="60:759">{processing ? 'Files are flying to the hoop…' : completed ? 'Upload results' : 'Drag and drop files or folders, or choose below.'}</p>
+          <p className="figma-upload-subtitle" style={style(80, 150)} data-node-id="60:759">{processing ? 'Files are flying to the hoop…' : completed ? 'PDF verification results' : 'Choose a PDF to verify, or drag it here.'}</p>
           <motion.div className="figma-scoreboard" style={style(841, 92, 159, 48)} data-node-id="60:766" {...motionFor('60:766')}>
-            <p className="figma-score-label" data-node-id="60:767">Uploaded</p>
+            <p className="figma-score-label" data-node-id="60:767">Verified</p>
             <div className="figma-score-digits" data-node-id="60:768">{items.length ? <div className="figma-score-digit figma-score-result"><p>{successCount}</p></div> : <><motion.div className="figma-score-digit figma-score-zero" data-node-id="60:777" {...motionFor('60:777')}><p>0</p></motion.div><motion.div className="figma-score-digit figma-score-one" data-node-id="60:786" {...motionFor('60:786')}><p>1</p></motion.div></>}</div>
           </motion.div>
 
           <motion.div className={`figma-dropzone ${isDragging ? 'is-dragging-file' : ''}`} style={style(160, 225, 760, 415)} data-node-id="60:801" {...motionFor('60:801')} onClick={() => !items.length && choose(fileInput)} role="button" tabIndex={0} aria-label="Drop files here or choose files" onKeyDown={(event) => { if ((event.key === 'Enter' || event.key === ' ') && !items.length) choose(fileInput); }}>
-            <input ref={fileInput} type="file" accept=".pdf,.docx,.pptx,.zip,.txt" multiple hidden onChange={onFilesPicked} />
-            <input ref={folderInput} type="file" accept=".pdf,.docx,.pptx,.zip,.txt" multiple hidden onChange={onFilesPicked} />
+            <input ref={fileInput} type="file" accept="application/pdf,.pdf" hidden onChange={onFilesPicked} />
+            <input ref={folderInput} type="file" accept="application/pdf,.pdf" hidden onChange={onFilesPicked} />
             <div className="figma-upload-icon" style={style(354, 41, 52, 52)} data-node-id="60:802"><img src="/assets/upload-figma/upload-icon.png" alt="" /></div>
-            <p className="figma-drop-title" style={style(0, 120, 760)} data-node-id="60:804">{processing ? 'Taking the shot!' : completed ? `${successCount} of ${items.length} uploaded` : 'Drop files here'}</p>
-            <p className="figma-drop-hint" style={style(0, 176, 760)} data-node-id="60:805">{processing ? 'Every file is aimed at the hoop automatically' : completed ? 'Review each file below' : 'Files and folders · up to 50 MB each'}</p>
+            <p className="figma-drop-title" style={style(0, 120, 760)} data-node-id="60:804">{processing ? 'Taking the shot!' : completed ? `${successCount} of ${items.length} verified` : 'Drop a PDF here'}</p>
+            <p className="figma-drop-hint" style={style(0, 176, 760)} data-node-id="60:805">{processing ? 'Your PDF is being verified locally' : completed ? 'Review the verification result below' : 'PDF · up to 50 MB'}</p>
             <div className="figma-target" style={style(280, 275, 200, 120)} data-node-id="60:806" />
-            {!items.length && <div className="figma-picker-actions"><button type="button" className="figma-pick-button" onClick={(event) => { event.stopPropagation(); choose(fileInput); }}>Choose files</button><button type="button" className="figma-pick-button figma-folder-button" onClick={(event) => { event.stopPropagation(); choose(folderInput); }}>Choose folder</button></div>}
+            {!items.length && !countdown && <div className="figma-picker-actions"><button type="button" className="figma-pick-button" onClick={(event) => { event.stopPropagation(); choose(fileInput); }}>Choose PDF</button></div>}
           </motion.div>
 
           {!items.length && <label className="figma-animation-toggle" style={style(80, 190)}><input type="checkbox" checked={playShotAnimation} onChange={(event) => { const enabled = event.target.checked; setPlayShotAnimation(enabled); writeUserPreference('nexus-upload-shot-animation', currentUserId, enabled ? 'on' : 'off'); }} /><span>Play shot animation</span></label>}
@@ -208,17 +218,18 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({ isOpen
           <motion.div className="figma-net" style={style(425, 646, 230, 150)} data-node-id="60:1250" {...motionFor('60:1250')}><img src="/assets/upload-figma/basketball-net.png" alt="" /></motion.div>
           <motion.div className="figma-rim-front" style={style(420, 622, 240, 36)} data-node-id="60:1258" {...motionFor('60:1258')}><img src="/assets/upload-figma/basketball-rim.png" alt="" /></motion.div>
           {playShotAnimation && items.filter((item) => item.status === 'success').map((item) => <motion.span key={item.id} className="figma-plus-one" style={style(item.point?.x ?? 598, item.point?.y ?? 590)} initial={{ opacity: 0, y: 14, scale: 0.4 }} animate={{ opacity: [0, 1, 1, 0], y: [14, -4, -4, -36], scale: [0.4, 1.15, 1, 0.9] }} transition={{ duration: 2.4, delay: 0, ease: 'easeOut' }}>+1</motion.span>)}
+          {countdown !== null && <div className="figma-upload-countdown">Verified ✓<span>Opening Academic Repository in {countdown}…</span></div>}
 
           {completed && <div className="figma-results">
             {items.map((item, index) => <motion.div key={item.id} className={`figma-result-row ${item.status}`} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.06 }}>
               <span className="figma-result-file" aria-hidden="true">{fileExtension(item.file.name).toUpperCase().slice(0, 4)}</span>
               <span className="figma-result-name" title={item.file.name}>{item.file.name}<small>{(item.file.size / (1024 * 1024)).toFixed(2)} MB{item.message ? ` · ${item.message}` : ''}</small></span>
-              <span className="figma-result-status">{item.status === 'success' ? <><img src="/assets/upload-figma/upload-success.png" alt="" />Successfully uploaded</> : item.status === 'error' ? <><b aria-hidden="true">×</b>Upload failed</> : <><i />Uploading…</>}</span>
+              <span className="figma-result-status">{item.status === 'success' ? <><img src="/assets/upload-figma/upload-success.png" alt="" />Verified successfully</> : item.status === 'error' ? <><b aria-hidden="true">×</b>Verification failed</> : <><i />Verifying…</>}</span>
             </motion.div>)}
           </div>}
           {!items.length && playShotAnimation && <motion.div className="figma-file-flight" style={{ ...style(190, 985, 120, 150), transformOrigin: '0 0' }} transformTemplate={({ x = '0px', y = '0px', rotate = '0deg', scaleX = '1', scaleY = '1' }) => `translate(${x}, ${y}) translate(50%, 50%) rotate(${rotate}) scale(${scaleX}, ${scaleY}) translate(-50%, -50%)`} data-node-id="60:1218" {...motionFor('60:1218')}><img src="/assets/upload-figma/flying-file.png" alt="" /></motion.div>}
           {!items.length && playShotAnimation && <><motion.p className="figma-plus-one" style={style(600, 610)} data-node-id="60:1280" {...motionFor('60:1280')}>+1</motion.p><motion.div className="figma-cursor figma-cursor-arrow" style={style(246.6, 1056.6, 47.6, 68)} data-node-id="60:1405" {...motionFor('60:1405')}><img src="/assets/upload-figma/cursor.png" alt="" /></motion.div><motion.div className="figma-cursor figma-cursor-open" style={style(218.8, 1024, 57.6, 64)} data-node-id="60:1448" {...motionFor('60:1448')}><img src="/assets/upload-figma/open-hand.svg" alt="" /></motion.div><motion.div className="figma-cursor figma-cursor-closed" style={style(219.6, 1026.4, 57.6, 64)} data-node-id="60:1499" {...motionFor('60:1499')}><img src="/assets/upload-figma/closed-hand.svg" alt="" /></motion.div></>}
-          {completed && <button type="button" className="figma-done-button" onClick={onClose}>Done</button>}
+          {completed && countdown === null && <button type="button" className="figma-done-button" onClick={onClose}>Done</button>}
         </div>
       </div>
     </div>
