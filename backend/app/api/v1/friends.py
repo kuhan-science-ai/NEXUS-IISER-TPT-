@@ -31,7 +31,7 @@ async def list_friends(
     if not friend_ids:
         return []
 
-    u_stmt = select(User).options(selectinload(User.profile)).where(User.id.in_(friend_ids))
+    u_stmt = select(User).options(selectinload(User.profile).selectinload(UserProfile.avatar)).where(User.id.in_(friend_ids))
     u_res = await db.execute(u_stmt)
     users = u_res.scalars().all()
 
@@ -44,6 +44,7 @@ async def list_friends(
             username=u.username,
             full_name=p.full_name if p else u.username,
             avatar_url=avatar_url,
+            avatar_mime_type=p.avatar.mime_type if p and p.avatar else None,
             department=p.department if p else None,
             status_text=p.status_text if p else None,
         ))
@@ -62,7 +63,7 @@ async def list_friend_requests(
 
     items = []
     for r in requests:
-        s_stmt = select(User).options(selectinload(User.profile)).where(User.id == r.sender_id)
+        s_stmt = select(User).options(selectinload(User.profile).selectinload(UserProfile.avatar)).where(User.id == r.sender_id)
         s_res = await db.execute(s_stmt)
         sender = s_res.scalar_one_or_none()
         sender_name = sender.profile.full_name if sender and sender.profile else (sender.username if sender else "Unknown")
@@ -71,6 +72,8 @@ async def list_friend_requests(
             sender_id=r.sender_id,
             sender_username=sender.username if sender else "unknown",
             sender_name=sender_name,
+            sender_avatar_url=f"/api/v1/files/{sender.profile.avatar_file_id}/download" if sender and sender.profile and sender.profile.avatar_file_id else None,
+            sender_avatar_mime_type=sender.profile.avatar.mime_type if sender and sender.profile and sender.profile.avatar else None,
             receiver_id=current_user.id,
             receiver_username=current_user.username,
             status=r.status.value,
@@ -256,7 +259,7 @@ async def search_users(
     db: AsyncSession = Depends(get_db)
 ):
     query_str = f"%{q.lower()}%"
-    stmt = select(User).options(selectinload(User.profile)).where(
+    stmt = select(User).options(selectinload(User.profile).selectinload(UserProfile.avatar)).where(
         and_(
             User.id != current_user.id,
             User.is_active == True,
@@ -278,6 +281,7 @@ async def search_users(
             username=u.username,
             full_name=p.full_name if p else u.username,
             avatar_url=avatar_url,
+            avatar_mime_type=p.avatar.mime_type if p and p.avatar else None,
             department=p.department if p else None,
             status_text=p.status_text if p else None,
         ))

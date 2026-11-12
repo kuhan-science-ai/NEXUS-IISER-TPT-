@@ -71,6 +71,8 @@ async def format_message_response(msg: Message, db: AsyncSession) -> MessageResp
 
     sender_username = msg.sender.username if msg.sender else "Deleted User"
     sender_name = msg.sender.profile.full_name if (msg.sender and msg.sender.profile) else sender_username
+    sender_profile = msg.sender.profile if msg.sender else None
+    sender_avatar = await db.get(FileMetadata, sender_profile.avatar_file_id) if sender_profile and sender_profile.avatar_file_id else None
 
     reply_preview = None
     if msg.reply_to_id:
@@ -88,6 +90,8 @@ async def format_message_response(msg: Message, db: AsyncSession) -> MessageResp
         sender_id=msg.sender_id,
         sender_username=sender_username,
         sender_name=sender_name,
+        avatar_url=f"/api/v1/files/{sender_profile.avatar_file_id}/download" if sender_profile and sender_profile.avatar_file_id else None,
+        avatar_mime_type=sender_avatar.mime_type if sender_avatar else None,
         content=content_display,
         message_type=msg.message_type,
         reply_to_id=msg.reply_to_id,
@@ -118,7 +122,7 @@ async def list_conversations(
     c_stmt = (
         select(Conversation)
         .options(
-            selectinload(Conversation.members).selectinload(ConversationMember.user).selectinload(User.profile)
+            selectinload(Conversation.members).selectinload(ConversationMember.user).selectinload(User.profile).selectinload(UserProfile.avatar)
         )
         .where(Conversation.id.in_(conv_ids))
         .order_by(desc(Conversation.updated_at))
@@ -154,6 +158,7 @@ async def list_conversations(
                     full_name=member.user.profile.full_name if member.user.profile else member.user.username,
                     role=member.role,
                     avatar_url=avatar_url,
+                    avatar_mime_type=member.user.profile.avatar.mime_type if member.user.profile and member.user.profile.avatar else None,
                 ))
 
         # Title calculation for direct messages

@@ -42,6 +42,8 @@ class FriendRequestResponse(BaseModel):
     sender_id: str
     sender_username: str
     sender_name: str
+    sender_avatar_url: Optional[str] = None
+    sender_avatar_mime_type: Optional[str] = None
     receiver_id: str
     receiver_username: str
     status: str
@@ -52,5 +54,6 @@ class FriendItem(BaseModel):
     username: str
     full_name: str
     avatar_url: Optional[str] = None
+    avatar_mime_type: Optional[str] = None
     department: Optional[str] = None
     status_text: Optional[str] = None

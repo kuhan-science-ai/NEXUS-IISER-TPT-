@@ -779,7 +779,7 @@ async def search_users(q: str = Query(min_length=1, max_length=100), user: dict[
     if not term:
         return []
     needle = f"%{term[:45]}%"
-    rows = await query(db, """SELECT u.id,u.username,p.full_name,p.department,p.status_text,p.avatar_url,p.program,
+    rows = await query(db, """SELECT u.id,u.username,p.full_name,p.department,p.status_text,p.avatar_url,p.avatar_mime_type,p.program,
         CASE WHEN f.id IS NOT NULL THEN 'friends'
              WHEN sent.id IS NOT NULL THEN 'outgoing_pending'
              WHEN received.id IS NOT NULL THEN 'incoming_pending'
@@ -791,31 +791,31 @@ async def search_users(q: str = Query(min_length=1, max_length=100), user: dict[
         WHERE u.is_active=1 AND u.id<>? AND (u.username LIKE ? OR p.full_name LIKE ?)
         ORDER BY CASE WHEN lower(u.username)=lower(?) THEN 0 WHEN lower(u.username) LIKE lower(?) THEN 1 ELSE 2 END,u.username LIMIT 10""",
         user["sub"], user["sub"], user["sub"], user["sub"], user["sub"], user["sub"], user["sub"], needle, needle, term, f"{term}%")
-    return [{"id": r["id"], "username": r["username"], "full_name": r.get("full_name") or r["username"], "avatar_url": r.get("avatar_url"), "department": r.get("department"), "program": r.get("program"), "status_text": r.get("status_text"), "relationship_status": r["relationship_status"]} for r in rows]
+    return [{"id": r["id"], "username": r["username"], "full_name": r.get("full_name") or r["username"], "avatar_url": r.get("avatar_url"), "avatar_mime_type": r.get("avatar_mime_type"), "department": r.get("department"), "program": r.get("program"), "status_text": r.get("status_text"), "relationship_status": r["relationship_status"]} for r in rows]
 
 
 @app.get("/api/v1/friends")
 async def friends(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
-    rows = await query(db, """SELECT u.id,u.username,p.full_name,p.department,p.status_text,p.avatar_url,p.program
+    rows = await query(db, """SELECT u.id,u.username,p.full_name,p.department,p.status_text,p.avatar_url,p.avatar_mime_type,p.program
         FROM friendships f JOIN users u ON u.id=CASE WHEN f.user_id_1=? THEN f.user_id_2 ELSE f.user_id_1 END
         LEFT JOIN user_profiles p ON p.user_id=u.id WHERE f.user_id_1=? OR f.user_id_2=? ORDER BY u.username""", user["sub"], user["sub"], user["sub"])
-    return [{"id": r["id"], "username": r["username"], "full_name": r.get("full_name") or r["username"], "avatar_url": r.get("avatar_url"), "department": r.get("department"), "status_text": r.get("status_text"), "program": r.get("program")} for r in rows]
+    return [{"id": r["id"], "username": r["username"], "full_name": r.get("full_name") or r["username"], "avatar_url": r.get("avatar_url"), "avatar_mime_type": r.get("avatar_mime_type"), "department": r.get("department"), "status_text": r.get("status_text"), "program": r.get("program")} for r in rows]
 
 
 @app.get("/api/v1/friends/requests")
 async def friend_requests(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
-    rows = await query(db, """SELECT fr.*,s.username sender_username,sp.full_name sender_name,sp.avatar_url sender_avatar_url,r.username receiver_username
+    rows = await query(db, """SELECT fr.*,s.username sender_username,sp.full_name sender_name,sp.avatar_url sender_avatar_url,sp.avatar_mime_type sender_avatar_mime_type,r.username receiver_username
         FROM friend_requests fr JOIN users s ON s.id=fr.sender_id LEFT JOIN user_profiles sp ON sp.user_id=s.id
         JOIN users r ON r.id=fr.receiver_id WHERE fr.receiver_id=? AND fr.status='pending' ORDER BY fr.created_at""", user["sub"])
-    return [{"id": r["id"], "sender_id": r["sender_id"], "sender_username": r["sender_username"], "sender_name": r.get("sender_name") or r["sender_username"], "sender_avatar_url": r.get("sender_avatar_url"), "receiver_id": r["receiver_id"], "receiver_username": r["receiver_username"], "status": r["status"], "direction": "received", "created_at": r["created_at"]} for r in rows]
+    return [{"id": r["id"], "sender_id": r["sender_id"], "sender_username": r["sender_username"], "sender_name": r.get("sender_name") or r["sender_username"], "sender_avatar_url": r.get("sender_avatar_url"), "sender_avatar_mime_type": r.get("sender_avatar_mime_type"), "receiver_id": r["receiver_id"], "receiver_username": r["receiver_username"], "status": r["status"], "direction": "received", "created_at": r["created_at"]} for r in rows]
 
 
 @app.get("/api/v1/friends/requests/sent")
 async def sent_friend_requests(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
-    rows = await query(db, """SELECT fr.id,fr.receiver_id,fr.created_at,u.username,p.full_name,p.avatar_url
+    rows = await query(db, """SELECT fr.id,fr.receiver_id,fr.created_at,u.username,p.full_name,p.avatar_url,p.avatar_mime_type
         FROM friend_requests fr JOIN users u ON u.id=fr.receiver_id LEFT JOIN user_profiles p ON p.user_id=u.id
         WHERE fr.sender_id=? AND fr.status='pending' ORDER BY fr.created_at""", user["sub"])
-    return [{"id": row["id"], "user_id": row["receiver_id"], "username": row["username"], "full_name": row.get("full_name") or row["username"], "avatar_url": row.get("avatar_url"), "status": "pending", "direction": "sent", "created_at": row["created_at"]} for row in rows]
+    return [{"id": row["id"], "user_id": row["receiver_id"], "username": row["username"], "full_name": row.get("full_name") or row["username"], "avatar_url": row.get("avatar_url"), "avatar_mime_type": row.get("avatar_mime_type"), "status": "pending", "direction": "sent", "created_at": row["created_at"]} for row in rows]
 
 
 @app.post("/api/v1/friends/request/{target_user_id}")
@@ -1059,7 +1059,7 @@ async def list_campus_group_messages(group_id: str, channel_id: str, user: dict[
     await require_campus_group_member(db, group_id, user["sub"])
     if not await first(db, "SELECT 1 AS ok FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id):
         raise HTTPException(status_code=404, detail="Channel not found")
-    rows = await query(db, """SELECT m.*,u.username,p.full_name FROM campus_group_messages m
+    rows = await query(db, """SELECT m.*,u.username,p.full_name,p.avatar_url,p.avatar_mime_type FROM campus_group_messages m
         LEFT JOIN users u ON u.id=m.sender_id LEFT JOIN user_profiles p ON p.user_id=u.id
         WHERE m.channel_id=? ORDER BY m.created_at DESC LIMIT 200""", channel_id)
     rows.reverse()
@@ -1067,7 +1067,7 @@ async def list_campus_group_messages(group_id: str, channel_id: str, user: dict[
     for row in rows:
         reactions = await query(db, "SELECT emoji,user_id FROM campus_group_message_reactions WHERE message_id=? ORDER BY created_at", row["id"])
         original = await first(db, "SELECT m.content,u.username,p.full_name FROM campus_group_messages m LEFT JOIN users u ON u.id=m.sender_id LEFT JOIN user_profiles p ON p.user_id=u.id WHERE m.id=?", row["reply_to_id"]) if row.get("reply_to_id") else None
-        output.append({"id": row["id"], "text": "This message was deleted." if row["is_deleted"] else row["content"], "sender": row.get("full_name") or row.get("username") or "Former student", "sender_id": row.get("sender_id"), "at": row["created_at"], "reactions": [{"emoji": emoji, "count": len([r for r in reactions if r["emoji"] == emoji]), "user_ids": [r["user_id"] for r in reactions if r["emoji"] == emoji]} for emoji in dict.fromkeys(reaction["emoji"] for reaction in reactions)], "replyToId": row.get("reply_to_id"), "reply_preview": ((original.get("full_name") or original.get("username") or "Student") + ": " + original.get("content", ""))[:200] if original else None})
+        output.append({"id": row["id"], "text": "This message was deleted." if row["is_deleted"] else row["content"], "sender": row.get("full_name") or row.get("username") or "Former student", "sender_id": row.get("sender_id"), "avatar_url": row.get("avatar_url"), "avatar_mime_type": row.get("avatar_mime_type"), "at": row["created_at"], "reactions": [{"emoji": emoji, "count": len([r for r in reactions if r["emoji"] == emoji]), "user_ids": [r["user_id"] for r in reactions if r["emoji"] == emoji]} for emoji in dict.fromkeys(reaction["emoji"] for reaction in reactions)], "replyToId": row.get("reply_to_id"), "reply_preview": ((original.get("full_name") or original.get("username") or "Student") + ": " + original.get("content", ""))[:200] if original else None})
     return output
 
 
@@ -1080,8 +1080,8 @@ async def send_campus_group_message(group_id: str, channel_id: str, payload: Cam
         raise HTTPException(status_code=404, detail="Reply target not found")
     message_id, stamp = new_id(), now()
     await execute(db, "INSERT INTO campus_group_messages(id,group_id,channel_id,sender_id,content,reply_to_id,created_at) VALUES(?,?,?,?,?,?,?)", message_id, group_id, channel_id, user["sub"], payload.content.strip(), payload.reply_to_id, stamp)
-    row = await first(db, "SELECT u.username,p.full_name FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?", user["sub"])
-    return {"id": message_id, "text": payload.content.strip(), "sender": row.get("full_name") or row["username"], "sender_id": user["sub"], "at": stamp, "reactions": [], "replyToId": payload.reply_to_id}
+    row = await first(db, "SELECT u.username,p.full_name,p.avatar_url,p.avatar_mime_type FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?", user["sub"])
+    return {"id": message_id, "text": payload.content.strip(), "sender": row.get("full_name") or row["username"], "sender_id": user["sub"], "avatar_url": row.get("avatar_url"), "avatar_mime_type": row.get("avatar_mime_type"), "at": stamp, "reactions": [], "replyToId": payload.reply_to_id}
 
 
 @app.delete("/api/v1/groups/{group_id}/channels/{channel_id}/messages")
@@ -1145,7 +1145,7 @@ def profile_url(row: dict[str, Any]) -> str | None:
 
 
 async def format_message(db: Any, message: dict[str, Any]) -> dict[str, Any]:
-    sender = await first(db, "SELECT u.username,p.full_name FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?", message["sender_id"]) if message.get("sender_id") else None
+    sender = await first(db, "SELECT u.username,p.full_name,p.avatar_url,p.avatar_mime_type FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?", message["sender_id"]) if message.get("sender_id") else None
     reactions = await query(db, "SELECT emoji,user_id FROM message_reactions WHERE message_id=? ORDER BY created_at", message["id"])
     grouped: dict[str, list[str]] = {}
     for reaction in reactions:
@@ -1155,6 +1155,8 @@ async def format_message(db: Any, message: dict[str, Any]) -> dict[str, Any]:
         "id": message["id"], "conversation_id": message["conversation_id"], "sender_id": message["sender_id"],
         "sender_username": sender["username"] if sender else "Deleted User",
         "sender_name": (sender.get("full_name") or sender["username"]) if sender else "Deleted User",
+        "avatar_url": sender.get("avatar_url") if sender else None,
+        "avatar_mime_type": sender.get("avatar_mime_type") if sender else None,
         "content": "This message was deleted." if message["is_deleted"] else message["content"],
         "message_type": message["message_type"], "reply_to_id": message.get("reply_to_id"),
         "reply_preview": ((reply["content"][:50] + "..." if len(reply["content"]) > 50 else reply["content"]) if reply else None),
@@ -1165,7 +1167,7 @@ async def format_message(db: Any, message: dict[str, Any]) -> dict[str, Any]:
 
 
 async def conversation_summary(db: Any, conversation: dict[str, Any], current_user_id: str) -> dict[str, Any]:
-    members = await query(db, """SELECT u.id user_id,u.username,COALESCE(p.full_name,u.username) full_name,cm.role,p.avatar_url
+    members = await query(db, """SELECT u.id user_id,u.username,COALESCE(p.full_name,u.username) full_name,cm.role,p.avatar_url,p.avatar_mime_type
         FROM conversation_members cm JOIN users u ON u.id=cm.user_id LEFT JOIN user_profiles p ON p.user_id=u.id
         WHERE cm.conversation_id=? ORDER BY cm.joined_at""", conversation["id"])
     last = await first(db, "SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at DESC LIMIT 1", conversation["id"])
@@ -1177,7 +1179,7 @@ async def conversation_summary(db: Any, conversation: dict[str, Any], current_us
         "description": conversation.get("description"), "creator_id": conversation.get("creator_id"),
         "avatar_url": None, "banner_url": None, "last_message": await format_message(db, last) if last else None,
         "unread_count": 0,
-        "members": [{"user_id": m["user_id"], "username": m["username"], "full_name": m["full_name"], "role": m["role"], "avatar_url": profile_url(m)} for m in members],
+        "members": [{"user_id": m["user_id"], "username": m["username"], "full_name": m["full_name"], "role": m["role"], "avatar_url": profile_url(m), "avatar_mime_type": m.get("avatar_mime_type")} for m in members],
         "created_at": conversation["created_at"],
     }
 

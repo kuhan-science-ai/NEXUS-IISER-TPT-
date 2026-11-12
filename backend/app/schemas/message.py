@@ -40,6 +40,8 @@ class MessageResponse(BaseModel):
     sender_id: Optional[str]
     sender_username: Optional[str]
     sender_name: Optional[str]
+    avatar_url: Optional[str] = None
+    avatar_mime_type: Optional[str] = None
     content: str
     message_type: MessageType
     reply_to_id: Optional[str]
@@ -58,6 +60,7 @@ class ConversationMemberSummary(BaseModel):
     full_name: str
     role: MemberRole
     avatar_url: Optional[str] = None
+    avatar_mime_type: Optional[str] = None
 
 class ConversationSummary(BaseModel):
     id: str

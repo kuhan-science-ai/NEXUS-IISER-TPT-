@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { api } from '../services/api';
+import { ProfileAvatar } from './ProfileAvatar';
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface GlobalSearchModalProps {
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose }) => {
   const [query, setQuery] = useState('');
   const [resources, setResources] = useState<any[]>([]);
+  const [people, setPeople] = useState<any[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -37,11 +39,19 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     return () => { active = false; };
   }, [isOpen, query]);
 
+  useEffect(() => {
+    if (!isOpen || !query.trim()) { setPeople([]); return; }
+    let active = true;
+    const refresh = () => void api.searchUsers(query.trim()).then(rows => { if (active) setPeople(rows); }).catch(() => { if (active) setPeople([]); });
+    const timer = window.setTimeout(refresh, 180);
+    const interval = window.setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 15000);
+    return () => { active = false; window.clearTimeout(timer); window.clearInterval(interval); };
+  }, [isOpen, query]);
+
   if (!isOpen) return null;
 
   const mockPeopleGroups = [
     { name: 'Quantum Collective', desc: 'Study group · 12 students · PHY 301', type: 'Group', path: '/studygroups' },
-    { name: 'Meera Iyer', desc: 'Physics · BS–MS 2023 · IISER Tirupati', type: 'Student', path: '/messaging' },
     { name: 'Skywatchers Club', desc: 'Campus club · 148 students · Astronomy night Fri', type: 'Club', path: '/campus?tab=events' },
   ];
 
@@ -233,6 +243,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                 </span>
               </div>
             ))}
+            {people.map(person => <div key={person.id} onClick={() => { navigate('/friends'); onClose(); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }} onMouseEnter={event => { event.currentTarget.style.background = 'var(--bg-raised)'; }} onMouseLeave={event => { event.currentTarget.style.background = 'transparent'; }}><ProfileAvatar className="friends-avatar" user={person} /><div style={{ minWidth: 0 }}><div style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>{person.full_name || person.username}</div><div style={{ color: 'var(--text-muted)', fontSize: 11 }}>@{person.username}{person.department ? ` · ${person.department}` : ''}</div></div><span style={{ marginLeft: 'auto', color: 'var(--secondary)', fontSize: 11 }}>Student</span></div>)}
           </div>
         </div>
 

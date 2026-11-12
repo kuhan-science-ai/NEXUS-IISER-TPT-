@@ -1,5 +1,7 @@
 # NEXUS Project State
 
+Profile avatar URLs and media types flow through friend/search, conversation member, direct-message, and group-message responses. Shared avatar rendering covers Friends, global search, DMs, and group chat. Profile saves refresh local views immediately; active people and conversation lists refresh every 15 seconds.
+
 Academic resource upload/edit dialogs preview an optional recolorable fire-grid animation. Selection and hex color are stored with the resource and rendered as a soft, narrow overlay around the full card border while preserving the standard card and button layout. Production D1 migration `0013_academic_resource_animation.sql` is applied; local D1/FastAPI need migrations.
 
 The fire overlay preserves the standard resource card layout and button positions; its animation is clipped to a subtle border band.

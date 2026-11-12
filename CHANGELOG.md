@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
+- Rendered profile avatars in Friends, friend/search results, global search, DMs, conversation members, and group chats; profile saves refresh this browser immediately and active lists reload current avatars periodically.
 - Raised the fire frame above the resource card and reduced its visual size.
 - Preserved the original resource card and button dimensions/placement while refining the fire animation into a softer, narrow border overlay.
 - Changed the fire-grid resource treatment to a full-card outer frame with centered card content and inset spacing that keeps flames away from the banner, thumbnail, and text.

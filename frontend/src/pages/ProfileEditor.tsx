@@ -217,6 +217,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
       try { localStorage.setItem(themeStorageKey, JSON.stringify({ a: themeColorA, b: themeColorB })); } catch { /* theme preview remains available for this session */ }
       try { localStorage.setItem(mediaStorageKey, JSON.stringify({ avatarIsVideo, bannerIsVideo, avatarEffect })); } catch { /* media preferences remain available for this session */ }
       await onProfileUpdated?.();
+      window.dispatchEvent(new CustomEvent('nexus-profile-updated'));
       initialValues.current = { displayName: displayName.trim(), bio, pronouns, accentColor, themeColorA, themeColorB, avatarEffect };
       setPendingAvatar(null); setPendingBanner(null); setRemoveAvatar(false); setRemoveBanner(false);
       setIsCloseBlocked(false);
