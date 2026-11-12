@@ -3,7 +3,8 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
-- Added drag, zoom, rotate, reset, and crop previews for profile photos/banners and Academic Repository pictures/banners; applying an animated media crop stores its current frame as a still WebP.
+- Preserved original animated GIF/video profile media when applying its preview, rendered GIF banners with image elements, and raised profile banner limits to 20 MB in the UI and both APIs.
+- Added drag, zoom, rotate, reset, and crop previews for profile photos/banners and Academic Repository pictures/banners; profile GIF/video files retain their animation when applied.
 - Refined resource preview stacking and clipping so banner, metadata, and changing action controls sit above the animated fire without inner scrollbars.
 - Added a scaled resource preview modal that opens from card-body clicks and preserves the banner, text, thumbnail, animation, and independent action buttons.
 - Fixed the fire animation by deriving a transparent animated WebP frame from the source GIF and using it in both card overlays and the upload/edit preview; this avoids opaque center fill and mask-dependent playback.

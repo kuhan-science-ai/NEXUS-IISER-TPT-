@@ -717,7 +717,7 @@ async def upload_profile_media(kind: str, request: Request, user: dict[str, Any]
     mime = str(getattr(file, "content_type", "") or "application/octet-stream").lower()
     if mime not in PROFILE_MEDIA_MIMES:
         raise HTTPException(status_code=400, detail="Unsupported profile media type")
-    max_size = (8 if kind == "avatar" else 10) * 1024 * 1024
+    max_size = (8 if kind == "avatar" else 20) * 1024 * 1024
     content = await file.read(max_size + 1)
     if not content:
         raise HTTPException(status_code=400, detail="Empty files cannot be uploaded")

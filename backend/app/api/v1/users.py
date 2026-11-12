@@ -167,7 +167,7 @@ async def upload_banner(
         file=file,
         category="banners",
         allowed_mimes=ALLOWED_PROFILE_MEDIA_MIMES,
-        max_size=10 * 1024 * 1024,
+        max_size=20 * 1024 * 1024,
         delivery_type="upload",
     )
 
