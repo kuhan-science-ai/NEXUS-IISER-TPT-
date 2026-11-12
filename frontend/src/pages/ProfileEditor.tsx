@@ -106,6 +106,10 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
   }, [hasUnsavedChanges]);
 
   const initials = (displayName || currentUser.username).split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase();
+  const liveBannerEdit = imageEditor?.kind === 'banner' ? imageEditor : null;
+  const previewBannerUrl = liveBannerEdit?.url || bannerUrl;
+  const previewBannerIsVideo = liveBannerEdit?.isVideo ?? bannerIsVideo;
+  const previewBannerTransform: React.CSSProperties | undefined = liveBannerEdit ? { objectFit: 'cover', transform: `translate(${liveBannerEdit.x * 100}%, ${liveBannerEdit.y * 100}%) rotate(${liveBannerEdit.rotation}deg) scale(${liveBannerEdit.scale})` } : undefined;
 
   const openImageEditor = async (kind: ImageKind, file?: File) => {
     if (!file) return;
@@ -390,7 +394,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
 
     <main className="profile-editor-preview-column">
       <div className="profile-editor-preview-card">
-        <div className="profile-editor-preview-banner" style={{ backgroundColor: accentColor }}>{bannerMode !== 'solid' && bannerUrl && (bannerIsVideo ? <video src={bannerUrl} autoPlay loop muted playsInline preload="auto" /> : <img src={bannerUrl} alt="" />)}</div>
+        <div className="profile-editor-preview-banner" style={{ backgroundColor: accentColor }}>{(liveBannerEdit || bannerMode !== 'solid') && previewBannerUrl && (previewBannerIsVideo ? <video src={previewBannerUrl} autoPlay loop muted playsInline preload="auto" style={previewBannerTransform} /> : <img src={previewBannerUrl} alt="" style={previewBannerTransform} />)}</div>
         <div className="profile-editor-preview-content">
           <div className={`profile-editor-preview-avatar avatar-effect-${avatarEffect}`} style={{ borderColor: accentColor }}>{avatarUrl ? (avatarIsVideo ? <video src={avatarUrl} autoPlay loop muted playsInline preload="auto" /> : <img src={avatarUrl} alt="" />) : <span>{initials || 'N'}</span>}</div>
           <div className="profile-editor-presence" />
