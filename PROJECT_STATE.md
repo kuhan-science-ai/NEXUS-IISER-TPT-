@@ -12,9 +12,9 @@ Clicking an Academic Repository resource card opens a scaled preview modal with 
 
 The repository preview layers its content and controls above the animated frame, clips frame overflow to avoid inner scrollbars, and reflects updated save/download state while actions are running and after refresh.
 
-Profile photos/banners and Academic Repository thumbnails/banners open crop previews with drag positioning, zoom, rotation, reset, and apply. Profile GIFs are converted to low-resolution, aspect-preserving WebM previews; applying animated crop changes renders a new WebM with the selected framing and matching background fill. The profile editor includes playback pause, seek, trim, and size controls, and banners support up to 20 MB.
+Profile photos/banners and Academic Repository thumbnails/banners open crop previews with drag positioning, zoom, rotation, reset, and apply. Profile GIFs are converted to low-resolution, aspect-preserving WebM previews; applying animated crop changes renders a new WebM with the selected framing and matching background fill. The profile editor includes playback pause, seek, trim, and size controls. Profile photos are capped at 10 MB; banners at 8 MB, with oversized banners opened in the editor for crop/trim.
 
-The profile media crop dialog is portaled above the clipped profile editor, keeping playback and timeline controls visible. Oversized banner selections show an immediate 20 MB warning.
+The profile media crop dialog is portaled above the clipped profile editor, keeping playback and timeline controls visible. Photos over 10 MB are rejected before preview; banners over 8 MB are opened with a default short trim and a size warning.
 
 Animated profile previews provide trim start/end handles, loop playback within the selected segment, and show original file size plus estimated cropped WebM size. Oversized video banners can be trimmed and re-encoded before upload.
 
@@ -41,7 +41,7 @@ NEXUS is a student community and academic platform for IISER Tirupati. The activ
 - The Alt+C developer console is visible only to accounts granted `admin` by the Worker after matching the configured, verified `FIREBASE_ADMIN_EMAIL`; admin group deletion and direct-message soft deletion are server-authorized.
 - Appearance choices, custom palettes, settings toggles, and local UI preferences are scoped to the signed-in account in browser storage. Shared groups and chats remain server-wide; browser preferences do not currently sync across devices.
 - Group owners can delete their group from its settings after confirming; the Worker checks the owner ID and cascades deletion to the group's channels and messages.
-- Profile photos and banners upload through the deployed Worker, with server-side 8 MB/20 MB limits and media signature checks. New media is stored as D1 chunks, profile endpoints return MIME types, and the UI renders GIF/video media in profile surfaces. D1 migration `0008_profile_media.sql` is applied remotely.
+- Profile photos and banners upload through the deployed Worker, with server-side 10 MB/8 MB limits and media signature checks. New media is stored as D1 chunks, profile endpoints return MIME types, and the UI renders GIF/video media in profile surfaces. D1 migration `0008_profile_media.sql` is applied remotely.
 - Login uses Firebase Authentication and NEXUS Worker session exchange. Firebase/token/API steps time out after 25 seconds with a retry message; Google popup remains user-controlled. The root README lists recovery checks for network, Firebase authorized domains/providers, and Worker availability.
 - Email/password signup sends Firebase email verification before NEXUS profile completion; unverified accounts receive a new verification email on login.
 - Firebase Worker session exchange validates ID tokens through Firebase Identity Toolkit using the project's public web API key, then creates or resumes the D1 NEXUS account; no custom JWK or Web Crypto signature verification remains in this auth flow.

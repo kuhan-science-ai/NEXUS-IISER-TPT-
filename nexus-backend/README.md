@@ -111,7 +111,7 @@ npx wrangler d1 migrations apply nexus-database --local
 ```
 # Profile photo and banner storage
 
-Profile photos (including GIFs and videos) are limited to 8 MB; banners are limited to 20 MB. The Worker stores each upload as new chunks in the existing D1 database and records its URL and MIME type on the profile, so media can render correctly after reloads and in profile views. No additional Cloudflare storage service is required.
+Profile photos (including GIFs and videos) are limited to 10 MB; banners are limited to 8 MB. The Worker stores each upload as new chunks in the existing D1 database and records its URL and MIME type on the profile, so media can render correctly after reloads and in profile views. No additional Cloudflare storage service is required.
 
 Apply the profile-media schema migration to production D1 once:
 

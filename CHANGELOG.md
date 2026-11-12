@@ -3,11 +3,12 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
+- Set profile photo and banner limits to 10 MB and 8 MB in the UI and APIs; reject oversized photos before preview, while oversized banners open with a short default trim and compression path. Enable smoother preloaded/hardware-composited banner playback on own and public profiles.
 - Optimized GIF preview/export resolution and bitrate, guarded oversized GIF dimensions, prevented duplicate simultaneous crop renders, and matched final banner framing/background to the crop preview.
 - Added physical start/end trimming for profile video banners, preview looping within the selected segment, and original/estimated export file-size readouts so oversized videos can be reduced before upload.
-- Fixed the profile crop dialog stacking so its playback and seek controls remain visible above the editor; oversized banners now show a clear 20 MB warning.
+- Fixed the profile crop dialog stacking so its playback and seek controls remain visible above the editor; oversized banners now show a clear 8 MB warning.
 - Added a pause button and seek timeline to animated profile image previews; GIFs become editable preview video, and animated crops are rendered into the saved WebM.
-- Preserved original animated GIF/video profile media when applying its preview, rendered GIF banners with image elements, and raised profile banner limits to 20 MB in the UI and both APIs.
+- Preserved animated GIF/video profile media when applying its preview and rendered GIF banners with image elements.
 - Added drag, zoom, rotate, reset, and crop previews for profile photos/banners and Academic Repository pictures/banners; profile GIF/video files retain their animation when applied.
 - Refined resource preview stacking and clipping so banner, metadata, and changing action controls sit above the animated fire without inner scrollbars.
 - Added a scaled resource preview modal that opens from card-body clicks and preserves the banner, text, thumbnail, animation, and independent action buttons.

@@ -457,7 +457,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                     Your profile is part of a verified student community. Only institute students can view it.
                   </p>
                   <div style={{ fontSize: '12px', color: 'var(--primary)', marginTop: '8px', cursor: 'pointer' }}>
-                    Manage profile photos and banners in Main Profile. Photos support images, GIFs, and videos up to 8 MB; banners up to 20 MB.
+                    Manage profile photos and banners in Main Profile. Photos support images, GIFs, and videos up to 10 MB; banners up to 8 MB.
                   </div>
                 </div>
               </div>
