@@ -12,7 +12,7 @@ interface ProfileEditorProps {
 
 const pronounOptions = ['Prefer not to say', 'she / her', 'he / him', 'they / them', 'Add custom…'];
 type ImageKind = 'avatar' | 'banner';
-type ImageEditorState = { kind: ImageKind; file: File; url: string; scale: number; rotation: number; x: number; y: number };
+type ImageEditorState = { kind: ImageKind; file: File; url: string; isVideo: boolean; scale: number; rotation: number; x: number; y: number };
 
 const hexToHsv = (hex: string) => {
   const parsed = hex.replace('#', '');
@@ -104,7 +104,6 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
     if (!file) return;
     const limit = kind === 'avatar' ? 8 : 10;
     const isVideo = file.type === 'video/mp4' || file.type === 'video/webm';
-    const isGif = file.type === 'image/gif';
     if (!file.type.startsWith('image/') && !isVideo) { setError('Choose an image, GIF, MP4 or WebM file.'); return; }
     if (file.size > limit * 1024 * 1024) { setError(`${kind === 'avatar' ? 'Profile photos' : 'Profile banners'} must be ${limit} MB or smaller, including GIFs and videos.`); return; }
     if (isVideo) {
@@ -112,14 +111,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
       if (!Number.isFinite(duration) || duration > 15) { setError('Animated videos must be 15 seconds or shorter.'); return; }
     }
     setError('');
-    // Canvas processing would convert GIF/video to a still frame. Keep their original source and quality.
-    if (isGif || isVideo) {
-      const mediaUrl = URL.createObjectURL(file);
-      if (kind === 'avatar') { setPendingAvatar(file); setAvatarUrl(mediaUrl); setAvatarIsVideo(isVideo); setRemoveAvatar(false); }
-      else { setPendingBanner(file); setBannerUrl(mediaUrl); setBannerIsVideo(isVideo); setRemoveBanner(false); setBannerMode('image'); }
-      return;
-    }
-    setImageEditor({ kind, file, url: URL.createObjectURL(file), scale: 1, rotation: 0, x: 0, y: 0 });
+    setImageEditor({ kind, file, url: URL.createObjectURL(file), isVideo, scale: 1, rotation: 0, x: 0, y: 0 });
   };
 
   const beginImageDrag = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -157,16 +149,18 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
 
   const applyImageEdit = async () => {
     if (!imageEditor) return;
-    const { kind, file, url, scale, rotation, x, y } = imageEditor;
-    const image = new Image();
-    image.src = url;
-    await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Could not process this image.')); });
+    const { kind, file, url, isVideo, scale, rotation, x, y } = imageEditor;
+    const image = isVideo ? document.createElement('video') : new Image();
+    if (isVideo) { (image as HTMLVideoElement).muted = true; (image as HTMLVideoElement).playsInline = true; }
+    await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Could not process this image.')); if (isVideo) { (image as HTMLVideoElement).onloadeddata = () => resolve(); (image as HTMLVideoElement).onerror = () => reject(new Error('Could not process this video.')); } image.src = url; });
     const [width, height] = kind === 'avatar' ? [800, 800] : [1600, 500];
     const canvas = document.createElement('canvas');
     canvas.width = width; canvas.height = height;
     const context = canvas.getContext('2d');
     if (!context) return;
-    const sourceRatio = image.width / image.height;
+    const sourceWidth = isVideo ? (image as HTMLVideoElement).videoWidth : (image as HTMLImageElement).naturalWidth;
+    const sourceHeight = isVideo ? (image as HTMLVideoElement).videoHeight : (image as HTMLImageElement).naturalHeight;
+    const sourceRatio = sourceWidth / sourceHeight;
     const targetRatio = width / height;
     let drawWidth = width; let drawHeight = height;
     if (sourceRatio > targetRatio) drawHeight = height;
@@ -322,8 +316,8 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
     </section>
     {imageEditor && <div className="profile-image-editor-backdrop" role="presentation">
       <section className="profile-image-editor" role="dialog" aria-modal="true" aria-labelledby="profile-image-editor-title">
-        <div className="profile-image-editor-head"><div><h2 id="profile-image-editor-title">Preview and edit {imageEditor.kind === 'avatar' ? 'profile photo' : 'banner'}</h2><p>Your image is uploaded only after you save profile changes.</p></div><button type="button" className="profile-editor-icon-button" onClick={() => setImageEditor(null)} aria-label="Cancel image edit"><X size={17} /></button></div>
-        <div className={`profile-image-crop ${imageEditor.kind === 'avatar' ? 'is-avatar' : 'is-banner'}`} onPointerDown={beginImageDrag} onPointerMove={moveImageDrag} onPointerUp={endImageDrag} onPointerCancel={endImageDrag} role="application" aria-label="Drag image to reposition it"><img draggable={false} src={imageEditor.url} alt="Image preview" style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} /><span className="profile-image-crop-guide">Drag to position</span></div>
+        <div className="profile-image-editor-head"><div><h2 id="profile-image-editor-title">Preview and edit {imageEditor.kind === 'avatar' ? 'profile photo' : 'banner'}</h2><p>{imageEditor.isVideo || imageEditor.file.type === 'image/gif' ? 'Applying a crop saves the current frame as an image.' : 'Your image is uploaded only after you save profile changes.'}</p></div><button type="button" className="profile-editor-icon-button" onClick={() => setImageEditor(null)} aria-label="Cancel image edit"><X size={17} /></button></div>
+        <div className={`profile-image-crop ${imageEditor.kind === 'avatar' ? 'is-avatar' : 'is-banner'}`} onPointerDown={beginImageDrag} onPointerMove={moveImageDrag} onPointerUp={endImageDrag} onPointerCancel={endImageDrag} role="application" aria-label="Drag image to reposition it">{imageEditor.isVideo ? <video draggable={false} src={imageEditor.url} autoPlay loop muted playsInline style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} /> : <img draggable={false} src={imageEditor.url} alt="Image preview" style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} />}<span className="profile-image-crop-guide">Drag to position</span></div>
         <div className="profile-image-editor-controls"><label><ZoomIn size={15} /> Zoom <input type="range" min="1" max="3" step=".01" value={imageEditor.scale} onChange={event => setImageEditor({ ...imageEditor, scale: Number(event.target.value) })} /></label><button type="button" className="profile-editor-secondary" onClick={() => setImageEditor({ ...imageEditor, rotation: imageEditor.rotation + 90 })}><RotateCcw size={15} /> Rotate</button><button type="button" className="profile-editor-text-button" onClick={() => setImageEditor({ ...imageEditor, scale: 1, rotation: 0, x: 0, y: 0 })}>Reset crop</button></div>
         <div className="profile-image-editor-actions"><button type="button" className="profile-editor-secondary" onClick={() => setImageEditor(null)}>Cancel</button><button type="button" className="profile-editor-save" onClick={() => void applyImageEdit()}><Check size={15} /> Apply image</button></div>
       </section>

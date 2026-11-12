@@ -12,6 +12,8 @@ Clicking an Academic Repository resource card opens a scaled preview modal with 
 
 The repository preview layers its content and controls above the animated frame, clips frame overflow to avoid inner scrollbars, and reflects updated save/download state while actions are running and after refresh.
 
+Profile photos/banners and Academic Repository thumbnails/banners open crop previews with drag positioning, zoom, rotation, reset, and apply. GIF/video profile media and GIF resource artwork can be previewed; applying a crop stores the current frame as a still WebP.
+
 Academic Repository resources can be edited by their uploader only. Editing supports title, subject code, publisher, page count, optional PDF replacement with automatic page recount, and replacing artwork. Worker and FastAPI APIs enforce ownership.
 
 Last reviewed: 2026-11-13
