@@ -97,66 +97,50 @@ On 2026-11-07, all NEXUS website accounts and user-owned D1 data were cleared. F
 
 If the Worker reports a verification stage such as **Firebase signing-key import**, send that exact stage and the approximate time to the site maintainer. The Worker logs only the stage and exception type; do not send or paste an ID token.
 
-## Running Laptop GPU AI (GPT-OSS 20B) for All Users Worldwide
+## Local GPU AI & Tunnel Activation Guide
 
-NEXUS can route AI Study Companion and Ask AI chats to OpenAI `gpt-oss:20b` running locally on your laptop's GPU via Ollama, accessible securely from the deployed Cloudflare site anywhere in the world.
-
-The local proxy keeps the model warm for 24 hours between requests, asks Ollama to skip optional reasoning traces, and configures up to 15 simultaneous model requests. Additional requests wait in Ollama's queue (up to 512) in arrival order. The 2,048-token per-request context helps fit parallel requests on the laptop GPU; a cold start or a full queue can still add latency.
+NEXUS uses one model for both the AI Study Companion and the floating AI assistant: **Qwen3 14B** (`qwen3:14b`) via Ollama on the laptop GPU. The launcher uses your already downloaded model, one authenticated local proxy, and one Cloudflare Quick Tunnel. The RTX 5080 has 16 GB VRAM. Ollama is configured for up to 2 parallel generations and queues bursts up to 512 requests; this does **not** mean 100 simultaneous GPU generations. Larger bursts wait for available GPU capacity.
 
 ### Prerequisites
-1. [Ollama](https://ollama.com/) installed with `gpt-oss:20b`:
-   ```powershell
-   ollama pull gpt-oss:20b
-   ```
-2. Cloudflare tunnel client (`cloudflared`) installed:
+
+1. Install [Ollama](https://ollama.com/) and make sure `ollama list` shows `qwen3:14b`. If it is missing, download it with `ollama pull qwen3:14b`.
+2. Install Cloudflare Tunnel:
    ```powershell
    winget install --id Cloudflare.cloudflared --exact
    ```
 
 ### Start AI after restarting your laptop
 
-The deployed website sends AI requests to Ollama running on this laptop. After Windows restarts, you must start Ollama, the authenticated local proxy, and a Cloudflare Quick Tunnel. Keep the two PowerShell windows open and prevent the laptop from sleeping while you want the website AI available.
+Keep both PowerShell windows open and prevent the laptop from sleeping while you want hosted AI available.
 
-1. **Confirm the Ollama model is installed**. In PowerShell, check:
-   ```powershell
-   ollama list
-   ```
-   If `gpt-oss:20b` is missing, download it once:
-   ```powershell
-   ollama pull gpt-oss:20b
-   ```
-
-2. **Terminal 1 — start Ollama with parallel capacity and the authenticated proxy**. From the project folder run:
+1. **Terminal 1 — start Qwen3 14B and the authenticated proxy:**
    ```powershell
    cd C:\NEXUS-iisert_final\nexus-backend
    .\start-local-ai.ps1
    ```
-   This restarts Ollama with a maximum of 15 parallel requests, a 512-request FIFO queue, and a 2,048-token context per request; it then checks for `gpt-oss:20b`, creates the private `.local-ai-token` the first time, and starts the proxy on `127.0.0.1:18787`. It closes the Ollama tray/server processes before starting Ollama's server with these settings. Leave this window running. Always use this script; running `python local_ai_proxy.py` directly does not configure Ollama or set the proxy token.
-
-3. **Terminal 2 — start the tunnel**. Open a second PowerShell window and run:
+   This restarts Ollama with the configured parallel and queue limits, verifies `qwen3:14b` is installed, creates `.local-ai-token` on first run, then starts the proxy on `127.0.0.1:18787`. Do not launch `local_ai_proxy.py` directly.
+2. **Terminal 2 — start the tunnel:**
    ```powershell
    cd C:\NEXUS-iisert_final\nexus-backend
    .\start-local-ai.ps1 -Tunnel
    ```
-   Wait for cloudflared to show `Your quick Tunnel has been created!` and copy its `https://...trycloudflare.com` URL. Leave this window running too.
-
-4. **Update the deployed Worker URL after every tunnel restart**. Quick Tunnel addresses change when cloudflared restarts. Open a third PowerShell window, run the command below, and paste the URL from step 3 when Wrangler asks for a secret value:
+   Copy the HTTPS `trycloudflare.com` URL and leave this window open.
+3. **Set the Worker tunnel URL after each Quick Tunnel restart:**
    ```powershell
    cd C:\NEXUS-iisert_final\nexus-backend
    npx wrangler secret put OLLAMA_BASE_URL
    ```
-   Wait for `Success! Uploaded secret OLLAMA_BASE_URL`. This updates the Worker used by the already-uploaded website; no site redeploy is needed.
-
-5. **Set the API key only for first-time setup or after rotating the local token**. The value must exactly match the private contents of `C:\NEXUS-iisert_final\nexus-backend\.local-ai-token`. Run:
+   Paste the HTTPS hostname without a path or trailing slash.
+   This changes the laptop proxy endpoint used by the already deployed Worker. After you push source changes, deploy the Worker from `nexus-backend` with `npx wrangler deploy` to publish new AI routing code.
+4. **Set the proxy API key once, or after rotating `.local-ai-token`:**
    ```powershell
    cd C:\NEXUS-iisert_final\nexus-backend
    npx wrangler secret put OLLAMA_API_KEY
    ```
-   When Wrangler prompts, open `.local-ai-token` locally and paste its contents into the prompt. Do not paste the token into this README, chat, or any committed file. Wait for `Success! Uploaded secret OLLAMA_API_KEY`. You normally do **not** repeat this on laptop restart because the ignored local token file persists.
+   Paste the local token when Wrangler prompts. Never put it in GitHub, README, or chat. You normally keep the same ignored token file after laptop restarts.
+5. Open [NEXUS AI Study Companion](https://nexus-iisert.pages.dev/ai) or use the floating assistant and send a message. If offline, confirm Ollama, proxy, and tunnel are running and that `OLLAMA_BASE_URL` matches the current tunnel URL.
 
-6. **Check it**. Open [NEXUS AI Study Companion](https://nexus-iisert.pages.dev/ai) and send a message. If it reports the laptop AI is offline, confirm all three local pieces are running (Ollama, proxy, tunnel), then verify that `OLLAMA_BASE_URL` is the current tunnel URL. If the proxy token file was deleted or regenerated, repeat step 5.
-
-The 15-request active limit is a configured target, not a guarantee that all replies finish at the same speed; GPU memory and load affect latency, and Ollama may reject requests if its queue fills. Keep `.local-ai-token` private. The laptop, Ollama, proxy, and tunnel must stay online for hosted AI replies. A Quick Tunnel is temporary; update `OLLAMA_BASE_URL` whenever its address changes.
+The laptop, Ollama, proxy, and tunnel must stay online for replies. A Quick Tunnel URL changes after restart. The request queue absorbs bursts but cannot make one laptop GPU generate 100 replies simultaneously.
 
 ## Architecture Philosophy
 - **Decoupled Design**: The frontend is built with minimal functional, unstyled components awaiting official Figma UI design handoff.

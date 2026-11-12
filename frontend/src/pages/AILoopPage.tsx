@@ -307,7 +307,7 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
             <div>
               <h3 style={{ fontWeight: '700', fontSize: '16px', marginBottom: '2px' }}>AI Study Companion</h3>
               <p style={{ fontSize: '12px', color: 'var(--text-faint)' }}>
-                GPT‑OSS 20B · your laptop GPU · conversation history saved
+                'Qwen3 14B · your laptop GPU'
               </p>
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>

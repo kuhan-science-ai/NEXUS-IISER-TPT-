@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Last reviewed: 2026-11-07
+Last reviewed: 2026-11-12
 
 ## Overview
 
@@ -20,9 +20,8 @@ NEXUS is a student community and academic platform for IISER Tirupati. The activ
 - Firebase-only accounts no longer run PBKDF2 to create a password the user never set; D1 stores an opaque, non-verifiable credential marker while Firebase remains the sole login provider for these accounts.
 
 - Cloudflare Pages proxies same-origin `/api/*` requests to the deployed `nexus-backend` Worker. The browser keeps using `/api/v1` without cross-origin requests. The Worker currently supports beta authentication, profiles, friends, and direct/group messaging; other APIs and WebSockets are not yet served by this Cloudflare backend.
-- The Cloudflare Worker persists AI conversations, threads, messages, and profile media chunks in D1 and can call the authenticated laptop Ollama proxy for GPT‑OSS 20B. The laptop must remain online with Ollama and a Cloudflare Tunnel running; the local helper is in `nexus-backend/local_ai_proxy.py`. QOTD/AOTD APIs are available, with one starter physics question seeded. PDF attachments are not supported by this Worker.
-- Laptop AI calls keep GPT‑OSS warm for 24 hours and request `think: false` with a 2,048-token context and 1,024-token generation limit to reduce latency; cold model starts can still take longer.
-- The laptop AI launcher configures Ollama for up to 15 parallel GPT‑OSS requests, followed by an arrival-ordered queue of up to 512 requests, using a 2,048-token per-request context. This is a hardware-dependent target, not unlimited throughput.
+- The Cloudflare Worker persists AI conversations, threads, and messages in D1, then routes all AI chats to the authenticated laptop Ollama proxy using `qwen3:14b`. The launcher and shared Cloudflare Tunnel must remain running for hosted replies.
+- The laptop RTX 5080 has 16 GB VRAM. Ollama is configured for up to two active generations total and a queue of up to 512 requests; the Worker sends a 2,048-token context. This accepts bursts but does not provide 100 simultaneous generations; sustained 100+ active users require a separate multi-GPU serving platform.
 - Local AI activation instructions now start the proxy with `start-local-ai.ps1` (which generates/exports its required shared token) and configure both deployed Worker secrets, `OLLAMA_API_KEY` and `OLLAMA_BASE_URL`; direct `python local_ai_proxy.py` launch does not initialize the token.
 - Generated `JWT_SECRET` and `PASSWORD_PEPPER` values are configured as Cloudflare Worker secrets; secret values are not stored in the repository.
 

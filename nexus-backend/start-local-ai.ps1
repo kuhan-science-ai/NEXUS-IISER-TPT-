@@ -34,9 +34,11 @@ if ($Tunnel) {
 $env:NEXUS_LOCAL_AI_TOKEN = Get-OrCreateToken
 $env:NEXUS_OLLAMA_URL = 'http://127.0.0.1:11434/api/chat'
 $env:NEXUS_LOCAL_AI_PORT = '18787'
-$env:OLLAMA_NUM_PARALLEL = '15'
+$env:OLLAMA_NUM_PARALLEL = '2'
+$env:OLLAMA_MAX_LOADED_MODELS = '1'
 $env:OLLAMA_MAX_QUEUE = '512'
-$env:OLLAMA_CONTEXT_LENGTH = '2048'
+$env:OLLAMA_CONTEXT_LENGTH = '4096'
+$env:OLLAMA_KEEP_ALIVE = '10m'
 
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue
 if (-not $ollama) { throw 'Ollama is missing from PATH. Install Ollama and reopen PowerShell.' }
@@ -45,7 +47,7 @@ if (-not $ollama) { throw 'Ollama is missing from PATH. Install Ollama and reope
 # tray app/server so the limits below are applied to this local AI instance.
 $runningOllama = Get-Process -Name 'ollama','ollama app' -ErrorAction SilentlyContinue
 if ($runningOllama) {
-  Write-Host 'Restarting Ollama with 15 parallel requests and a 512-request queue...'
+  Write-Host 'Restarting Ollama with 2 parallel requests and a 512-request queue...'
   $runningOllama | Stop-Process -Force
   Start-Sleep -Seconds 2
 }
@@ -60,14 +62,16 @@ for ($attempt = 0; $attempt -lt 60; $attempt++) {
 }
 if (-not $ready) { throw 'Ollama server did not become ready. Run `ollama serve` manually to inspect the startup error.' }
 
-$model = & $ollama.Source list | Select-String '^gpt-oss:20b\s'
-if (-not $model) {
-  throw 'GPT-OSS 20B is missing. Run: ollama pull gpt-oss:20b'
+$models = @(& $ollama.Source list)
+if (-not ($models | Select-String '^qwen3:14b\s')) {
+  throw 'The downloaded qwen3:14b model was not found. Run `ollama pull qwen3:14b` and start this script again.'
 }
 
 Write-Host 'Starting the authenticated local AI proxy at http://127.0.0.1:18787'
-Write-Host 'Ollama concurrency: 15 active requests; up to 512 additional requests queued by Ollama.'
-Write-Host 'Per-request context is 2,048 tokens to fit parallel workloads on this laptop GPU.'
+Write-Host 'The unified Qwen3 14B assistant is available through the authenticated proxy and secure tunnel.'
+Write-Host 'Ollama is configured for up to 2 simultaneous generations and a queue of up to 512 requests.'
+Write-Host 'Requests beyond GPU capacity wait in the Ollama queue; 100 concurrent active generations are not guaranteed on one laptop GPU.'
+Write-Host 'Per-request context is 4,096 tokens.'
 Write-Host "Proxy token file: $tokenPath"
 Write-Host 'Set the Cloudflare Worker OLLAMA_API_KEY secret to the contents of this file.'
 Write-Host 'The token is local-only; do not paste it into chat or commit it.'

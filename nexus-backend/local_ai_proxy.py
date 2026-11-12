@@ -13,11 +13,11 @@ OLLAMA_URL = os.environ.get("NEXUS_OLLAMA_URL", "http://127.0.0.1:11434/api/chat
 ACCESS_TOKEN = os.environ.get("NEXUS_LOCAL_AI_TOKEN", "")
 PORT = int(os.environ.get("NEXUS_LOCAL_AI_PORT", "18787"))
 MAX_BODY = 64 * 1024
+ALLOWED_MODELS = {"qwen3:14b"}
 
 
 class ConcurrentAIHTTPServer(ThreadingHTTPServer):
-    # Accept a burst of chat requests and let Ollama schedule them in arrival
-    # order. Ollama runs up to 15 requests concurrently and queues the rest.
+    # Accept a burst of chat requests and let Ollama schedule them.
     request_queue_size = 512
     daemon_threads = True
 
@@ -41,8 +41,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
         try:
             with urlopen("http://127.0.0.1:11434/api/tags", timeout=3) as response:
                 models = json.loads(response.read()).get("models", [])
-            ready = any(model.get("name", "").split(":")[0] == "gpt-oss" and model.get("name", "").startswith("gpt-oss:20b") for model in models)
-            self._send(200 if ready else 503, {"ok": ready, "model": "gpt-oss:20b", "message": "Ready" if ready else "Run: ollama pull gpt-oss:20b"})
+            names = {model.get("name", "") for model in models}
+            missing = sorted(ALLOWED_MODELS - names)
+            self._send(200 if not missing else 503, {"ok": not missing, "models": sorted(ALLOWED_MODELS - set(missing)), "missing": missing, "message": "Ready" if not missing else "The configured NEXUS model is not installed"})
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
             self._send(503, {"ok": False, "message": "Ollama is not running on localhost:11434"})
 
@@ -62,18 +63,17 @@ class ProxyHandler(BaseHTTPRequestHandler):
             if not isinstance(payload, dict) or not isinstance(payload.get("messages"), list):
                 self._send(400, {"error": "Expected a messages array"})
                 return
+            model = payload.get("model")
+            if model not in ALLOWED_MODELS:
+                self._send(400, {"error": "Unknown NEXUS model"})
+                return
             safe_payload = {
-                "model": "gpt-oss:20b",
+                "model": model,
                 "messages": payload["messages"],
-                # Keep the model warm between requests; loading a 20B model is
-                # much slower than generating short follow-up responses.
-                "keep_alive": "24h",
-                # GPT-OSS can spend time producing a long reasoning trace.
-                # Disable it for quicker conversational answers and keep the
-                # context/output budget bounded for the laptop GPU.
-                "think": False,
+                "keep_alive": "10m",
+                "think": bool(payload.get("think", False)),
                 "stream": False,
-                "options": {"num_ctx": 2048, "num_predict": 1024, "temperature": 0.3},
+                "options": {"num_ctx": 2048, "num_predict": 1200, "temperature": 0.25},
             }
             request = Request(OLLAMA_URL, data=json.dumps(safe_payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
             with urlopen(request, timeout=600) as response:
@@ -91,5 +91,5 @@ class ProxyHandler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     if not ACCESS_TOKEN:
         raise SystemExit("NEXUS_LOCAL_AI_TOKEN must be set before starting the proxy.")
-    print(f"NEXUS laptop AI proxy listening on http://127.0.0.1:{PORT}; model=gpt-oss:20b")
+    print(f"NEXUS laptop AI proxy listening on http://127.0.0.1:{PORT}; model={','.join(sorted(ALLOWED_MODELS))}")
     ConcurrentAIHTTPServer(("127.0.0.1", PORT), ProxyHandler).serve_forever()

@@ -43,9 +43,9 @@ Email/password accounts choose an email, password, username, and display name. G
 
 ## Laptop-hosted AI
 
-The hosted chat calls Ollama on the owner's laptop through an authenticated localhost proxy and Cloudflare Tunnel. Install Ollama, pull `gpt-oss:20b`, and install `cloudflared`.
+The hosted AI features use one model, `qwen3:14b`, through an authenticated localhost proxy and Cloudflare Tunnel. Install Ollama and `cloudflared`; the launcher expects the Qwen3 14B weights to already be installed.
 
-The launcher starts Ollama with up to 15 parallel requests, up to 512 queued requests, and a 2,048-token context per request. Requests beyond the active parallel limit wait in Ollama's queue in arrival order. Actual latency depends on available GPU memory and workload; this is not unlimited capacity.
+The launcher allows up to 2 parallel generations, up to 512 queued requests, and the Worker sends a 2,048-token context per request. This absorbs bursts but does not mean 100 concurrent generations; requests beyond GPU capacity wait in Ollama's queue.
 
 ### Quick Start Commands to Activate AI:
 
@@ -54,7 +54,7 @@ The launcher starts Ollama with up to 15 parallel requests, up to 512 queued req
    cd C:\NEXUS-iisert_final\nexus-backend
    .\start-local-ai.ps1
    ```
-   Run the launcher, not `python local_ai_proxy.py`: it restarts Ollama with the concurrency settings, creates/exports the proxy token, checks for `gpt-oss:20b`, and starts the authenticated proxy. Keep this terminal open.
+   Run the launcher, not `python local_ai_proxy.py`: it restarts Ollama with the concurrency settings, verifies `qwen3:14b`, creates/exports the proxy token, and starts the authenticated proxy. Keep this terminal open.
 2. **Terminal 2 — Cloudflare Tunnel**:
    ```powershell
    cd C:\NEXUS-iisert_final\nexus-backend
@@ -73,7 +73,7 @@ The launcher starts Ollama with up to 15 parallel requests, up to 512 queued req
    ```
    When prompted, enter the HTTPS hostname (no path or trailing `/`). These `secret put` commands update the already deployed Worker, so do not redeploy for this setup.
 
-Keep the proxy and tunnel terminals running, keep the laptop awake, then try Ask AI on the deployed site. After every Quick Tunnel restart, update `OLLAMA_BASE_URL`; update `OLLAMA_API_KEY` only if the local token changes. Ollama remains bound to localhost and is never exposed directly. The proxy is limited to GPT‑OSS 20B and does not log prompts. Do not share or commit `.local-ai-token`.
+Keep the proxy and tunnel terminals running and keep the laptop awake. Both AI chat surfaces use Qwen3 14B through this tunnel. After every Quick Tunnel restart, update `OLLAMA_BASE_URL`; update `OLLAMA_API_KEY` only if the local token changes. Ollama remains bound to localhost and is never exposed directly. The proxy only accepts the configured model name and does not log prompts. Do not share or commit `.local-ai-token`.
 
 ## Deploy to Cloudflare
 
@@ -97,7 +97,7 @@ The current config points to the existing `nexus-database`. Migrations through `
 - Authentication uses signed HS256 bearer access tokens and PBKDF2-SHA256 password hashes; D1 access uses prepared statements.
 - Cloudflare Workers currently caps Web Crypto PBKDF2 at 100,000 iterations. Workers Free also has a 10 ms CPU budget per request, so measure deployed sign-in CPU before treating Free-plan capacity as sufficient.
 - Friends, friend requests, profiles, conversations, messages, reactions, pin/edit/delete, and history clearing are persisted in D1.
-- AI conversations, threads, and messages are persisted in D1. The Worker forwards bounded requests to GPT‑OSS 20B in Ollama on the owner's laptop, through a bearer-token-protected local proxy and a Cloudflare Tunnel. The local proxy keeps the model warm for 24 hours and uses `think: false`, an 8,192-token context, and a 1,024-token output limit for faster replies; prompts are capped at 4,000 characters and page context at 2,500 characters. The laptop and tunnel must be online for responses.
+- AI conversations, threads, and messages are persisted in D1. All conversations use Qwen3 14B through the bearer-token-protected local proxy and one Cloudflare Tunnel; prompts are capped at 4,000 characters, recent history at ten turns, and page context at 2,500 characters. The laptop and tunnel must be online for responses.
 - QOTD/AOTD questions, archive entries, answer submissions, points, and comments use D1. The migration seeds one initial question. PDF attachments are not supported by this Worker yet.
 - The Messenger refreshes visible conversations every five seconds to receive messages across sessions. Cloudflare Durable Objects/WebSockets are not wired yet, so this is polling rather than push delivery.
 - Uploads, settings, password reset, notifications, academic features, and other application APIs are not migrated.
