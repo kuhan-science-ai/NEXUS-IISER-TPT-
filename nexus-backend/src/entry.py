@@ -24,6 +24,11 @@ class AIConversationCreate(BaseModel):
     title: str | None = Field(default="New AI Conversation", max_length=150)
 
 
+class LatexDraftUpdate(BaseModel):
+    engine: str = Field(pattern="^(katex|tectonic)$")
+    source: str = Field(max_length=200_000)
+
+
 class AIChatRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
     page_context: dict[str, Any] | None = None
@@ -359,6 +364,19 @@ class ReactionBody(BaseModel):
 async def health(db: Any = Depends(get_db)):
     await first(db, "SELECT 1 AS ok")
     return {"status": "ok", "database": "connected"}
+
+
+@app.get("/api/v1/latex/drafts")
+async def get_latex_drafts(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    rows = await query(db, "SELECT engine,source,updated_at FROM latex_drafts WHERE user_id=?", user["sub"])
+    return {row["engine"]: {"source": row["source"], "updated_at": row["updated_at"]} for row in rows}
+
+
+@app.put("/api/v1/latex/drafts")
+async def save_latex_draft(payload: LatexDraftUpdate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    stamp = now()
+    await execute(db, "INSERT INTO latex_drafts(user_id,engine,source,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id,engine) DO UPDATE SET source=excluded.source,updated_at=excluded.updated_at", user["sub"], payload.engine, payload.source, stamp)
+    return {"engine": payload.engine, "source": payload.source, "updated_at": stamp}
 
 
 @app.post("/api/v1/auth/register", status_code=status.HTTP_201_CREATED)

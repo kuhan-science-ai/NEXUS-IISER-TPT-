@@ -13,6 +13,9 @@ export async function compileLatex(source: string, filename = 'document', theme:
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
+    if (response.status === 405) {
+      throw new Error('Full LaTeX PDF compilation is not available on the hosted Worker yet. KaTeX preview works in your browser; run the local FastAPI backend to compile PDFs.');
+    }
     throw new Error(payload?.detail || `LaTeX compilation failed (${response.status}).`);
   }
   return response.blob();

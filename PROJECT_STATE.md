@@ -8,6 +8,9 @@ NEXUS is a student community and academic platform for IISER Tirupati. The activ
 
 ## Current status
 
+- LaTeX Studio seeds separate KaTeX and full LaTeX examples and saves each signed-in account's drafts in D1 (`0010_latex_drafts.sql`, pending migration/deployment); KaTeX rendering is browser-local, while full PDF compilation remains a local FastAPI capability until a hosted compiler is added.
+- AI requests continue while navigating between tabs/routes; users can cancel from the active assistant UI. Completed replies mark the account-scoped AI Assistant settings tab with the existing rainbow glow until opened.
+
 - Authentication UI is wired for Firebase email/password and Google providers. The Worker validates Firebase ID tokens through Identity Toolkit and creates persistent D1 profiles. The Firebase Auth identities and sign-in configuration are retained; the D1 website user accounts were cleared on 2026-11-07 so users can create fresh NEXUS profiles.
 - The Alt+C developer console is visible only to accounts granted `admin` by the Worker after matching the configured, verified `FIREBASE_ADMIN_EMAIL`; admin group deletion and direct-message soft deletion are server-authorized.
 - Appearance choices, custom palettes, settings toggles, and local UI preferences are scoped to the signed-in account in browser storage. Shared groups and chats remain server-wide; browser preferences do not currently sync across devices.

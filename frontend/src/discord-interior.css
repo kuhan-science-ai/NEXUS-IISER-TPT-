@@ -461,6 +461,11 @@
   background: linear-gradient(110deg, #01ccea 0%, #20d99f 23%, #ffdf35 43%, #ff8958 60%, #f04cae 76%, #9933ff 100%) !important;
   border-color: rgba(210, 190, 255, .52) !important;
   color: #211632 !important;
+  box-shadow: none;
+  animation: none;
+}
+
+.discord-interior-scope .discord-settings-nav-item.ai-assistant-tab.ai-assistant-completed {
   box-shadow: 0 0 13px rgba(46, 220, 204, .38), 0 0 23px rgba(153, 51, 255, .28);
   animation: nexus-ai-tab-glow 2.8s ease-in-out infinite;
 }

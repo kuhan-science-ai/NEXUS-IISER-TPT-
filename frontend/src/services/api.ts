@@ -407,6 +407,14 @@ class ApiService {
   async listNotifications(): Promise<any[]> {
     return this.request('/campus/notifications');
   }
+
+  async getLatexDrafts(): Promise<Record<string, { source: string; updated_at: string }>> {
+    return this.request('/latex/drafts');
+  }
+
+  async saveLatexDraft(engine: 'katex' | 'tectonic', source: string): Promise<void> {
+    await this.request('/latex/drafts', { method: 'PUT', body: JSON.stringify({ engine, source }) });
+  }
 }
 
 export const api = new ApiService();

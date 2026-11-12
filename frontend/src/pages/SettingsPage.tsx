@@ -41,6 +41,7 @@ type ProfileLaunchEffect = 'classic' | 'fireball';
 export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogout, onProfileUpdated, theme, onThemeChange, uiPalette, onUiPaletteChange, onUiPalettePreview }) => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('account');
+  const [assistantHasCompleted, setAssistantHasCompleted] = useState(() => readUserPreference('nexus-ai-completed', currentUser?.id || 'guest', false));
   const [appearanceTab, setAppearanceTab] = useState<'interface' | 'theme' | 'effects' | 'notes'>('interface');
   const [stickyNotePreferences, setStickyNotePreferences] = useState<StickyNotePreferences>(() => readStickyNotePreferences(currentUser?.id || 'guest'));
   const [profileLaunchEffect, setProfileLaunchEffect] = useState<ProfileLaunchEffect>(() => {
@@ -48,6 +49,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
   });
   const [interfaceSubTab, setInterfaceSubTab] = useState<'presets' | 'builder'>('presets');
   const [dashboardSettingsTab, setDashboardSettingsTab] = useState<'core' | 'study' | 'more' | 'clubs' | 'timetable'>('core');
+
+  useEffect(() => {
+    const updateCompletion = (event: Event) => {
+      const userId = (event as CustomEvent<{ userId?: string }>).detail?.userId;
+      if (userId === currentUser?.id) setAssistantHasCompleted(true);
+    };
+    setAssistantHasCompleted(readUserPreference('nexus-ai-completed', currentUser?.id || 'guest', false));
+    window.addEventListener('nexus-ai-response-completed', updateCompletion);
+    return () => window.removeEventListener('nexus-ai-response-completed', updateCompletion);
+  }, [currentUser?.id]);
   const [customPalettes, setCustomPalettes] = useState<CustomUiPalette[]>(() => readCustomUiPalettes(currentUser?.id || 'guest'));
   const [customPaletteName, setCustomPaletteName] = useState('');
   const [customBackground, setCustomBackground] = useState('#17212c');
@@ -386,8 +397,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                 return (
                   <button
                     key={item.id}
-                    onClick={() => { if (customPaletteEditing && item.id !== 'appearance') discardCustomPalettePreview(); setActiveSection(item.id); }}
-                    className={`discord-settings-nav-item${active ? ' active' : ''}${item.id === 'assistant' ? ' ai-assistant-tab' : ''}${active && item.id === 'assistant' ? ' ai-assistant-active' : ''}`}
+                    onClick={() => { if (customPaletteEditing && item.id !== 'appearance') discardCustomPalettePreview(); setActiveSection(item.id); if (item.id === 'assistant') { setAssistantHasCompleted(false); writeUserPreference('nexus-ai-completed', currentUser?.id || 'guest', false); } }}
+                    className={`discord-settings-nav-item${active ? ' active' : ''}${item.id === 'assistant' ? ' ai-assistant-tab' : ''}${item.id === 'assistant' && assistantHasCompleted ? ' ai-assistant-completed' : ''}${active && item.id === 'assistant' ? ' ai-assistant-active' : ''}`}
                     aria-current={active ? 'page' : undefined}
                     style={{
                       padding: '8px 10px',

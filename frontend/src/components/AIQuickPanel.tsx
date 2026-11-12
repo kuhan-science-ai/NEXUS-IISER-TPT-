@@ -42,6 +42,7 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
   const [assistantName, setAssistantName] = useState(() => readUserPreference('nexus-ai-name', userId, 'NEXUS').slice(0, 10));
   const launcherDisplayName = assistantName.toUpperCase().endsWith(' AI') ? assistantName : `${assistantName} AI`;
   const convId = useRef<string | null>(null);
+  const requestController = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ pointerX: number; pointerY: number; left: number; top: number; width: number; height: number } | null>(null);
   const annotationStart = useRef<{ x: number; y: number } | null>(null);
@@ -213,6 +214,8 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
     const prompt = input.trim();
     if (!prompt || busy || !currentUser) return;
     setInput(''); setError(''); setBusy(true);
+    const controller = new AbortController();
+    requestController.current = controller;
     setLines(prev => [...prev, { role: 'user', content: prompt }, { role: 'assistant', content: '' }]);
     try {
       if (!convId.current) {
@@ -223,6 +226,7 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.getToken()}` },
         body: JSON.stringify({ prompt, page_context: pageContext() }),
+        signal: controller.signal,
       });
       if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.detail || `Assistant request failed (${response.status})`); }
       const reader = response.body?.getReader();
@@ -250,11 +254,17 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
           }
         }
       }
+      writeUserPreference('nexus-ai-completed', userId, true);
+      window.dispatchEvent(new CustomEvent('nexus-ai-response-completed', { detail: { userId } }));
     } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        setLines(prev => prev.map((line, index) => index === prev.length - 1 && !line.content ? { ...line, status: 'Cancelled.' } : line));
+        return;
+      }
       const message = err.message || 'The assistant could not complete the request.';
       setError(message);
       setLines(prev => prev.map((line, index) => index === prev.length - 1 && !line.content ? { ...line, status: message } : line));
-    } finally { setBusy(false); setPointedText(''); setAnnotationText(''); setAnnotationRect(null); }
+    } finally { requestController.current = null; setBusy(false); setPointedText(''); setAnnotationText(''); setAnnotationRect(null); }
   };
 
   const confirm = async (approved: boolean) => {
@@ -338,7 +348,7 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
       setOpen(true);
     }} title={`Drag to move · Click or press Alt+A to ask ${launcherDisplayName}`} aria-label={`Ask ${launcherDisplayName}`} style={{ ...buttonStyle, width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: '50%', color: '#f7f5ff', cursor: 'grab', touchAction: 'none' }}><Sparkles className="nexus-ai-launcher-icon" size={18} /><span className="nexus-ai-launcher-label">Ask {launcherDisplayName}<ArrowRight size={14} /></span><kbd className="nexus-ai-launcher-shortcut">Alt+A</kbd></button> :
       <section className="nexus-ai-panel" style={{ width: 'min(390px, calc(100vw - 28px))', height: 'min(560px, calc(100dvh - 32px))', maxHeight: 'calc(100dvh - 32px)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
-        <header onPointerDown={beginDrag} title="Drag to move the assistant" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 12px', borderBottom: '1px solid var(--border)', cursor: 'move', touchAction: 'none', userSelect: 'none' }}><Move size={14} color="var(--text-faint)" /><Sparkles size={17} /><strong style={{ flex: 1 }}>{assistantName}</strong><button onPointerDown={event => event.stopPropagation()} onClick={() => void newQuickChat()} title="Start a new saved AI chat" style={{ ...buttonStyle, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Plus size={13} /> New</button><span className="nexus-ai-beta">AI</span><button onPointerDown={event => event.stopPropagation()} onClick={() => { setPointMode(true); setAnnotationMode(false); setAnnotationText(''); }} title="Point to page content" style={{ ...buttonStyle, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Crosshair size={14} /> Point</button><button onPointerDown={event => event.stopPropagation()} onClick={() => { setOpen(false); setAnnotationMode(true); setPointMode(false); setPointedText(''); setAnnotationRect(null); }} title="Mark a region to ask about" style={{ ...buttonStyle, display: 'inline-flex', alignItems: 'center', gap: 5 }}><ScanLine size={14} /> Annotate</button><button onPointerDown={event => event.stopPropagation()} onClick={() => setOpen(false)} aria-label="Close assistant" style={buttonStyle}><X size={15} /></button></header>
+        <header onPointerDown={beginDrag} title="Drag to move the assistant" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 12px', borderBottom: '1px solid var(--border)', cursor: 'move', touchAction: 'none', userSelect: 'none' }}><Move size={14} color="var(--text-faint)" /><Sparkles size={17} /><strong style={{ flex: 1 }}>{assistantName}</strong>{busy && <button onPointerDown={event => event.stopPropagation()} onClick={() => requestController.current?.abort()} title="Cancel this response" style={{ ...buttonStyle, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ban size={13} /> Cancel</button>}<button onPointerDown={event => event.stopPropagation()} onClick={() => void newQuickChat()} title="Start a new saved AI chat" style={{ ...buttonStyle, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Plus size={13} /> New</button><span className="nexus-ai-beta">AI</span><button onPointerDown={event => event.stopPropagation()} onClick={() => { setPointMode(true); setAnnotationMode(false); setAnnotationText(''); }} title="Point to page content" style={{ ...buttonStyle, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Crosshair size={14} /> Point</button><button onPointerDown={event => event.stopPropagation()} onClick={() => { setOpen(false); setAnnotationMode(true); setPointMode(false); setPointedText(''); setAnnotationRect(null); }} title="Mark a region to ask about" style={{ ...buttonStyle, display: 'inline-flex', alignItems: 'center', gap: 5 }}><ScanLine size={14} /> Annotate</button><button onPointerDown={event => event.stopPropagation()} onClick={() => setOpen(false)} aria-label="Close assistant" style={buttonStyle}><X size={15} /></button></header>
         {pointMode && <div style={{ padding: '8px 14px', background: 'rgba(139,92,246,.12)', fontSize: 12 }}>Click any page content to give it to the assistant.</div>}
         <div style={{ flex: 1, overflowY: 'auto', padding: 13, display: 'flex', flexDirection: 'column', gap: 9 }}>
           {!lines.length && <p style={{ color: 'var(--text-faint)', fontSize: 13, lineHeight: 1.55 }}>Ask about this page or request a supported change, such as adding a calendar event. Changes require your approval.</p>}

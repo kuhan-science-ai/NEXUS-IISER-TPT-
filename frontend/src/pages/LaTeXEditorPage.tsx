@@ -5,6 +5,7 @@ import { MathRenderer } from '../components/MathRenderer';
 import { SideNav } from '../components/SideNav';
 import { UserSummary } from '../services/api';
 import { readUserPreference, writeUserPreference } from '../services/userPreferences';
+import { api } from '../services/api';
 import { compileLatex, downloadPdf } from '../services/latex';
 import './LaTeXEditorPage.css';
 
@@ -154,7 +155,7 @@ type LatexEngine = 'katex' | 'tectonic';
 type StarterId = 'math' | 'physics' | 'chemistry';
 
 const FAST_STARTERS: Record<StarterId, { label: string; source: string }> = {
-  math: { label: 'Maths · Fast KaTeX', source: String.raw`# Mathematics quick sheet
+  math: { label: 'Maths · Fast KaTeX', source: String.raw`# KaTeX sample · Mathematics
 
 Derivative:
 $$\frac{d}{dx} e^x = e^x$$
@@ -332,11 +333,32 @@ export const LaTeXEditorPage: React.FC<LaTeXEditorPageProps> = ({ currentUser, o
   const [compiledEngine, setCompiledEngine] = useState<LatexEngine>('tectonic');
   const [compiling, setCompiling] = useState(false);
   const [compileError, setCompileError] = useState('');
+  const [draftsLoaded, setDraftsLoaded] = useState(!currentUser);
 
   useEffect(() => () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl); }, [pdfUrl]);
   useEffect(() => { try { localStorage.setItem(fastDraftKey, fastContent); } catch { /* Keep editing if browser storage is unavailable. */ } }, [fastDraftKey, fastContent]);
   useEffect(() => { try { localStorage.setItem(fullDraftKey, fullContent); } catch { /* Keep editing if browser storage is unavailable. */ } }, [fullDraftKey, fullContent]);
   useEffect(() => { setEngineMode(readUserPreference<LatexEngine>('nexus-latex-engine', preferenceUserId, 'katex') === 'tectonic' ? 'tectonic' : 'katex'); }, [preferenceUserId]);
+  useEffect(() => {
+    let active = true;
+    setDraftsLoaded(!currentUser);
+    if (!currentUser) return () => { active = false; };
+    void api.getLatexDrafts().then(drafts => {
+      if (!active) return;
+      if (drafts.katex?.source) setFastContent(drafts.katex.source);
+      if (drafts.tectonic?.source) setFullContent(drafts.tectonic.source);
+    }).catch(() => { /* The account-scoped local draft remains available offline. */ })
+      .finally(() => { if (active) setDraftsLoaded(true); });
+    return () => { active = false; };
+  }, [preferenceUserId]);
+  useEffect(() => {
+    if (!currentUser || !draftsLoaded) return;
+    const timer = window.setTimeout(() => {
+      void api.saveLatexDraft('katex', fastContent).catch(() => { /* Local autosave remains available if the API is offline. */ });
+      void api.saveLatexDraft('tectonic', fullContent).catch(() => { /* Local autosave remains available if the API is offline. */ });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [currentUser, draftsLoaded, fastContent, fullContent]);
 
   const isFullDocument = /\\documentclass\b/.test(content) && /\\begin\{document\}/.test(content);
   const pdfIsCurrent = !!pdfUrl && compiledSource === content && compiledTheme === documentTheme && compiledEngine === engineMode;

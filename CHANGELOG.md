@@ -2,7 +2,11 @@
 
 All notable changes to the NEXUS core architecture will be documented here.
 
-## [Unreleased] - 2026-11-05
+## [Unreleased] - 2026-11-12
+- Added KaTeX and full LaTeX starter examples, account-specific D1 draft autosave, and clear hosted-worker messaging for PDF compilation; added the `0010_latex_drafts.sql` migration (apply before deploying the Worker).
+- Kept AI requests running across tab and route changes, added manual request cancellation, and reused the rainbow tab glow to mark a completed reply until the assistant tab is opened.
+
+## [2026-11-05]
 - Raised Qwen3 response capacity from 1,200 to 4,096 generated tokens and context to 8,192; disabled hidden thinking for faster direct answers. Added a cyclic, personalized “{assistant name} is thinking...” indicator to both AI chat views.
 - Consolidated both AI chat surfaces on the installed Qwen3 14B Ollama model and removed the per-chat subject/model selector. The authenticated local proxy now allows only `qwen3:14b`; README instructions document tunnel activation and the laptop GPU queue limits.
 - Made Firebase-to-NEXUS profile completion recoverable after partial D1 writes, added safe stage-specific Worker errors, and included HTTP status in frontend errors when an API response has no detail.

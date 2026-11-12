@@ -37,6 +37,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({ content, className =
             displayMode: true,
             throwOnError: false,
             strict: false,
+            trust: false,
           });
           return <span key={index} dangerouslySetInnerHTML={{ __html: html }} />;
         } catch {
@@ -49,6 +50,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({ content, className =
             displayMode: false,
             throwOnError: false,
             strict: false,
+            trust: false,
           });
           return <span key={index} dangerouslySetInnerHTML={{ __html: html }} />;
         } catch {

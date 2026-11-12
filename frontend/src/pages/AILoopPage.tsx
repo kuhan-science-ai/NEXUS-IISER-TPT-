@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api, UserSummary } from '../services/api';
 import { MathRenderer } from '../components/MathRenderer';
-import { readUserPreference } from '../services/userPreferences';
+import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 import { SideNav } from '../components/SideNav';
 import { Activity, Ban, BarChart3, Bot, BrainCircuit, Circle, CircleCheck, CircleX, Copy, Database, GitFork, Radio, Reply, Save, Search, Settings2, ShieldCheck, Target, Trash2, Wrench, Zap, type LucideIcon } from 'lucide-react';
 
@@ -52,6 +52,7 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
   const [loadingEarlierMessages, setLoadingEarlierMessages] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [assistantName, setAssistantName] = useState(() => readAssistantName(currentUser?.id || 'guest'));
+  const requestController = useRef<AbortController | null>(null);
 
   const copyMessage = async (content: string) => { try { await navigator.clipboard.writeText(content); } catch { setRequestError('Could not copy this message in this browser.'); } };
   const quoteMessage = (content: string) => { setPrompt(value => `${value}${value ? '\n' : ''}> ${content.split('\n').join('\n> ')}\n\n`); document.querySelector<HTMLInputElement>('[data-ai-prompt]')?.focus(); };
@@ -170,6 +171,8 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
     const submittedPrompt = prompt.trim();
     if (!submittedPrompt || !activeConvId || isProcessing) return;
     setIsProcessing(true); setStages([]); setStreamedText(''); setPendingConfirmation(null); setRequestError('');
+    const controller = new AbortController();
+    requestController.current = controller;
     setPrompt('');
     setConversationMessages(prev => [...prev, { id: `optimistic-${Date.now()}`, role: 'user', content: submittedPrompt, created_at: new Date().toISOString() }]);
     const token = api.getToken();
@@ -178,6 +181,7 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ prompt: submittedPrompt, page_context: getPageContext() }),
+        signal: controller.signal,
       });
       if (!response.ok) {
         const error = await response.json().catch(() => null);
@@ -207,11 +211,19 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
       const persisted = await loadMessages(activeConvId);
       if (!persisted && completedResponse) setConversationMessages(prev => [...prev, { id: `stream-fallback-${Date.now()}`, role: 'assistant', content: completedResponse, created_at: new Date().toISOString() }]);
       setStreamedText('');
+      writeUserPreference('nexus-ai-completed', currentUser.id, true);
+      window.dispatchEvent(new CustomEvent('nexus-ai-response-completed', { detail: { userId: currentUser.id } }));
     } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        setStages(prev => [...prev, { stage: 'cancelled', message: 'Response cancelled.' }]);
+        setIsProcessing(false);
+        return;
+      }
       const message = err.message || 'The assistant could not complete the request.';
       setRequestError(message);
       setStages(prev => [...prev, { stage: 'error', message }]);
     } finally {
+      requestController.current = null;
       setIsProcessing(false);
     }
   };
@@ -228,8 +240,8 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
   };
 
   const handleCancel = async () => {
-    if (!activeConvId) return;
-    await api.cancelAI(activeConvId); setIsProcessing(false);
+    requestController.current?.abort();
+    setIsProcessing(false);
   };
 
   if (!currentUser) return null;
