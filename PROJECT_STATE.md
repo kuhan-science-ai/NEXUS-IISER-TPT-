@@ -8,6 +8,8 @@ Resource cards show a consistent fallback banner when no banner is uploaded. The
 
 The fire overlay preserves the standard resource card layout and button positions; its animation is clipped to a subtle border band.
 
+Clicking an Academic Repository resource card opens a scaled preview modal with its original banner, metadata, thumbnail, and animated fire frame. Card action buttons remain independent of the preview.
+
 Academic Repository resources can be edited by their uploader only. Editing supports title, subject code, publisher, page count, optional PDF replacement with automatic page recount, and replacing artwork. Worker and FastAPI APIs enforce ownership.
 
 Last reviewed: 2026-11-13
