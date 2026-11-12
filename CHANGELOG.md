@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
+- Added resource editing for uploaders, including metadata, PDF replacement with automatic page recount, and optional thumbnail/banner replacement; both APIs reject edits by non-owners.
 - Added optional square resource thumbnails and wide banners, with previews, upload validation, persisted storage, and banner rendering separated from resource titles/details.
 - Restored live subject filters for Physics, Chemistry, Mathematics, and Biology; removed the alternate list mode and tightened the resource grid cards.
 - Added owner-only resource deletion in Discover, Saved resources, and My uploads; both backend implementations enforce uploader ownership and remove the PDF plus associated saved/view records.

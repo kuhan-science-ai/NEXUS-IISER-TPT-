@@ -306,6 +306,10 @@ class ApiService {
     return this.request('/academics/resources', { method: 'POST', body: formData });
   }
 
+  async updateResource(resourceId: string, formData: FormData): Promise<any> {
+    return this.request(`/academics/resources/${resourceId}`, { method: 'PUT', body: formData });
+  }
+
   // Forums
   async listForumPosts(category?: string, query?: string): Promise<any[]> {
     let url = '/forums/posts?';

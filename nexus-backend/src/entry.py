@@ -509,6 +509,39 @@ async def upload_academic_resource(request: Request, user: dict[str, Any] = Depe
     return academic_resource_view(row, True)
 
 
+@app.put("/api/v1/academics/resources/{resource_id}")
+async def edit_academic_resource(resource_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    row = await first(db, "SELECT * FROM academic_resources WHERE id=? AND uploader_id=?", resource_id, user["sub"])
+    if not row:
+        raise HTTPException(status_code=404, detail="Resource not found or you cannot edit it")
+    form = await request.form()
+    try:
+        payload = AcademicResourceInput(title=str(form.get("title", "")).strip(), subject_code=str(form.get("subject_code", "")).strip(), publisher_name=str(form.get("publisher_name", "")).strip(), pages=int(str(form.get("pages", row["pages"]))))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Complete the resource details and provide a valid page count") from exc
+    replacement = form.get("file")
+    content = None
+    filename = row["original_filename"]
+    if replacement is not None and hasattr(replacement, "read") and getattr(replacement, "filename", ""):
+        filename = str(replacement.filename)
+        content = await replacement.read(50 * 1024 * 1024 + 1)
+        if not content or len(content) > 50 * 1024 * 1024 or not filename.lower().endswith(".pdf") or getattr(replacement, "content_type", "") != "application/pdf" or not content.startswith(b"%PDF-"):
+            raise HTTPException(status_code=400, detail="Choose a valid PDF file smaller than 50 MB")
+    artwork = {kind: await academic_artwork_content(form.get(kind)) for kind in ("thumbnail", "banner")}
+    await execute(db, "UPDATE academic_resources SET title=?,subject_code=?,publisher_name=?,pages=?,original_filename=?,size_bytes=? WHERE id=? AND uploader_id=?", payload.title, payload.subject_code, payload.publisher_name, payload.pages, filename[:255], len(content) if content is not None else row["size_bytes"], resource_id, user["sub"])
+    if content is not None:
+        await execute(db, "DELETE FROM academic_resource_chunks WHERE resource_id=?", resource_id)
+        for index, offset in enumerate(range(0, len(content), 1_400_000)):
+            encoded = base64.b64encode(content[offset:offset + 1_400_000]).decode("ascii")
+            await execute(db, "INSERT INTO academic_resource_chunks(resource_id,chunk_index,data_base64) VALUES(?,?,?)", resource_id, index, encoded)
+    for kind, image in artwork.items():
+        if image:
+            await execute(db, "DELETE FROM academic_resource_artwork WHERE resource_id=? AND kind=?", resource_id, kind)
+            await store_academic_artwork(db, resource_id, kind, image)
+    updated = await first(db, "SELECT r.*,u.username AS uploader_name,1 AS is_saved,EXISTS(SELECT 1 FROM academic_resource_artwork a WHERE a.resource_id=r.id AND a.kind='thumbnail') AS has_thumbnail,EXISTS(SELECT 1 FROM academic_resource_artwork a WHERE a.resource_id=r.id AND a.kind='banner') AS has_banner FROM academic_resources r LEFT JOIN users u ON u.id=r.uploader_id WHERE r.id=?", resource_id)
+    return academic_resource_view(updated, bool(updated["is_saved"]))
+
+
 @app.put("/api/v1/academics/resources/{resource_id}/saved")
 async def save_academic_resource(resource_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     if not await first(db, "SELECT 1 AS ok FROM academic_resources WHERE id=?", resource_id):

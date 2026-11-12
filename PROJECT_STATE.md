@@ -1,5 +1,7 @@
 # NEXUS Project State
 
+Academic Repository resources can be edited by their uploader only. Editing supports title, subject code, publisher, page count, optional PDF replacement with automatic page recount, and replacing artwork. Worker and FastAPI APIs enforce ownership.
+
 Last reviewed: 2026-11-13
 
 ## Overview

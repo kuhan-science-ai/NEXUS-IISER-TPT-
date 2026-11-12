@@ -242,6 +242,63 @@ async def upload_academic_resource(
     return {"message": "Resource successfully uploaded", "id": resource.id, "resource_id": resource.id, "title": resource.title}
 
 
+@router.put("/resources/{resource_id}")
+async def edit_academic_resource(
+    resource_id: str,
+    request: Request,
+    title: str = Form(...),
+    subject_code: str = Form(...),
+    publisher_name: str = Form(...),
+    pages: int = Form(..., ge=1, le=100000),
+    file: Optional[UploadFile] = File(None),
+    thumbnail: Optional[UploadFile] = File(None),
+    banner: Optional[UploadFile] = File(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    resource = await db.get(AcademicResource, resource_id)
+    if not resource or resource.uploader_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Resource not found or you cannot edit it")
+    if not title.strip() or len(title.strip()) > 200 or not subject_code.strip() or len(subject_code.strip()) > 40 or not publisher_name.strip() or len(publisher_name.strip()) > 120:
+        raise HTTPException(status_code=400, detail="Title, subject code, and publisher name are required")
+    old_files: list[FileMetadata] = []
+    resource.title, resource.subject_code, resource.publisher_name, resource.pages = title.strip(), subject_code.strip(), publisher_name.strip(), pages
+    if file and file.filename:
+        file.file.seek(0)
+        if file.content_type != "application/pdf" or not (await file.read(5)).startswith(b"%PDF-"):
+            file.file.seek(0)
+            raise HTTPException(status_code=400, detail="The uploaded file is not a valid PDF")
+        file.file.seek(0)
+        stored_name, rel_path, size_bytes, mime = await storage_service.save_file(file=file, category="academics", allowed_mimes={"application/pdf"}, delivery_type="upload")
+        replacement = FileMetadata(filename=(file.filename or "resource.pdf")[:255], stored_filename=stored_name, file_path=rel_path, mime_type=mime, size_bytes=size_bytes, uploader_id=current_user.id, is_public=True, file_category="academic")
+        db.add(replacement)
+        await db.flush()
+        old_file = await db.get(FileMetadata, resource.file_id)
+        if old_file:
+            old_files.append(old_file)
+        resource.file_id, resource.size_bytes = replacement.id, size_bytes
+    for kind, upload in (("thumbnail", thumbnail), ("banner", banner)):
+        if not await validate_resource_artwork(upload):
+            continue
+        stored, path, image_size, image_mime = await storage_service.save_file(upload, category="academics", allowed_mimes={"image/jpeg", "image/png", "image/webp"}, max_size=4 * 1024 * 1024, delivery_type="upload")
+        replacement = FileMetadata(filename=(upload.filename or f"resource-{kind}")[:255], stored_filename=stored, file_path=path, mime_type=image_mime, size_bytes=image_size, uploader_id=current_user.id, is_public=True, file_category="academic-artwork")
+        db.add(replacement)
+        await db.flush()
+        field = "thumbnail_file_id" if kind == "thumbnail" else "banner_file_id"
+        old_id = getattr(resource, field)
+        old_art = await db.get(FileMetadata, old_id) if old_id else None
+        if old_art:
+            old_files.append(old_art)
+        setattr(resource, field, replacement.id)
+    await db.commit()
+    for old in old_files:
+        old_path = old.file_path
+        await db.delete(old)
+        await db.commit()
+        storage_service.delete_file(old_path)
+    return {"message": "Resource updated", "id": resource.id, "title": resource.title}
+
+
 async def academic_resources_for_user(db: AsyncSession, user_id: str, collection: str = "all"):
     stmt = select(AcademicResource).options(selectinload(AcademicResource.file), selectinload(AcademicResource.thumbnail_file), selectinload(AcademicResource.banner_file), selectinload(AcademicResource.course), selectinload(AcademicResource.uploader).selectinload(User.profile), selectinload(AcademicResource.bookmarks))
     if collection == "mine":
