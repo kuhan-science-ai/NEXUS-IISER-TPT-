@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Academic resource upload/edit dialogs preview an optional recolorable fire-grid animation. Selection and hex color are stored with the resource and rendered in a fixed card-side viewport, clear of resource text. Production D1 migration `0013_academic_resource_animation.sql` is applied; local D1/FastAPI need migrations.
+Academic resource upload/edit dialogs preview an optional recolorable fire-grid animation. Selection and hex color are stored with the resource and rendered as a full-card outer frame; card content is centered and inset so flames stay clear of the banner, thumbnail, and text. Production D1 migration `0013_academic_resource_animation.sql` is applied; local D1/FastAPI need migrations.
 
 Academic Repository resources can be edited by their uploader only. Editing supports title, subject code, publisher, page count, optional PDF replacement with automatic page recount, and replacing artwork. Worker and FastAPI APIs enforce ownership.
 

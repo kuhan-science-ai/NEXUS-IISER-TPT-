@@ -1,2 +1,10 @@
-.academic-resource-card-content{min-width:0}.academic-resource-card-content.has-animation{display:grid;grid-template-columns:minmax(0,1fr) 76px;align-items:center;gap:8px}.academic-resource-card-content>div{min-width:0}.academic-resource-animation-card{display:grid;place-items:center;width:76px;height:90px;overflow:hidden;border:1px solid var(--border);border-radius:9px;background:var(--bg-canvas)}.academic-resource-animation-card img{display:block;width:100%;height:100%;object-fit:cover;filter:hue-rotate(var(--resource-animation-hue)) saturate(1.8)}
-@media(max-width:420px){.academic-resource-card-content.has-animation{grid-template-columns:minmax(0,1fr) 62px}.academic-resource-animation-card{width:62px;height:78px}}
+.academic-resource-card{position:relative;isolation:isolate;display:flex;flex-direction:column;align-items:stretch;gap:9px;min-width:0;padding:16px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-surface)}
+.academic-resource-card.has-fire-animation{border-color:transparent;background:var(--bg-surface)}
+.academic-resource-card.has-fire-animation::before{position:absolute;z-index:-1;inset:-13px;content:"";pointer-events:none;background:url('/resource-grid-flame.gif') center/100% 100% no-repeat;filter:hue-rotate(var(--resource-animation-hue)) saturate(1.8)}
+.academic-resource-card-content{min-width:0}.academic-resource-card-content>div{min-width:0}
+.academic-resource-card.has-fire-animation .academic-resource-card-content>div{display:grid;justify-items:center;text-align:center;gap:2px}
+.academic-resource-card.has-fire-animation .academic-resource-card-content>div>div:first-child{justify-content:center}
+.academic-resource-card.has-fire-animation .academic-resource-card-content>div>div:nth-child(2)>div{justify-content:center}
+.academic-resource-card.has-fire-animation .academic-resource-card-content>div>div:nth-child(2)>div:last-child{justify-content:center;flex-wrap:wrap}
+.academic-resource-card.has-fire-animation .academic-resource-card-content strong{ text-align:center }
+@media(max-width:520px){.academic-resource-card.has-fire-animation{padding:14px}}

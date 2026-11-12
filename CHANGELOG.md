@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
+- Changed the fire-grid resource treatment to a full-card outer frame with centered card content and inset spacing that keeps flames away from the banner, thumbnail, and text.
 - Added optional recolorable fire-grid animation to resource upload/edit drafts and compact card previews; production D1 migration `0013_academic_resource_animation.sql` is applied.
 - Added resource editing for uploaders, including metadata, PDF replacement with automatic page recount, and optional thumbnail/banner replacement; both APIs reject edits by non-owners.
 - Added optional square resource thumbnails and wide banners, with previews, upload validation, persisted storage, and banner rendering separated from resource titles/details.
