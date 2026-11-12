@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, BookOpen, Clock3, Download, FileText, Grid2X2, List, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, BookOpen, Clock3, Download, FileText, Search, Trash2, X } from 'lucide-react';
 import { api, UserSummary } from '../services/api';
 import { SideNav } from '../components/SideNav';
 import { TopHeader } from '../components/TopHeader';
 import { GlobalSearchModal } from '../components/GlobalSearchModal';
 import { UploadResourceModal } from '../components/UploadResourceModal';
 import { AcademicResourceMetadataModal, StagedAcademicResource } from '../components/AcademicResourceMetadataModal';
-import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 
 interface RepositoryPageProps { currentUser: UserSummary | null; onLogout?: () => void; }
 type RepositoryTab = 'discover' | 'saved' | 'my' | 'recent';
@@ -38,7 +37,6 @@ export const RepositoryPage: React.FC<RepositoryPageProps> = ({ currentUser, onL
   const [resources, setResources] = useState<Resource[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<Subject>('All');
-  const [resourceView, setResourceView] = useState<'grid' | 'list'>(() => readUserPreference<'grid' | 'list'>('nexus-academic-repository-view', currentUser?.id || '', 'grid'));
   const [sortBy, setSortBy] = useState<'recent' | 'downloads'>('recent');
   const [searchOpen, setSearchOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -58,15 +56,6 @@ export const RepositoryPage: React.FC<RepositoryPageProps> = ({ currentUser, onL
     setStaged(pending);
     navigate('/repository', { replace: true, state: null });
   }, [location.state, navigate]);
-
-  useEffect(() => {
-    setResourceView(readUserPreference<'grid' | 'list'>('nexus-academic-repository-view', currentUser?.id || '', 'grid'));
-  }, [currentUser?.id]);
-
-  const chooseView = (view: 'grid' | 'list') => {
-    setResourceView(view);
-    if (currentUser) writeUserPreference('nexus-academic-repository-view', currentUser.id, view);
-  };
 
   const refresh = useCallback(async () => {
     if (!currentUser) return;
@@ -165,10 +154,6 @@ export const RepositoryPage: React.FC<RepositoryPageProps> = ({ currentUser, onL
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <label style={{ display: 'flex', flex: '1 1 260px', alignItems: 'center', gap: 9, height: 40, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-muted)' }}><Search size={15} /><input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="Search title, subject code, or publisher" aria-label="Search resources" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--text-primary)' }} /></label>
             <select value={sortBy} onChange={event => setSortBy(event.target.value as 'recent' | 'downloads')} aria-label="Sort resources" style={{ height: 40 }}><option value="recent">Recently added</option><option value="downloads">Most downloaded</option></select>
-            <div role="group" aria-label="Resource layout" style={{ display: 'flex', padding: 3, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)' }}>
-              <button type="button" aria-label="Grid view" aria-pressed={resourceView === 'grid'} title="Grid view" onClick={() => chooseView('grid')} style={{ display: 'grid', placeItems: 'center', width: 34, height: 32, border: 0, borderRadius: 6, background: resourceView === 'grid' ? 'var(--primary-glow)' : 'transparent', color: resourceView === 'grid' ? 'var(--primary)' : 'var(--text-muted)', cursor: 'pointer' }}><Grid2X2 size={16} /></button>
-              <button type="button" aria-label="Previous list view" aria-pressed={resourceView === 'list'} title="Previous list view" onClick={() => chooseView('list')} style={{ display: 'grid', placeItems: 'center', width: 34, height: 32, border: 0, borderRadius: 6, background: resourceView === 'list' ? 'var(--primary-glow)' : 'transparent', color: resourceView === 'list' ? 'var(--primary)' : 'var(--text-muted)', cursor: 'pointer' }}><List size={17} /></button>
-            </div>
             {activeTab === 'recent' && resources.length > 0 && <button type="button" onClick={() => setClearPromptOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 38, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-muted)', cursor: 'pointer' }}><Trash2 size={14} /> Delete history</button>}
           </div>
           <div role="group" aria-label="Filter resources by subject" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -180,11 +165,11 @@ export const RepositoryPage: React.FC<RepositoryPageProps> = ({ currentUser, onL
           </div>
           {requestedResourceId && <aside style={{ padding: 13, border: '1px solid var(--primary)', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 12 }}>Requested resource: {resources.find(resource => resource.id === requestedResourceId)?.title || 'It may be in another repository section.'}</aside>}
           {loadError && <p role="alert" style={{ margin: 0, color: 'var(--danger, #e56b6b)', fontSize: 13 }}>{loadError}</p>}
-          {loading ? <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Loading resources…</div> : visibleResources.length ? <div style={resourceView === 'grid' ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(100%,300px),1fr))', gap: 12 } : { display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {visibleResources.map(resource => <article key={resource.id} style={{ display: 'flex', flexDirection: resourceView === 'grid' ? 'column' : 'row', alignItems: resourceView === 'grid' ? 'stretch' : 'center', gap: 13, padding: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface)', minWidth: 0 }}>
-              <span style={{ display: 'grid', placeItems: 'center', flex: 'none', width: 42, height: 42, borderRadius: 9, background: 'var(--primary-glow)', color: 'var(--primary)' }}><FileText size={19} /></span>
-              <div style={{ flex: 1, minWidth: 0 }}><strong style={{ display: 'block', overflowWrap: 'anywhere', color: 'var(--text-primary)', fontSize: 14 }}>{resource.title}</strong><p style={{ margin: '5px 0', color: 'var(--text-muted)', fontSize: 12 }}>{resource.subject_code || resource.subject || 'Subject not specified'} · {resource.publisher_name}</p><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', color: 'var(--text-subtle)', fontSize: 11 }}><span><BookOpen size={12} style={{ verticalAlign: '-2px' }} /> {resource.pages} pages</span><span>{fileSize(resource.size_bytes)}</span><span><Download size={12} style={{ verticalAlign: '-2px' }} /> {resource.download_count} downloads</span><span><Clock3 size={12} style={{ verticalAlign: '-2px' }} /> {new Date(resource.created_at).toLocaleDateString()}</span></div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}><button type="button" disabled={workingId === resource.id} onClick={() => void toggleSave(resource)} style={{ height: 32, padding: '0 11px', border: '1px solid var(--border)', borderRadius: 7, background: resource.is_saved ? 'var(--primary-glow)' : 'var(--bg-surface)', color: resource.is_saved ? 'var(--primary)' : 'var(--text-muted)', cursor: 'pointer', fontSize: 11 }}>{resource.is_saved ? 'Saved ✓' : 'Save'}</button><button type="button" disabled={workingId === resource.id} onClick={() => void download(resource)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 11px', border: 0, borderRadius: 7, background: 'var(--primary)', color: '#fff', cursor: 'pointer', fontSize: 11 }}><Download size={13} />{workingId === resource.id ? 'Please wait…' : 'Download PDF'}</button>{resource.uploader_id === currentUser.id && <button type="button" disabled={workingId === resource.id} onClick={() => void removeResource(resource)} aria-label={`Delete ${resource.title}`} title="Delete this resource for everyone" style={{ display: 'grid', placeItems: 'center', width: 32, height: 32, border: '1px solid var(--border)', borderRadius: 7, background: 'var(--bg-surface)', color: 'var(--danger, #d85c63)', cursor: 'pointer' }}><Trash2 size={14} /></button>}</div>
+          {loading ? <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Loading resources…</div> : visibleResources.length ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(100%,250px),1fr))', gap: 10 }}>
+            {visibleResources.map(resource => <article key={resource.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: 12, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface)', minWidth: 0 }}>
+              <span style={{ display: 'grid', placeItems: 'center', flex: 'none', width: 34, height: 34, borderRadius: 8, background: 'var(--primary-glow)', color: 'var(--primary)' }}><FileText size={16} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}><strong style={{ display: 'block', overflowWrap: 'anywhere', color: 'var(--text-primary)', fontSize: 13 }}>{resource.title}</strong><p style={{ margin: '4px 0 7px', color: 'var(--text-muted)', fontSize: 11 }}>{resource.subject_code || resource.subject || 'Subject not specified'} · {resource.publisher_name}</p><div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', color: 'var(--text-subtle)', fontSize: 10 }}><span><BookOpen size={11} style={{ verticalAlign: '-2px' }} /> {resource.pages} pages</span><span>{fileSize(resource.size_bytes)}</span><span><Download size={11} style={{ verticalAlign: '-2px' }} /> {resource.download_count}</span><span><Clock3 size={11} style={{ verticalAlign: '-2px' }} /> {new Date(resource.created_at).toLocaleDateString()}</span></div>
+                <div style={{ display: 'flex', gap: 7, marginTop: 9 }}><button type="button" disabled={workingId === resource.id} onClick={() => void toggleSave(resource)} style={{ height: 29, padding: '0 9px', border: '1px solid var(--border)', borderRadius: 7, background: resource.is_saved ? 'var(--primary-glow)' : 'var(--bg-surface)', color: resource.is_saved ? 'var(--primary)' : 'var(--text-muted)', cursor: 'pointer', fontSize: 10 }}>{resource.is_saved ? 'Saved ✓' : 'Save'}</button><button type="button" disabled={workingId === resource.id} onClick={() => void download(resource)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 29, padding: '0 9px', border: 0, borderRadius: 7, background: 'var(--primary)', color: '#fff', cursor: 'pointer', fontSize: 10 }}><Download size={12} />{workingId === resource.id ? 'Please wait…' : 'Download'}</button>{resource.uploader_id === currentUser.id && <button type="button" disabled={workingId === resource.id} onClick={() => void removeResource(resource)} aria-label={`Delete ${resource.title}`} title="Delete this resource for everyone" style={{ display: 'grid', placeItems: 'center', width: 29, height: 29, border: '1px solid var(--border)', borderRadius: 7, background: 'var(--bg-surface)', color: 'var(--danger, #d85c63)', cursor: 'pointer' }}><Trash2 size={13} /></button>}</div>
               </div>
             </article>)}
           </div> : <div style={{ display: 'grid', justifyItems: 'center', gap: 9, padding: '48px 18px', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)', textAlign: 'center' }}><BookOpen size={22} /><strong style={{ color: 'var(--text-primary)', fontSize: 14 }}>{searchQuery ? 'No matching resources' : activeTab === 'discover' ? 'No resources yet' : activeTab === 'saved' ? 'No saved resources yet' : activeTab === 'my' ? 'You haven’t uploaded any resources' : 'No recently viewed resources'}</strong><span style={{ fontSize: 12 }}>{activeTab === 'discover' && !searchQuery ? 'Upload the first PDF to start the academic repository.' : 'Resources will appear here when available.'}</span></div>}
