@@ -61,7 +61,7 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
     const name = role === 'user' ? (currentUser.display_name || currentUser.full_name || currentUser.username) : assistantName;
     return <article className={`nexus-ai-chat-message${grouped ? ' grouped' : ''}`} key={message.id || index}>
       <span className="nexus-ai-chat-avatar-slot">{!grouped && (role === 'user' && currentUser.avatar_url ? currentUser.avatar_mime_type?.startsWith('video/') ? <video className="nexus-ai-chat-avatar" src={currentUser.avatar_url} autoPlay loop muted playsInline /> : <img className="nexus-ai-chat-avatar" src={currentUser.avatar_url} alt="" /> : <span className="nexus-ai-chat-avatar">{role === 'user' ? name.slice(0, 1).toUpperCase() : <Bot size={15} />}</span>)}</span>
-      <div className="nexus-ai-chat-body">{!grouped && <div className="nexus-ai-chat-meta"><strong>{name}</strong><time>{message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'now'}</time></div>}<div className="nexus-ai-chat-text">{content ? <MathRenderer content={content} /> : message.status || (isProcessing ? 'Thinking…' : '')}</div><div className="nexus-ai-chat-actions"><button type="button" title="Copy message" onClick={() => void copyMessage(content)}><Copy size={13} /></button><button type="button" title="Reply to message" onClick={() => quoteMessage(content)}><Reply size={14} /></button></div></div>
+      <div className="nexus-ai-chat-body">{!grouped && <div className="nexus-ai-chat-meta"><strong>{name}</strong><time>{message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'now'}</time></div>}<div className="nexus-ai-chat-text">{content ? <MathRenderer content={content} /> : message.status || (isProcessing ? <span className="nexus-ai-thinking" role="status">{assistantName} is thinking<span className="nexus-ai-thinking-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span> : '')}</div><div className="nexus-ai-chat-actions"><button type="button" title="Copy message" onClick={() => void copyMessage(content)}><Copy size={13} /></button><button type="button" title="Reply to message" onClick={() => quoteMessage(content)}><Reply size={14} /></button></div></div>
     </article>;
   };
 
@@ -322,9 +322,10 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
           {/* Content area */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-            {(conversationMessages.length > 0 || streamedText) && <section className="nexus-ai-chat-history" aria-label="Conversation history">
+            {(conversationMessages.length > 0 || streamedText || isProcessing) && <section className="nexus-ai-chat-history" aria-label="Conversation history">
               {hasMoreMessages && <button type="button" disabled={loadingEarlierMessages} onClick={() => activeConvId && void loadMessages(activeConvId, messageOffset, true)} style={{ alignSelf: 'center', padding: '7px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg-raised)', color: 'var(--text-muted)', fontSize: 12 }}>{loadingEarlierMessages ? 'Loading…' : 'Load earlier messages'}</button>}
               {conversationMessages.map((message, index, messages) => renderChatMessage(message, index, messages))}
+              {isProcessing && !streamedText && <div aria-live="polite">{renderChatMessage({ id: 'thinking-response', role: 'assistant', created_at: new Date().toISOString() }, 0, [])}</div>}
               {streamedText && <div aria-live="polite">{renderChatMessage({ id: 'streaming-response', role: 'assistant', created_at: new Date().toISOString() }, conversationMessages.length, [...conversationMessages, { role: 'assistant' }], streamedText)}</div>}
             </section>}
 

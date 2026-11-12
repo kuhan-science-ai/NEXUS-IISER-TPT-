@@ -37,7 +37,7 @@ $env:NEXUS_LOCAL_AI_PORT = '18787'
 $env:OLLAMA_NUM_PARALLEL = '2'
 $env:OLLAMA_MAX_LOADED_MODELS = '1'
 $env:OLLAMA_MAX_QUEUE = '512'
-$env:OLLAMA_CONTEXT_LENGTH = '4096'
+$env:OLLAMA_CONTEXT_LENGTH = '8192'
 $env:OLLAMA_KEEP_ALIVE = '10m'
 
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue
@@ -71,7 +71,7 @@ Write-Host 'Starting the authenticated local AI proxy at http://127.0.0.1:18787'
 Write-Host 'The unified Qwen3 14B assistant is available through the authenticated proxy and secure tunnel.'
 Write-Host 'Ollama is configured for up to 2 simultaneous generations and a queue of up to 512 requests.'
 Write-Host 'Requests beyond GPU capacity wait in the Ollama queue; 100 concurrent active generations are not guaranteed on one laptop GPU.'
-Write-Host 'Per-request context is 4,096 tokens.'
+Write-Host 'Per-request context is 8,192 tokens, with up to 4,096 response tokens.'
 Write-Host "Proxy token file: $tokenPath"
 Write-Host 'Set the Cloudflare Worker OLLAMA_API_KEY secret to the contents of this file.'
 Write-Host 'The token is local-only; do not paste it into chat or commit it.'

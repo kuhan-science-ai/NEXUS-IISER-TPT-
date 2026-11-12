@@ -45,7 +45,7 @@ Email/password accounts choose an email, password, username, and display name. G
 
 The hosted AI features use one model, `qwen3:14b`, through an authenticated localhost proxy and Cloudflare Tunnel. Install Ollama and `cloudflared`; the launcher expects the Qwen3 14B weights to already be installed.
 
-The launcher allows up to 2 parallel generations, up to 512 queued requests, and the Worker sends a 2,048-token context per request. This absorbs bursts but does not mean 100 concurrent generations; requests beyond GPU capacity wait in Ollama's queue.
+The launcher allows up to 2 parallel generations, up to 512 queued requests, an 8,192-token context, and up to 4,096 generated response tokens per pass. If Ollama reports a token-limit stop, the Worker requests up to two continuation passes. Direct-answer mode reduces reasoning overhead; requests beyond GPU capacity wait in Ollama's queue.
 
 ### Quick Start Commands to Activate AI:
 

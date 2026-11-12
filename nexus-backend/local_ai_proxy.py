@@ -73,7 +73,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 "keep_alive": "10m",
                 "think": bool(payload.get("think", False)),
                 "stream": False,
-                "options": {"num_ctx": 2048, "num_predict": 1200, "temperature": 0.25},
+                "options": {"num_ctx": 8192, "num_predict": 4096, "temperature": 0.25},
             }
             request = Request(OLLAMA_URL, data=json.dumps(safe_payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
             with urlopen(request, timeout=600) as response:

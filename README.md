@@ -99,7 +99,7 @@ If the Worker reports a verification stage such as **Firebase signing-key import
 
 ## Local GPU AI & Tunnel Activation Guide
 
-NEXUS uses one model for both the AI Study Companion and the floating AI assistant: **Qwen3 14B** (`qwen3:14b`) via Ollama on the laptop GPU. The launcher uses your already downloaded model, one authenticated local proxy, and one Cloudflare Quick Tunnel. The RTX 5080 has 16 GB VRAM. Ollama is configured for up to 2 parallel generations and queues bursts up to 512 requests; this does **not** mean 100 simultaneous GPU generations. Larger bursts wait for available GPU capacity.
+NEXUS uses one model for both the AI Study Companion and the floating AI assistant: **Qwen3 14B** (`qwen3:14b`) via Ollama on the laptop GPU. The launcher uses your already downloaded model, one authenticated local proxy, and one Cloudflare Quick Tunnel. The RTX 5080 has 16 GB VRAM. Ollama is configured for up to 2 parallel generations, an 8,192-token context, and responses up to 4,096 tokens per generation. If Ollama reports that a response hit this limit, the Worker automatically asks for up to two continuation segments. Bursts queue up to 512 requests; this does **not** mean 100 simultaneous GPU generations, and larger bursts wait for GPU capacity. Direct-answer mode reduces reasoning overhead.
 
 ### Prerequisites
 
