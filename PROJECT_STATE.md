@@ -12,7 +12,7 @@ Clicking an Academic Repository resource card opens a scaled preview modal with 
 
 The repository preview layers its content and controls above the animated frame, clips frame overflow to avoid inner scrollbars, and reflects updated save/download state while actions are running and after refresh.
 
-Profile photos/banners and Academic Repository thumbnails/banners open crop previews with drag positioning, zoom, rotation, reset, and apply. Profile GIFs are converted to editable WebM previews; applying animated crop changes renders a new WebM with the selected framing. The profile editor includes playback pause and seek controls, and banners support up to 20 MB.
+Profile photos/banners and Academic Repository thumbnails/banners open crop previews with drag positioning, zoom, rotation, reset, and apply. Profile GIFs are converted to low-resolution, aspect-preserving WebM previews; applying animated crop changes renders a new WebM with the selected framing and matching background fill. The profile editor includes playback pause, seek, trim, and size controls, and banners support up to 20 MB.
 
 The profile media crop dialog is portaled above the clipped profile editor, keeping playback and timeline controls visible. Oversized banner selections show an immediate 20 MB warning.
 

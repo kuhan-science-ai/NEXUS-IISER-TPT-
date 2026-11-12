@@ -113,7 +113,7 @@
 .profile-editor-preview-column { display: flex; align-items: flex-start; justify-content: center; padding: 44px 28px; background: transparent; }
 .profile-editor-preview-card { width: min(100%, 490px); min-height: 630px; overflow: hidden; border: 1px solid var(--pe-border); border-radius: 15px; background: linear-gradient(150deg, color-mix(in srgb, var(--profile-theme-a), var(--pe-panel) 55%), color-mix(in srgb, var(--profile-theme-b), var(--pe-panel) 67%)); box-shadow: 0 18px 45px rgba(0,0,0,.22); }
 .profile-editor-preview-banner { height: 150px; overflow: hidden; background-image: linear-gradient(130deg, color-mix(in srgb, var(--profile-accent), var(--pe-panel) 20%), color-mix(in srgb, var(--profile-accent), #252837 62%) 58%, #261a32); background-position: center; background-size: cover; }
-.profile-editor-preview-banner img,.profile-editor-preview-banner video { display:block;width:100%;height:100%;object-fit:cover; }
+.profile-editor-preview-banner img,.profile-editor-preview-banner video { display:block;width:100%;height:100%;object-fit:fill; }
 .profile-editor-preview-content { position: relative; padding: 0 26px 25px; }
 .profile-editor-preview-avatar { position: relative; width: 104px; height: 104px; margin-top: -51px; display: grid; place-items: center; overflow: hidden; border: 4px solid var(--pe-panel); outline: 2px solid var(--profile-accent); border-radius: 50%; background: var(--pe-raised); color: white; font-size: 25px; font-weight: 800; }
 .avatar-effect-rotate { animation: avatar-orbit 8s linear infinite; }

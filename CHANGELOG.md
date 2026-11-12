@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
+- Optimized GIF preview/export resolution and bitrate, guarded oversized GIF dimensions, prevented duplicate simultaneous crop renders, and matched final banner framing/background to the crop preview.
 - Added physical start/end trimming for profile video banners, preview looping within the selected segment, and original/estimated export file-size readouts so oversized videos can be reduced before upload.
 - Fixed the profile crop dialog stacking so its playback and seek controls remain visible above the editor; oversized banners now show a clear 20 MB warning.
 - Added a pause button and seek timeline to animated profile image previews; GIFs become editable preview video, and animated crops are rendered into the saved WebM.

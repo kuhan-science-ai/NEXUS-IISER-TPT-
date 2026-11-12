@@ -69,6 +69,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
   const [cropTime, setCropTime] = useState(0);
   const [cropDuration, setCropDuration] = useState(0);
   const [cropPlaying, setCropPlaying] = useState(true);
+  const [applyingImage, setApplyingImage] = useState(false);
   const [isCloseBlocked, setIsCloseBlocked] = useState(false);
   const initialValues = useRef({ displayName: currentUser.display_name || currentUser.full_name || '', bio: currentUser.bio || '', pronouns, accentColor, themeColorA, themeColorB, avatarEffect });
   const hasUnsavedChanges = displayName.trim() !== initialValues.current.displayName.trim()
@@ -119,9 +120,9 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
       if (kind === 'banner') window.alert('This banner is larger than 20 MB. Choose a smaller file.');
       return;
     }
-    if (oversizeAnimatedBanner) setError('This video is over 20 MB. Trim it in the preview to reduce the saved size.');
+    if (oversizeAnimatedBanner) setError('This animated banner is over 20 MB. Trim it in the preview to reduce the saved size.');
     if (file.type === 'image/gif') {
-      try { setError('Preparing animated preview…'); mediaFile = await gifToVideo(file, kind); isVideo = true; }
+      try { setError('Preparing animated preview…'); mediaFile = await gifToVideo(file); isVideo = true; }
       catch { setError('This browser could not prepare the GIF preview. Try a video or still image.'); return; }
     }
     let duration = 0;
@@ -129,27 +130,33 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
       duration = await getVideoDuration(mediaFile);
       if (!Number.isFinite(duration) || (kind === 'avatar' && duration > 15)) { setError('Animated profile photos must be 15 seconds or shorter.'); return; }
     }
-    if (oversizeAnimatedBanner) setError('This video is over 20 MB. Trim it in the preview to reduce the saved size.'); else setError('');
+    if (oversizeAnimatedBanner) setError('This animated banner is over 20 MB. Trim it in the preview to reduce the saved size.'); else setError('');
     setCropDuration(duration); setCropTime(0); setCropPlaying(true);
     setImageEditor({ kind, file: mediaFile, url: URL.createObjectURL(mediaFile), sourceSize: file.size, isVideo, scale: 1, rotation: 0, x: 0, y: 0, trimStart: 0, trimEnd: Math.min(duration, 15) });
   };
 
   const getVideoDuration = (file: File) => new Promise<number>((resolve, reject) => { const media = document.createElement('video'); const source = URL.createObjectURL(file); media.preload = 'metadata'; media.onloadedmetadata = () => { URL.revokeObjectURL(source); resolve(media.duration); }; media.onerror = () => { URL.revokeObjectURL(source); reject(new Error('Could not read video metadata.')); }; media.src = source; });
 
-  const gifToVideo = async (file: File, kind: ImageKind): Promise<File> => {
+  const gifToVideo = async (file: File): Promise<File> => {
     if (!('MediaRecorder' in window) || !HTMLCanvasElement.prototype.captureStream) throw new Error('Animated recording is unavailable');
+    const header = new Uint8Array(await file.slice(0, 10).arrayBuffer());
+    const logicalWidth = header[6] | (header[7] << 8), logicalHeight = header[8] | (header[9] << 8);
+    if (header.length < 10 || logicalWidth * logicalHeight > 8_000_000 || Math.max(logicalWidth, logicalHeight) > 6000) throw new Error('This GIF is too large to edit safely. Resize it and try again.');
     const sourceUrl = URL.createObjectURL(file);
     const image = new Image(); image.src = sourceUrl;
     await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('GIF could not be read')); });
-    const [width, height] = kind === 'avatar' ? [800, 800] : [1600, 500];
+    if (!image.naturalWidth || !image.naturalHeight || image.naturalWidth * image.naturalHeight > 40_000_000) { URL.revokeObjectURL(sourceUrl); throw new Error('This GIF is too large to edit safely. Resize it and try again.'); }
+    // Preserve the GIF's original aspect ratio here; the crop editor applies framing once at export.
+    const resize = Math.min(1, 960 / image.naturalWidth, 960 / image.naturalHeight);
+    const width = Math.max(1, Math.round(image.naturalWidth * resize));
+    const height = Math.max(1, Math.round(image.naturalHeight * resize));
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
-    const context = canvas.getContext('2d'); if (!context) throw new Error('Canvas unavailable');
-    const ratio = Math.max(width / image.naturalWidth, height / image.naturalHeight);
-    const draw = () => { context.clearRect(0, 0, width, height); context.drawImage(image, (width - image.naturalWidth * ratio) / 2, (height - image.naturalHeight * ratio) / 2, image.naturalWidth * ratio, image.naturalHeight * ratio); };
-    const stream = canvas.captureStream(30);
+    const context = canvas.getContext('2d'); if (!context) { URL.revokeObjectURL(sourceUrl); throw new Error('Canvas unavailable'); }
+    const draw = () => { context.fillStyle = accentColor; context.fillRect(0, 0, width, height); context.drawImage(image, 0, 0, width, height); };
+    const stream = canvas.captureStream(24);
     const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(type => MediaRecorder.isTypeSupported(type));
     if (!mimeType) { URL.revokeObjectURL(sourceUrl); throw new Error('WebM recording unavailable'); }
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1_500_000 });
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 600_000 });
     const chunks: BlobPart[] = [];
     const recorded = new Promise<File>((resolve, reject) => {
       recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
@@ -158,13 +165,13 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
     });
     let frame = 0; const drawFrame = () => { draw(); frame = requestAnimationFrame(drawFrame); };
     draw(); recorder.start(); frame = requestAnimationFrame(drawFrame);
-    await new Promise(resolve => window.setTimeout(resolve, 5000));
-    cancelAnimationFrame(frame); recorder.stop(); stream.getTracks().forEach(track => track.stop()); URL.revokeObjectURL(sourceUrl);
+    try { await new Promise(resolve => window.setTimeout(resolve, 5000)); }
+    finally { cancelAnimationFrame(frame); if (recorder.state !== 'inactive') recorder.stop(); stream.getTracks().forEach(track => track.stop()); URL.revokeObjectURL(sourceUrl); }
     return recorded;
   };
 
   const beginImageDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!imageEditor) return;
+    if (!imageEditor || applyingImage) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     imageDrag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, startX: imageEditor.x, startY: imageEditor.y };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -217,61 +224,53 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
   };
 
   const applyImageEdit = async () => {
-    if (!imageEditor) return;
+    if (!imageEditor || applyingImage) return;
     const { kind, file, url, isVideo, scale, rotation, x, y } = imageEditor;
-    if (isVideo) {
-      try {
+    setApplyingImage(true);
+    try {
+      if (isVideo) {
         const adjusted = await cropVideo(file, url, kind, { scale, rotation, x, y, trimStart: imageEditor.trimStart, trimEnd: imageEditor.trimEnd });
         const adjustedUrl = URL.createObjectURL(adjusted);
         if (kind === 'avatar') { setPendingAvatar(adjusted); setAvatarUrl(adjustedUrl); setAvatarIsVideo(true); setRemoveAvatar(false); }
         else { setPendingBanner(adjusted); setBannerUrl(adjustedUrl); setBannerIsVideo(true); setRemoveBanner(false); setBannerMode('image'); }
         URL.revokeObjectURL(url); setImageEditor(null);
-      } catch (cropError) { setError(cropError instanceof Error ? cropError.message : 'Could not apply the animated crop.'); }
-      return;
-    }
-    const image = isVideo ? document.createElement('video') : new Image();
-    if (isVideo) { (image as HTMLVideoElement).muted = true; (image as HTMLVideoElement).playsInline = true; }
-    await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Could not process this image.')); if (isVideo) { (image as HTMLVideoElement).onloadeddata = () => resolve(); (image as HTMLVideoElement).onerror = () => reject(new Error('Could not process this video.')); } image.src = url; });
-    const [width, height] = kind === 'avatar' ? [800, 800] : [1600, 500];
-    const canvas = document.createElement('canvas');
-    canvas.width = width; canvas.height = height;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    const sourceWidth = isVideo ? (image as HTMLVideoElement).videoWidth : (image as HTMLImageElement).naturalWidth;
-    const sourceHeight = isVideo ? (image as HTMLVideoElement).videoHeight : (image as HTMLImageElement).naturalHeight;
-    const sourceRatio = sourceWidth / sourceHeight;
-    const targetRatio = width / height;
-    let drawWidth = width; let drawHeight = height;
-    if (sourceRatio > targetRatio) drawHeight = height;
-    else drawWidth = width;
-    if (sourceRatio > targetRatio) drawWidth = height * sourceRatio;
-    else drawHeight = width / sourceRatio;
-    context.translate(width / 2 + (x * width), height / 2 + (y * height));
-    context.rotate((rotation * Math.PI) / 180);
-    context.scale(scale, scale);
-    context.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
-    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', .92));
-    if (!blob) { setError('Could not prepare this image.'); return; }
-    const editedFile = new File([blob], `${file.name.replace(/\.[^.]+$/, '')}.webp`, { type: 'image/webp' });
-    const editedUrl = URL.createObjectURL(blob);
-    if (kind === 'avatar') { setPendingAvatar(editedFile); setAvatarUrl(editedUrl); setAvatarIsVideo(false); setRemoveAvatar(false); }
-    else { setPendingBanner(editedFile); setBannerUrl(editedUrl); setBannerIsVideo(false); setRemoveBanner(false); setBannerMode('image'); }
-    setImageEditor(null);
+        return;
+      }
+      const image = new Image(); image.src = url;
+      await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Could not process this image.')); });
+      const [width, height] = kind === 'avatar' ? [800, 800] : [1600, 500];
+      const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+      const context = canvas.getContext('2d'); if (!context) throw new Error('Could not prepare this image.');
+      const ratio = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+      const drawWidth = image.naturalWidth * ratio, drawHeight = image.naturalHeight * ratio;
+      context.fillStyle = accentColor; context.fillRect(0, 0, width, height);
+      context.translate(width / 2 + x * width, height / 2 + y * height);
+      context.rotate(rotation * Math.PI / 180); context.scale(scale, scale);
+      context.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', .92));
+      if (!blob) throw new Error('Could not prepare this image.');
+      const editedFile = new File([blob], `${file.name.replace(/\.[^.]+$/, '')}.webp`, { type: 'image/webp' });
+      const editedUrl = URL.createObjectURL(blob);
+      if (kind === 'avatar') { setPendingAvatar(editedFile); setAvatarUrl(editedUrl); setAvatarIsVideo(false); setRemoveAvatar(false); }
+      else { setPendingBanner(editedFile); setBannerUrl(editedUrl); setBannerIsVideo(false); setRemoveBanner(false); setBannerMode('image'); }
+      URL.revokeObjectURL(url); setImageEditor(null);
+    } catch (cropError) { setError(cropError instanceof Error ? cropError.message : 'Could not apply the image edit.'); }
+    finally { setApplyingImage(false); }
   };
 
   const cropVideo = async (file: File, sourceUrl: string, kind: ImageKind, crop: { scale: number; rotation: number; x: number; y: number; trimStart: number; trimEnd: number }): Promise<File> => {
     if (!('MediaRecorder' in window) || !HTMLCanvasElement.prototype.captureStream) throw new Error('This browser cannot export edited video.');
     const video = document.createElement('video'); video.src = sourceUrl; video.muted = true; video.playsInline = true;
     await new Promise<void>((resolve, reject) => { video.onloadedmetadata = () => resolve(); video.onerror = () => reject(new Error('Could not load this video.')); });
-    const [width, height] = kind === 'avatar' ? [800, 800] : [1600, 500];
+    const [width, height] = kind === 'avatar' ? [640, 640] : [1280, 400];
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
     const context = canvas.getContext('2d'); if (!context) throw new Error('Canvas unavailable');
     const ratio = Math.max(width / video.videoWidth, height / video.videoHeight);
-    const drawFrame = () => { context.clearRect(0, 0, width, height); context.save(); context.translate(width / 2 + crop.x * width, height / 2 + crop.y * height); context.rotate(crop.rotation * Math.PI / 180); context.scale(crop.scale, crop.scale); context.drawImage(video, -video.videoWidth * ratio / 2, -video.videoHeight * ratio / 2, video.videoWidth * ratio, video.videoHeight * ratio); context.restore(); };
-    const stream = canvas.captureStream(30);
+    const drawFrame = () => { context.fillStyle = accentColor; context.fillRect(0, 0, width, height); context.save(); context.translate(width / 2 + crop.x * width, height / 2 + crop.y * height); context.rotate(crop.rotation * Math.PI / 180); context.scale(crop.scale, crop.scale); context.drawImage(video, -video.videoWidth * ratio / 2, -video.videoHeight * ratio / 2, video.videoWidth * ratio, video.videoHeight * ratio); context.restore(); };
+    const stream = canvas.captureStream(24);
     const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(type => MediaRecorder.isTypeSupported(type));
     if (!mimeType) throw new Error('WebM recording unavailable.');
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1_500_000 }); const chunks: BlobPart[] = [];
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 900_000 }); const chunks: BlobPart[] = [];
     const output = new Promise<File>((resolve, reject) => { recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); }; recorder.onerror = () => reject(new Error('Video crop export failed.')); recorder.onstop = () => resolve(new File([new Blob(chunks, { type: 'video/webm' })], `${file.name.replace(/\.[^.]+$/, '')}-edited.webm`, { type: 'video/webm' })); });
     let animationFrame = 0;
     video.currentTime = crop.trimStart;
@@ -420,14 +419,14 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
     </section>
     {imageEditor && createPortal(<div className="profile-image-editor-backdrop" role="presentation" style={{ '--pe-panel': 'var(--bg-navigation, #2f3136)', '--pe-card': 'var(--bg-surface, #2f3136)', '--pe-raised': 'var(--bg-elevated, #40444b)', '--pe-border': 'var(--border, #202225)', '--pe-text': 'var(--text-primary, #f2f3f5)', '--pe-muted': 'var(--text-muted, #b9bbbe)', '--profile-accent': accentColor } as React.CSSProperties}>
       <section className="profile-image-editor" role="dialog" aria-modal="true" aria-labelledby="profile-image-editor-title">
-        <div className="profile-image-editor-head"><div><h2 id="profile-image-editor-title">Preview and edit {imageEditor.kind === 'avatar' ? 'profile photo' : 'banner'}</h2><p>{imageEditor.isVideo ? 'Edits are rendered into the saved animation.' : 'Your image is uploaded only after you save profile changes.'}</p></div><button type="button" className="profile-editor-icon-button" onClick={() => { URL.revokeObjectURL(imageEditor.url); setImageEditor(null); }} aria-label="Cancel image edit"><X size={17} /></button></div>
-        <div className={`profile-image-crop ${imageEditor.kind === 'avatar' ? 'is-avatar' : 'is-banner'}`} onPointerDown={beginImageDrag} onPointerMove={moveImageDrag} onPointerUp={endImageDrag} onPointerCancel={endImageDrag} role="application" aria-label="Drag image to reposition it">{imageEditor.isVideo ? <video ref={cropVideoRef} draggable={false} src={imageEditor.url} autoPlay muted playsInline onLoadedMetadata={onCropVideoMetadata} onTimeUpdate={onCropVideoTime} onPlay={() => setCropPlaying(true)} onPause={() => setCropPlaying(false)} style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} /> : <img draggable={false} src={imageEditor.url} alt="Image preview" style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} />}<span className="profile-image-crop-guide">Drag to position</span></div>
+        <div className="profile-image-editor-head"><div><h2 id="profile-image-editor-title">Preview and edit {imageEditor.kind === 'avatar' ? 'profile photo' : 'banner'}</h2><p>{applyingImage ? 'Rendering your edited media…' : imageEditor.isVideo ? 'Edits are rendered into the saved animation.' : 'Your image is uploaded only after you save profile changes.'}</p></div><button type="button" className="profile-editor-icon-button" disabled={applyingImage} onClick={() => { URL.revokeObjectURL(imageEditor.url); setImageEditor(null); }} aria-label="Cancel image edit"><X size={17} /></button></div>
+        <div className={`profile-image-crop ${imageEditor.kind === 'avatar' ? 'is-avatar' : 'is-banner'}`} style={{ backgroundColor: accentColor }} onPointerDown={beginImageDrag} onPointerMove={moveImageDrag} onPointerUp={endImageDrag} onPointerCancel={endImageDrag} role="application" aria-label="Drag image to reposition it">{imageEditor.isVideo ? <video ref={cropVideoRef} draggable={false} src={imageEditor.url} autoPlay muted playsInline onLoadedMetadata={onCropVideoMetadata} onTimeUpdate={onCropVideoTime} onPlay={() => setCropPlaying(true)} onPause={() => setCropPlaying(false)} style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} /> : <img draggable={false} src={imageEditor.url} alt="Image preview" style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} />}<span className="profile-image-crop-guide">Drag to position</span></div>
         {imageEditor.isVideo && <>
-          <div className="profile-image-timeline"><button type="button" className="profile-editor-secondary" aria-label={cropPlaying ? 'Pause preview' : 'Play preview'} onClick={() => { const video = cropVideoRef.current; if (!video) return; if (video.paused) void video.play(); else video.pause(); }}>{cropPlaying ? <Pause size={15} /> : <Play size={15} />}</button><input aria-label="Preview timeline" type="range" min={imageEditor.trimStart} max={Math.max(imageEditor.trimStart + .05, imageEditor.trimEnd)} step="0.01" value={Math.min(Math.max(cropTime, imageEditor.trimStart), imageEditor.trimEnd)} onChange={event => seekCropVideo(Number(event.target.value))} /><span>{cropTime.toFixed(1)}s / {imageEditor.trimEnd.toFixed(1)}s</span></div>
-          <div className="profile-video-trim"><strong>Trim clip</strong><label>Start <input type="range" min="0" max={Math.max(0, imageEditor.trimEnd - .25)} step=".05" value={imageEditor.trimStart} onChange={event => changeTrimStart(Number(event.target.value))} />{imageEditor.trimStart.toFixed(1)}s</label><label>End <input type="range" min={Math.min(cropDuration, imageEditor.trimStart + .25)} max={Math.min(cropDuration, imageEditor.trimStart + 15)} step=".05" value={Math.min(imageEditor.trimEnd, cropDuration)} onChange={event => changeTrimEnd(Number(event.target.value))} />{imageEditor.trimEnd.toFixed(1)}s</label><p>Original file: <b>{formatMediaSize(imageEditor.sourceSize)}</b><span> · </span>Estimated cropped export: <b>{formatMediaSize((imageEditor.trimEnd - imageEditor.trimStart) * 1_500_000 / 8 + 100_000)}</b></p>{imageEditor.kind === 'banner' && imageEditor.sourceSize > 20 * 1024 * 1024 && <small role="alert">This file is over 20 MB. Trim the clip and apply it to create a smaller video.</small>}</div>
+          <div className="profile-image-timeline"><button type="button" className="profile-editor-secondary" disabled={applyingImage} aria-label={cropPlaying ? 'Pause preview' : 'Play preview'} onClick={() => { const video = cropVideoRef.current; if (!video) return; if (video.paused) void video.play(); else video.pause(); }}>{cropPlaying ? <Pause size={15} /> : <Play size={15} />}</button><input aria-label="Preview timeline" disabled={applyingImage} type="range" min={imageEditor.trimStart} max={Math.max(imageEditor.trimStart + .05, imageEditor.trimEnd)} step="0.01" value={Math.min(Math.max(cropTime, imageEditor.trimStart), imageEditor.trimEnd)} onChange={event => seekCropVideo(Number(event.target.value))} /><span>{cropTime.toFixed(1)}s / {imageEditor.trimEnd.toFixed(1)}s</span></div>
+          <div className="profile-video-trim"><strong>Trim clip</strong><label>Start <input disabled={applyingImage} type="range" min="0" max={Math.max(0, imageEditor.trimEnd - .25)} step=".05" value={imageEditor.trimStart} onChange={event => changeTrimStart(Number(event.target.value))} />{imageEditor.trimStart.toFixed(1)}s</label><label>End <input disabled={applyingImage} type="range" min={Math.min(cropDuration, imageEditor.trimStart + .25)} max={Math.min(cropDuration, imageEditor.trimStart + 15)} step=".05" value={Math.min(imageEditor.trimEnd, cropDuration)} onChange={event => changeTrimEnd(Number(event.target.value))} />{imageEditor.trimEnd.toFixed(1)}s</label><p>Original file: <b>{formatMediaSize(imageEditor.sourceSize)}</b><span> · </span>Estimated cropped export: <b>{formatMediaSize((imageEditor.trimEnd - imageEditor.trimStart) * 900_000 / 8 + 100_000)}</b></p>{imageEditor.kind === 'banner' && imageEditor.sourceSize > 20 * 1024 * 1024 && <small role="alert">This animated file is over 20 MB. Trim and apply it to create a smaller video.</small>}</div>
         </>}
-        <div className="profile-image-editor-controls"><label><ZoomIn size={15} /> Zoom <input type="range" min="1" max="3" step=".01" value={imageEditor.scale} onChange={event => setImageEditor({ ...imageEditor, scale: Number(event.target.value) })} /></label><button type="button" className="profile-editor-secondary" onClick={() => setImageEditor({ ...imageEditor, rotation: imageEditor.rotation + 90 })}><RotateCcw size={15} /> Rotate</button><button type="button" className="profile-editor-text-button" onClick={() => setImageEditor({ ...imageEditor, scale: 1, rotation: 0, x: 0, y: 0 })}>Reset crop</button></div>
-        <div className="profile-image-editor-actions"><button type="button" className="profile-editor-secondary" onClick={() => { URL.revokeObjectURL(imageEditor.url); setImageEditor(null); }}>Cancel</button><button type="button" className="profile-editor-save" onClick={() => void applyImageEdit()}><Check size={15} /> Apply image</button></div>
+        <div className="profile-image-editor-controls"><label><ZoomIn size={15} /> Zoom <input disabled={applyingImage} type="range" min="1" max="3" step=".01" value={imageEditor.scale} onChange={event => setImageEditor({ ...imageEditor, scale: Number(event.target.value) })} /></label><button disabled={applyingImage} type="button" className="profile-editor-secondary" onClick={() => setImageEditor({ ...imageEditor, rotation: imageEditor.rotation + 90 })}><RotateCcw size={15} /> Rotate</button><button disabled={applyingImage} type="button" className="profile-editor-text-button" onClick={() => setImageEditor({ ...imageEditor, scale: 1, rotation: 0, x: 0, y: 0 })}>Reset crop</button></div>
+        <div className="profile-image-editor-actions"><button disabled={applyingImage} type="button" className="profile-editor-secondary" onClick={() => { URL.revokeObjectURL(imageEditor.url); setImageEditor(null); }}>Cancel</button><button disabled={applyingImage} type="button" className="profile-editor-save" onClick={() => void applyImageEdit()}><Check size={15} /> {applyingImage ? 'Rendering…' : 'Apply image'}</button></div>
       </section>
     </div>, document.body)}
   </div>
