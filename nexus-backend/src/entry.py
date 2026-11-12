@@ -489,6 +489,14 @@ async def clear_academic_resource_history(user: dict[str, Any] = Depends(get_cur
     await execute(db, "DELETE FROM academic_resource_views WHERE user_id=?", user["sub"])
 
 
+@app.delete("/api/v1/academics/resources/{resource_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_academic_resource(resource_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    resource = await first(db, "SELECT id FROM academic_resources WHERE id=? AND uploader_id=?", resource_id, user["sub"])
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found or you cannot delete it")
+    await execute(db, "DELETE FROM academic_resources WHERE id=? AND uploader_id=?", resource_id, user["sub"])
+
+
 @app.get("/api/v1/academics/resources/{resource_id}/download")
 async def download_academic_resource(resource_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     row = await first(db, "SELECT * FROM academic_resources WHERE id=?", resource_id)

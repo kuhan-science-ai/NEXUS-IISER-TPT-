@@ -289,6 +289,7 @@ class ApiService {
   async listRecentResources(): Promise<any[]> { return this.request('/academics/resources/recent'); }
   async saveResource(resourceId: string): Promise<void> { await this.request(`/academics/resources/${resourceId}/saved`, { method: 'PUT' }); }
   async unsaveResource(resourceId: string): Promise<void> { await this.request(`/academics/resources/${resourceId}/saved`, { method: 'DELETE' }); }
+  async deleteResource(resourceId: string): Promise<void> { await this.request(`/academics/resources/${resourceId}`, { method: 'DELETE' }); }
   async clearRecentResources(): Promise<void> { await this.request('/academics/resources/history', { method: 'DELETE' }); }
   async downloadResource(resourceId: string): Promise<Blob> {
     const headers: Record<string, string> = {};

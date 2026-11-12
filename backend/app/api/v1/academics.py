@@ -263,6 +263,24 @@ async def clear_resource_history(current_user: User = Depends(get_current_user),
     await db.commit()
 
 
+@router.delete("/resources/{resource_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_resource(resource_id: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    resource = await db.get(AcademicResource, resource_id)
+    if not resource or resource.uploader_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Resource not found or you cannot delete it")
+    file_meta = await db.get(FileMetadata, resource.file_id)
+    await db.execute(delete(ResourceBookmark).where(ResourceBookmark.resource_id == resource_id))
+    await db.execute(delete(ResourceRating).where(ResourceRating.resource_id == resource_id))
+    await db.execute(delete(ResourceView).where(ResourceView.resource_id == resource_id))
+    await db.delete(resource)
+    await db.flush()
+    if file_meta:
+        await db.delete(file_meta)
+    await db.commit()
+    if file_meta:
+        storage_service.delete_file(file_meta.file_path)
+
+
 @router.get("/resources/{resource_id}/download")
 async def download_academic_resource(resource_id: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     resource = await db.get(AcademicResource, resource_id)

@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
+- Added owner-only resource deletion in Discover, Saved resources, and My uploads; both backend implementations enforce uploader ownership and remove the PDF plus associated saved/view records.
 - Rebuilt Academic Repository around empty-by-default resource lists, authenticated saved/my/recent views, account-scoped history clearing, and backend download counts. Added PDF verification/page extraction animation, staged metadata entry, discard-before-save behavior, D1 chunk storage, and matching Worker/Alembic migrations (`0011_academic_resources.sql`, `39a6d814b2f1`).
 
 ## [2026-11-12]
