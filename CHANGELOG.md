@@ -5,6 +5,7 @@ All notable changes to the NEXUS core architecture will be documented here.
 ## [Unreleased] - 2026-11-12
 - Added KaTeX and full LaTeX starter examples, account-specific D1 draft autosave, and clear hosted-worker messaging for PDF compilation; added the `0010_latex_drafts.sql` migration (apply before deploying the Worker).
 - Kept AI requests running across tab and route changes, added manual request cancellation, and reused the rainbow tab glow to mark a completed reply until the assistant tab is opened.
+- Fixed hosted LaTeX Studio previews to render KaTeX snippets and supported full-document bodies in-browser; hid PDF compile controls from production builds where the Worker has no compiler route.
 
 ## [2026-11-05]
 - Raised Qwen3 response capacity from 1,200 to 4,096 generated tokens and context to 8,192; disabled hidden thinking for faster direct answers. Added a cyclic, personalized “{assistant name} is thinking...” indicator to both AI chat views.
