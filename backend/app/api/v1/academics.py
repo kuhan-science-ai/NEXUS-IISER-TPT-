@@ -62,6 +62,28 @@ async def enroll_course(
     await db.commit()
     return {"message": f"Successfully enrolled in {course.code}"}
 
+
+async def validate_resource_artwork(file: UploadFile | None) -> bool:
+    if not file or not file.filename:
+        return False
+    if file.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=400, detail="Cover and banner images must be JPG, PNG, or WebP files")
+    file.file.seek(0, 2)
+    size = file.file.tell()
+    file.file.seek(0)
+    if size < 1 or size > 4 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Cover and banner images must be 4 MB or smaller")
+    header = await file.read(12)
+    file.file.seek(0)
+    signatures = {
+        "image/jpeg": header.startswith(b"\xff\xd8\xff"),
+        "image/png": header.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/webp": len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP",
+    }
+    if not signatures.get(file.content_type, False):
+        raise HTTPException(status_code=400, detail="The image content does not match its file type")
+    return True
+
 @router.get("/resources")
 async def list_resources(
     query: Optional[str] = None,
@@ -78,6 +100,8 @@ async def list_resources(
             selectinload(AcademicResource.course),
             selectinload(AcademicResource.uploader).selectinload(User.profile),
             selectinload(AcademicResource.bookmarks),
+            selectinload(AcademicResource.thumbnail_file),
+            selectinload(AcademicResource.banner_file),
         )
     )
     if query:
@@ -114,6 +138,8 @@ async def list_resources(
             "size_bytes": r.size_bytes or (r.file.size_bytes if r.file else 0),
             "is_saved": any(bookmark.user_id == current_user.id for bookmark in r.bookmarks),
             "uploader_id": r.uploader_id,
+            "thumbnail_url": f"/api/v1/academics/resources/{r.id}/assets/thumbnail" if r.thumbnail_file_id else None,
+            "banner_url": f"/api/v1/academics/resources/{r.id}/assets/banner" if r.banner_file_id else None,
             "academic_year": r.academic_year,
             "semester": r.semester,
             "download_count": r.download_count,
@@ -144,6 +170,8 @@ async def upload_academic_resource(
     academic_year: Optional[str] = Form("2026-2027"),
     semester: Optional[str] = Form("Monsoon"),
     file: UploadFile = File(...),
+    thumbnail: Optional[UploadFile] = File(None),
+    banner: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -154,6 +182,8 @@ async def upload_academic_resource(
         file.file.seek(0)
         raise HTTPException(status_code=400, detail="The uploaded file is not a valid PDF")
     file.file.seek(0)
+    has_thumbnail = await validate_resource_artwork(thumbnail)
+    has_banner = await validate_resource_artwork(banner)
     stored_name, rel_path, size_bytes, mime = await storage_service.save_file(
         file=file,
         category="academics",
@@ -174,6 +204,18 @@ async def upload_academic_resource(
     db.add(file_meta)
     await db.flush()
 
+    async def save_artwork(upload: UploadFile | None, exists: bool, label: str) -> FileMetadata | None:
+        if not exists or upload is None:
+            return None
+        stored, path, image_size, image_mime = await storage_service.save_file(upload, category="academics", allowed_mimes={"image/jpeg", "image/png", "image/webp"}, max_size=4 * 1024 * 1024, delivery_type="upload")
+        image = FileMetadata(filename=(upload.filename or f"resource-{label}")[:255], stored_filename=stored, file_path=path, mime_type=image_mime, size_bytes=image_size, uploader_id=current_user.id, is_public=True, file_category="academic-artwork")
+        db.add(image)
+        await db.flush()
+        return image
+
+    thumbnail_meta = await save_artwork(thumbnail, has_thumbnail, "thumbnail")
+    banner_meta = await save_artwork(banner, has_banner, "banner")
+
     resource = AcademicResource(
         title=title,
         description=description,
@@ -184,6 +226,8 @@ async def upload_academic_resource(
         publisher_name=publisher_name.strip()[:120],
         pages=pages,
         size_bytes=size_bytes,
+        thumbnail_file_id=thumbnail_meta.id if thumbnail_meta else None,
+        banner_file_id=banner_meta.id if banner_meta else None,
         academic_year=academic_year,
         semester=semester,
         file_id=file_meta.id,
@@ -199,7 +243,7 @@ async def upload_academic_resource(
 
 
 async def academic_resources_for_user(db: AsyncSession, user_id: str, collection: str = "all"):
-    stmt = select(AcademicResource).options(selectinload(AcademicResource.file), selectinload(AcademicResource.course), selectinload(AcademicResource.uploader).selectinload(User.profile), selectinload(AcademicResource.bookmarks))
+    stmt = select(AcademicResource).options(selectinload(AcademicResource.file), selectinload(AcademicResource.thumbnail_file), selectinload(AcademicResource.banner_file), selectinload(AcademicResource.course), selectinload(AcademicResource.uploader).selectinload(User.profile), selectinload(AcademicResource.bookmarks))
     if collection == "mine":
         stmt = stmt.where(AcademicResource.uploader_id == user_id)
     elif collection == "saved":
@@ -220,6 +264,8 @@ async def academic_resources_for_user(db: AsyncSession, user_id: str, collection
             "uploader_name": uploader_name, "created_at": resource.created_at.isoformat(),
             "is_saved": any(bookmark.user_id == user_id for bookmark in resource.bookmarks),
             "download_url": f"/api/v1/academics/resources/{resource.id}/download",
+            "thumbnail_url": f"/api/v1/academics/resources/{resource.id}/assets/thumbnail" if resource.thumbnail_file_id else None,
+            "banner_url": f"/api/v1/academics/resources/{resource.id}/assets/banner" if resource.banner_file_id else None,
         })
     return items
 
@@ -269,6 +315,7 @@ async def delete_resource(resource_id: str, current_user: User = Depends(get_cur
     if not resource or resource.uploader_id != current_user.id:
         raise HTTPException(status_code=404, detail="Resource not found or you cannot delete it")
     file_meta = await db.get(FileMetadata, resource.file_id)
+    artwork_files = [image for image in (await db.get(FileMetadata, resource.thumbnail_file_id) if resource.thumbnail_file_id else None, await db.get(FileMetadata, resource.banner_file_id) if resource.banner_file_id else None) if image]
     await db.execute(delete(ResourceBookmark).where(ResourceBookmark.resource_id == resource_id))
     await db.execute(delete(ResourceRating).where(ResourceRating.resource_id == resource_id))
     await db.execute(delete(ResourceView).where(ResourceView.resource_id == resource_id))
@@ -276,9 +323,13 @@ async def delete_resource(resource_id: str, current_user: User = Depends(get_cur
     await db.flush()
     if file_meta:
         await db.delete(file_meta)
+    for image in artwork_files:
+        await db.delete(image)
     await db.commit()
     if file_meta:
         storage_service.delete_file(file_meta.file_path)
+    for image in artwork_files:
+        storage_service.delete_file(image.file_path)
 
 
 @router.get("/resources/{resource_id}/download")
@@ -299,6 +350,25 @@ async def download_academic_resource(resource_id: str, current_user: User = Depe
     if not path.exists():
         raise HTTPException(status_code=404, detail="Resource file is unavailable")
     return FileResponse(path=str(path), media_type="application/pdf", filename=resource.file.filename)
+
+
+@router.get("/resources/{resource_id}/assets/{kind}")
+async def get_resource_artwork(resource_id: str, kind: str, db: AsyncSession = Depends(get_db)):
+    if kind not in {"thumbnail", "banner"}:
+        raise HTTPException(status_code=404, detail="Resource artwork not found")
+    resource = await db.get(AcademicResource, resource_id)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource artwork not found")
+    file_id = resource.thumbnail_file_id if kind == "thumbnail" else resource.banner_file_id
+    meta = await db.get(FileMetadata, file_id) if file_id else None
+    if not meta:
+        raise HTTPException(status_code=404, detail="Resource artwork not found")
+    if storage_service.is_cloudinary_path(meta.file_path):
+        return RedirectResponse(storage_service.get_download_url(meta.file_path, attachment=False), status_code=307)
+    path = storage_service.get_absolute_path(meta.file_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Resource artwork is unavailable")
+    return FileResponse(path=str(path), media_type=meta.mime_type, headers={"Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff"})
 
 @router.post("/resources/{resource_id}/bookmark")
 async def bookmark_resource(

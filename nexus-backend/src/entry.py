@@ -395,7 +395,39 @@ def academic_resource_view(row: dict[str, Any], saved: bool = False) -> dict[str
         "uploader_name": row.get("uploader_name") or row["publisher_name"],
         "created_at": row["created_at"], "is_saved": bool(saved),
         "download_url": f"/api/v1/academics/resources/{row['id']}/download",
+        "thumbnail_url": f"/api/v1/academics/resources/{row['id']}/assets/thumbnail" if row.get("has_thumbnail") else None,
+        "banner_url": f"/api/v1/academics/resources/{row['id']}/assets/banner" if row.get("has_banner") else None,
     }
+
+
+async def academic_artwork_content(upload: Any) -> tuple[bytes, str] | None:
+    if upload is None or not hasattr(upload, "read") or not getattr(upload, "filename", ""):
+        return None
+    content = await upload.read(4 * 1024 * 1024 + 1)
+    if not content:
+        return None
+    if len(content) > 4 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Cover and banner images must be 4 MB or smaller")
+    mime = str(getattr(upload, "content_type", "") or "").lower()
+    valid = {
+        "image/jpeg": content.startswith(b"\xff\xd8\xff"),
+        "image/png": content.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/webp": len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP",
+    }
+    if mime not in valid or not valid[mime]:
+        raise HTTPException(status_code=400, detail="Cover and banner images must be valid JPG, PNG, or WebP files")
+    return content, mime
+
+
+async def store_academic_artwork(db: Any, resource_id: str, kind: str, artwork: tuple[bytes, str] | None) -> bool:
+    if not artwork:
+        return False
+    content, mime = artwork
+    chunk_size = 1_000_000
+    for index, offset in enumerate(range(0, len(content), chunk_size)):
+        encoded = base64.b64encode(content[offset:offset + chunk_size]).decode("ascii")
+        await execute(db, "INSERT INTO academic_resource_artwork(resource_id,kind,mime_type,chunk_index,data_base64) VALUES(?,?,?,?,?)", resource_id, kind, mime, index, encoded)
+    return True
 
 
 async def academic_resource_rows(db: Any, user_id: str, collection: str = "all") -> list[dict[str, Any]]:
@@ -413,7 +445,9 @@ async def academic_resource_rows(db: Any, user_id: str, collection: str = "all")
         params = (user_id,)
     order = "v.viewed_at DESC" if collection == "recent" else "r.created_at DESC"
     rows = await query(db, f"""SELECT r.*,u.username AS uploader_name,
-        EXISTS(SELECT 1 FROM saved_academic_resources s WHERE s.resource_id=r.id AND s.user_id=?) AS is_saved
+        EXISTS(SELECT 1 FROM saved_academic_resources s WHERE s.resource_id=r.id AND s.user_id=?) AS is_saved,
+        EXISTS(SELECT 1 FROM academic_resource_artwork a WHERE a.resource_id=r.id AND a.kind='thumbnail') AS has_thumbnail,
+        EXISTS(SELECT 1 FROM academic_resource_artwork a WHERE a.resource_id=r.id AND a.kind='banner') AS has_banner
         FROM academic_resources r LEFT JOIN users u ON u.id=r.uploader_id {where}
         ORDER BY {order} LIMIT 300""", *params)
     return rows
@@ -458,6 +492,8 @@ async def upload_academic_resource(request: Request, user: dict[str, Any] = Depe
         raise HTTPException(status_code=413, detail="PDF files must be between 1 byte and 50 MB")
     if mime != "application/pdf" or not filename.lower().endswith(".pdf") or not content.startswith(b"%PDF-"):
         raise HTTPException(status_code=400, detail="The uploaded file is not a valid PDF")
+    thumbnail_art = await academic_artwork_content(form.get("thumbnail"))
+    banner_art = await academic_artwork_content(form.get("banner"))
     resource_id, stamp = new_id(), now()
     await execute(db, "INSERT INTO academic_resources(id,title,subject_code,publisher_name,original_filename,mime_type,size_bytes,pages,uploader_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)", resource_id, payload.title, payload.subject_code, payload.publisher_name, filename[:255], "application/pdf", len(content), payload.pages, user["sub"], stamp)
     # Keep each base64 D1 value below its 2 MB row/value cap while using
@@ -466,8 +502,10 @@ async def upload_academic_resource(request: Request, user: dict[str, Any] = Depe
     for index, offset in enumerate(range(0, len(content), chunk_size)):
         encoded = base64.b64encode(content[offset:offset + chunk_size]).decode("ascii")
         await execute(db, "INSERT INTO academic_resource_chunks(resource_id,chunk_index,data_base64) VALUES(?,?,?)", resource_id, index, encoded)
+    has_thumbnail = await store_academic_artwork(db, resource_id, "thumbnail", thumbnail_art)
+    has_banner = await store_academic_artwork(db, resource_id, "banner", banner_art)
     await execute(db, "INSERT INTO saved_academic_resources(resource_id,user_id,created_at) VALUES(?,?,?)", resource_id, user["sub"], stamp)
-    row = await first(db, "SELECT r.*,u.username AS uploader_name,1 AS is_saved FROM academic_resources r LEFT JOIN users u ON u.id=r.uploader_id WHERE r.id=?", resource_id)
+    row = await first(db, "SELECT r.*,u.username AS uploader_name,1 AS is_saved,? AS has_thumbnail,? AS has_banner FROM academic_resources r LEFT JOIN users u ON u.id=r.uploader_id WHERE r.id=?", int(has_thumbnail), int(has_banner), resource_id)
     return academic_resource_view(row, True)
 
 
@@ -487,6 +525,17 @@ async def unsave_academic_resource(resource_id: str, user: dict[str, Any] = Depe
 @app.delete("/api/v1/academics/resources/history", status_code=status.HTTP_204_NO_CONTENT)
 async def clear_academic_resource_history(user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     await execute(db, "DELETE FROM academic_resource_views WHERE user_id=?", user["sub"])
+
+
+@app.get("/api/v1/academics/resources/{resource_id}/assets/{kind}")
+async def academic_resource_artwork(resource_id: str, kind: str, db: Any = Depends(get_db)):
+    if kind not in {"thumbnail", "banner"}:
+        raise HTTPException(status_code=404, detail="Resource artwork not found")
+    chunks = await query(db, "SELECT mime_type,data_base64 FROM academic_resource_artwork WHERE resource_id=? AND kind=? ORDER BY chunk_index", resource_id, kind)
+    if not chunks:
+        raise HTTPException(status_code=404, detail="Resource artwork not found")
+    body = b"".join(base64.b64decode(chunk["data_base64"]) for chunk in chunks)
+    return Response(content=body, media_type=chunks[0]["mime_type"], headers={"Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff"})
 
 
 @app.delete("/api/v1/academics/resources/{resource_id}", status_code=status.HTTP_204_NO_CONTENT)
