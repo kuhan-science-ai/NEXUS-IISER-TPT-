@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
+- Fixed the fire animation by deriving a transparent animated WebP frame from the source GIF and using it in both card overlays and the upload/edit preview; this avoids opaque center fill and mask-dependent playback.
 - Render the animated fire asset as a small, top-layer card-border image and provide a matching gradient placeholder banner for resources without uploaded banners.
 - Rendered profile avatars in Friends, friend/search results, global search, DMs, conversation members, and group chats; profile saves refresh this browser immediately and active lists reload current avatars periodically.
 - Raised the fire frame above the resource card and reduced its visual size.

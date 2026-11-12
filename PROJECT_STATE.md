@@ -4,7 +4,7 @@ Profile avatar URLs and media types flow through friend/search, conversation mem
 
 Academic resource upload/edit dialogs preview an optional recolorable fire-grid animation. Selection and hex color are stored with the resource and rendered as a soft, narrow overlay around the full card border while preserving the standard card and button layout. Production D1 migration `0013_academic_resource_animation.sql` is applied; local D1/FastAPI need migrations.
 
-Resource cards show a consistent fallback banner when no banner is uploaded. The fire effect uses the animated GIF as an overlay image so its frames continue playing above the card without changing layout.
+Resource cards show a consistent fallback banner when no banner is uploaded. The fire frame is an animated WebP with a transparent center, derived from the provided GIF, and plays above the card and in upload/edit previews without changing layout.
 
 The fire overlay preserves the standard resource card layout and button positions; its animation is clipped to a subtle border band.
 
