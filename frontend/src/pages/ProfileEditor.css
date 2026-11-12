@@ -187,6 +187,7 @@
 .profile-image-editor-controls { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .profile-image-editor-controls label { display: flex; align-items: center; flex: 1; gap: 8px; color: var(--pe-muted); font-size: 12px; font-weight: 650; }
 .profile-image-editor-controls input[type="range"] { flex: 1; min-width: 80px; accent-color: var(--profile-accent); }
+.profile-image-timeline { display:flex;align-items:center;gap:10px;margin:-5px 0 14px }.profile-image-timeline .profile-editor-secondary { display:grid;place-items:center;width:34px;height:32px;padding:0 }.profile-image-timeline input { flex:1;min-width:0;accent-color:var(--profile-accent) }.profile-image-timeline span { min-width:82px;color:var(--pe-muted);font-size:10px;font-variant-numeric:tabular-nums;text-align:right }
 .profile-image-editor-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 20px; }
 @keyframes profile-image-editor-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes profile-image-editor-in { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }

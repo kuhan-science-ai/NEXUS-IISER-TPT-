@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
+- Added a pause button and seek timeline to animated profile image previews; GIFs become editable preview video, and animated crops are rendered into the saved WebM.
 - Preserved original animated GIF/video profile media when applying its preview, rendered GIF banners with image elements, and raised profile banner limits to 20 MB in the UI and both APIs.
 - Added drag, zoom, rotate, reset, and crop previews for profile photos/banners and Academic Repository pictures/banners; profile GIF/video files retain their animation when applied.
 - Refined resource preview stacking and clipping so banner, metadata, and changing action controls sit above the animated fire without inner scrollbars.
