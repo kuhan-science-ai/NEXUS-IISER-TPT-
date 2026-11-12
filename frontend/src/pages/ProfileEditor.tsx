@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowLeft, BookOpen, Camera, Check, ChevronDown, CircleUserRound, ImagePlus, LayoutGrid, LockKeyhole, Pause, Play, RotateCcw, Sparkles, X, ZoomIn } from 'lucide-react';
 import { api, UserSummary } from '../services/api';
 import { readUserPreference, writeUserPreference } from '../services/userPreferences';
@@ -110,7 +111,12 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
     let mediaFile = file;
     let isVideo = file.type === 'video/mp4' || file.type === 'video/webm';
     if (!file.type.startsWith('image/') && !isVideo) { setError('Choose an image, GIF, MP4 or WebM file.'); return; }
-    if (file.size > limit * 1024 * 1024) { setError(`${kind === 'avatar' ? 'Profile photos' : 'Profile banners'} must be ${limit} MB or smaller, including GIFs and videos.`); return; }
+    if (file.size > limit * 1024 * 1024) {
+      const message = `${kind === 'avatar' ? 'Profile photos' : 'Profile banners'} must be ${limit} MB or smaller, including GIFs and videos.`;
+      setError(message);
+      if (kind === 'banner') window.alert(`This banner is larger than 20 MB. Choose a smaller file.`);
+      return;
+    }
     if (file.type === 'image/gif') {
       try { setError('Preparing animated preview…'); mediaFile = await gifToVideo(file, kind); isVideo = true; }
       catch { setError('This browser could not prepare the GIF preview. Try a video or still image.'); return; }
@@ -383,7 +389,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
         <article className="profile-editor-widget"><div className="profile-editor-book-row"><div className="profile-editor-book-cover cover-teal"><BookOpen size={22} /></div><div><strong>Linear Algebra Done Right</strong><span>Want to read · Mathematics</span></div></div></article>
       </>}
     </section>
-    {imageEditor && <div className="profile-image-editor-backdrop" role="presentation">
+    {imageEditor && createPortal(<div className="profile-image-editor-backdrop" role="presentation" style={{ '--pe-panel': 'var(--bg-navigation, #2f3136)', '--pe-card': 'var(--bg-surface, #2f3136)', '--pe-raised': 'var(--bg-elevated, #40444b)', '--pe-border': 'var(--border, #202225)', '--pe-text': 'var(--text-primary, #f2f3f5)', '--pe-muted': 'var(--text-muted, #b9bbbe)', '--profile-accent': accentColor } as React.CSSProperties}>
       <section className="profile-image-editor" role="dialog" aria-modal="true" aria-labelledby="profile-image-editor-title">
         <div className="profile-image-editor-head"><div><h2 id="profile-image-editor-title">Preview and edit {imageEditor.kind === 'avatar' ? 'profile photo' : 'banner'}</h2><p>{imageEditor.isVideo ? 'Edits are rendered into the saved animation.' : 'Your image is uploaded only after you save profile changes.'}</p></div><button type="button" className="profile-editor-icon-button" onClick={() => { URL.revokeObjectURL(imageEditor.url); setImageEditor(null); }} aria-label="Cancel image edit"><X size={17} /></button></div>
         <div className={`profile-image-crop ${imageEditor.kind === 'avatar' ? 'is-avatar' : 'is-banner'}`} onPointerDown={beginImageDrag} onPointerMove={moveImageDrag} onPointerUp={endImageDrag} onPointerCancel={endImageDrag} role="application" aria-label="Drag image to reposition it">{imageEditor.isVideo ? <video ref={cropVideoRef} draggable={false} src={imageEditor.url} autoPlay loop muted playsInline onLoadedMetadata={event => setCropDuration(event.currentTarget.duration)} onTimeUpdate={event => setCropTime(event.currentTarget.currentTime)} onPlay={() => setCropPlaying(true)} onPause={() => setCropPlaying(false)} style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} /> : <img draggable={false} src={imageEditor.url} alt="Image preview" style={{ transform: `translate(${imageEditor.x * 100}%, ${imageEditor.y * 100}%) rotate(${imageEditor.rotation}deg) scale(${imageEditor.scale})` }} />}<span className="profile-image-crop-guide">Drag to position</span></div>
@@ -391,7 +397,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ currentUser, onPro
         <div className="profile-image-editor-controls"><label><ZoomIn size={15} /> Zoom <input type="range" min="1" max="3" step=".01" value={imageEditor.scale} onChange={event => setImageEditor({ ...imageEditor, scale: Number(event.target.value) })} /></label><button type="button" className="profile-editor-secondary" onClick={() => setImageEditor({ ...imageEditor, rotation: imageEditor.rotation + 90 })}><RotateCcw size={15} /> Rotate</button><button type="button" className="profile-editor-text-button" onClick={() => setImageEditor({ ...imageEditor, scale: 1, rotation: 0, x: 0, y: 0 })}>Reset crop</button></div>
         <div className="profile-image-editor-actions"><button type="button" className="profile-editor-secondary" onClick={() => { URL.revokeObjectURL(imageEditor.url); setImageEditor(null); }}>Cancel</button><button type="button" className="profile-editor-save" onClick={() => void applyImageEdit()}><Check size={15} /> Apply image</button></div>
       </section>
-    </div>}
+    </div>, document.body)}
   </div>
   {hasUnsavedChanges && <div className={`profile-editor-change-bar${isCloseBlocked ? ' is-warning' : ''}`} role="status"><div><strong>Unsaved profile changes</strong><span>{isCloseBlocked ? 'Save, discard, or keep editing before closing.' : 'Review your changes before closing the profile.'}</span></div><div><button type="button" className="profile-editor-secondary" onClick={resetChanges}>Reset</button><button type="button" className="profile-editor-secondary" onClick={onClose} disabled={saving}>Discard &amp; close</button><button type="button" className="profile-editor-save" onClick={() => void saveProfile()} disabled={saving}>{saving ? 'Saving…' : <><Check size={15} /> Save changes</>}</button></div></div>}
   </div>;

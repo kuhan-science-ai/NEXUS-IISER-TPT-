@@ -173,8 +173,8 @@
 .profile-editor-empty-state p { max-width: 260px; color: var(--pe-subtle); font-size: 11px; line-height: 1.55; }
 
 /* Image changes are staged locally first; the backend is only touched on Save changes. */
-.profile-image-editor-backdrop { position: absolute; z-index: 10; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(5, 7, 14, .3); backdrop-filter: blur(2px); animation: profile-image-editor-backdrop-in 180ms ease-out both; }
-.profile-image-editor { width: min(560px, 100%); padding: 20px; border: 1px solid rgba(215, 218, 255, .18); border-radius: 14px; background: var(--pe-panel); color: var(--pe-text); box-shadow: 0 24px 72px rgba(0, 0, 0, .5); animation: profile-image-editor-in 260ms cubic-bezier(.16, 1, .3, 1) both; }
+.profile-image-editor-backdrop { position: fixed; z-index: 10050; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(5, 7, 14, .72); backdrop-filter: blur(5px); animation: profile-image-editor-backdrop-in 180ms ease-out both; }
+.profile-image-editor { width: min(560px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 20px; border: 1px solid rgba(215, 218, 255, .18); border-radius: 14px; background: var(--pe-panel); color: var(--pe-text); box-shadow: 0 24px 72px rgba(0, 0, 0, .5); animation: profile-image-editor-in 260ms cubic-bezier(.16, 1, .3, 1) both; }
 .profile-image-editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .profile-image-editor-head h2 { margin: 0; font-size: 17px; line-height: 1.25; }
 .profile-image-editor-head p { margin: 5px 0 0; color: var(--pe-muted); font-size: 12px; line-height: 1.45; }
@@ -187,7 +187,7 @@
 .profile-image-editor-controls { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .profile-image-editor-controls label { display: flex; align-items: center; flex: 1; gap: 8px; color: var(--pe-muted); font-size: 12px; font-weight: 650; }
 .profile-image-editor-controls input[type="range"] { flex: 1; min-width: 80px; accent-color: var(--profile-accent); }
-.profile-image-timeline { display:flex;align-items:center;gap:10px;margin:-5px 0 14px }.profile-image-timeline .profile-editor-secondary { display:grid;place-items:center;width:34px;height:32px;padding:0 }.profile-image-timeline input { flex:1;min-width:0;accent-color:var(--profile-accent) }.profile-image-timeline span { min-width:82px;color:var(--pe-muted);font-size:10px;font-variant-numeric:tabular-nums;text-align:right }
+.profile-image-timeline { position:relative;z-index:2;display:flex;align-items:center;gap:10px;min-height:42px;margin:-5px 0 14px;padding:5px 8px;border:1px solid var(--pe-border);border-radius:9px;background:var(--pe-card) }.profile-image-timeline .profile-editor-secondary { display:grid;place-items:center;flex:none;width:34px;height:32px;padding:0 }.profile-image-timeline input { display:block;flex:1;min-width:80px;height:24px;accent-color:var(--profile-accent);cursor:pointer }.profile-image-timeline span { min-width:82px;color:var(--pe-muted);font-size:10px;font-variant-numeric:tabular-nums;text-align:right }
 .profile-image-editor-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 20px; }
 @keyframes profile-image-editor-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes profile-image-editor-in { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
