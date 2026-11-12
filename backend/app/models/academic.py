@@ -60,6 +60,8 @@ class AcademicResource(Base):
     size_bytes = Column(BigInteger, nullable=False, default=0)
     thumbnail_file_id = Column(String(36), ForeignKey("file_metadata.id", ondelete="SET NULL"), nullable=True)
     banner_file_id = Column(String(36), ForeignKey("file_metadata.id", ondelete="SET NULL"), nullable=True)
+    animation = Column(String(20), nullable=False, default="none")
+    animation_color = Column(String(7), nullable=False, default="#ff6a00")
     academic_year = Column(String(20), nullable=True)
     semester = Column(String(20), nullable=True)
     file_id = Column(String(36), ForeignKey("file_metadata.id", ondelete="RESTRICT"), nullable=False)

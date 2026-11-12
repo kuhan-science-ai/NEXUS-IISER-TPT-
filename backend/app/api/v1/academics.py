@@ -1,4 +1,5 @@
 from typing import Optional, List
+import re
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, status
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -140,6 +141,7 @@ async def list_resources(
             "uploader_id": r.uploader_id,
             "thumbnail_url": f"/api/v1/academics/resources/{r.id}/assets/thumbnail" if r.thumbnail_file_id else None,
             "banner_url": f"/api/v1/academics/resources/{r.id}/assets/banner" if r.banner_file_id else None,
+            "animation": r.animation or "none", "animation_color": r.animation_color or "#ff6a00",
             "academic_year": r.academic_year,
             "semester": r.semester,
             "download_count": r.download_count,
@@ -172,6 +174,8 @@ async def upload_academic_resource(
     file: UploadFile = File(...),
     thumbnail: Optional[UploadFile] = File(None),
     banner: Optional[UploadFile] = File(None),
+    animation: str = Form("none"),
+    animation_color: str = Form("#ff6a00"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -228,6 +232,8 @@ async def upload_academic_resource(
         size_bytes=size_bytes,
         thumbnail_file_id=thumbnail_meta.id if thumbnail_meta else None,
         banner_file_id=banner_meta.id if banner_meta else None,
+        animation="fire-grid" if animation == "fire-grid" else "none",
+        animation_color=animation_color if re.fullmatch(r"#[0-9a-fA-F]{6}", animation_color) else "#ff6a00",
         academic_year=academic_year,
         semester=semester,
         file_id=file_meta.id,
@@ -253,6 +259,8 @@ async def edit_academic_resource(
     file: Optional[UploadFile] = File(None),
     thumbnail: Optional[UploadFile] = File(None),
     banner: Optional[UploadFile] = File(None),
+    animation: str = Form("none"),
+    animation_color: str = Form("#ff6a00"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -263,6 +271,8 @@ async def edit_academic_resource(
         raise HTTPException(status_code=400, detail="Title, subject code, and publisher name are required")
     old_files: list[FileMetadata] = []
     resource.title, resource.subject_code, resource.publisher_name, resource.pages = title.strip(), subject_code.strip(), publisher_name.strip(), pages
+    resource.animation = "fire-grid" if animation == "fire-grid" else "none"
+    resource.animation_color = animation_color if re.fullmatch(r"#[0-9a-fA-F]{6}", animation_color) else "#ff6a00"
     if file and file.filename:
         file.file.seek(0)
         if file.content_type != "application/pdf" or not (await file.read(5)).startswith(b"%PDF-"):

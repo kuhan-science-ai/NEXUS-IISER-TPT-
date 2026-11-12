@@ -394,6 +394,7 @@ def academic_resource_view(row: dict[str, Any], saved: bool = False) -> dict[str
         "download_count": int(row["download_count"]), "uploader_id": row["uploader_id"],
         "uploader_name": row.get("uploader_name") or row["publisher_name"],
         "created_at": row["created_at"], "is_saved": bool(saved),
+        "animation": row.get("animation") or "none", "animation_color": row.get("animation_color") or "#ff6a00",
         "download_url": f"/api/v1/academics/resources/{row['id']}/download",
         "thumbnail_url": f"/api/v1/academics/resources/{row['id']}/assets/thumbnail" if row.get("has_thumbnail") else None,
         "banner_url": f"/api/v1/academics/resources/{row['id']}/assets/banner" if row.get("has_banner") else None,
@@ -494,8 +495,12 @@ async def upload_academic_resource(request: Request, user: dict[str, Any] = Depe
         raise HTTPException(status_code=400, detail="The uploaded file is not a valid PDF")
     thumbnail_art = await academic_artwork_content(form.get("thumbnail"))
     banner_art = await academic_artwork_content(form.get("banner"))
+    animation = "fire-grid" if form.get("animation") == "fire-grid" else "none"
+    animation_color = str(form.get("animation_color") or "#ff6a00")
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", animation_color):
+        animation_color = "#ff6a00"
     resource_id, stamp = new_id(), now()
-    await execute(db, "INSERT INTO academic_resources(id,title,subject_code,publisher_name,original_filename,mime_type,size_bytes,pages,uploader_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)", resource_id, payload.title, payload.subject_code, payload.publisher_name, filename[:255], "application/pdf", len(content), payload.pages, user["sub"], stamp)
+    await execute(db, "INSERT INTO academic_resources(id,title,subject_code,publisher_name,original_filename,mime_type,size_bytes,pages,uploader_id,created_at,animation,animation_color) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", resource_id, payload.title, payload.subject_code, payload.publisher_name, filename[:255], "application/pdf", len(content), payload.pages, user["sub"], stamp, animation, animation_color)
     # Keep each base64 D1 value below its 2 MB row/value cap while using
     # fewer than 50 statements for a maximum-size upload on the D1 Free plan.
     chunk_size = 1_400_000
@@ -528,7 +533,11 @@ async def edit_academic_resource(resource_id: str, request: Request, user: dict[
         if not content or len(content) > 50 * 1024 * 1024 or not filename.lower().endswith(".pdf") or getattr(replacement, "content_type", "") != "application/pdf" or not content.startswith(b"%PDF-"):
             raise HTTPException(status_code=400, detail="Choose a valid PDF file smaller than 50 MB")
     artwork = {kind: await academic_artwork_content(form.get(kind)) for kind in ("thumbnail", "banner")}
-    await execute(db, "UPDATE academic_resources SET title=?,subject_code=?,publisher_name=?,pages=?,original_filename=?,size_bytes=? WHERE id=? AND uploader_id=?", payload.title, payload.subject_code, payload.publisher_name, payload.pages, filename[:255], len(content) if content is not None else row["size_bytes"], resource_id, user["sub"])
+    animation = "fire-grid" if form.get("animation") == "fire-grid" else "none"
+    animation_color = str(form.get("animation_color") or row.get("animation_color") or "#ff6a00")
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", animation_color):
+        animation_color = "#ff6a00"
+    await execute(db, "UPDATE academic_resources SET title=?,subject_code=?,publisher_name=?,pages=?,original_filename=?,size_bytes=?,animation=?,animation_color=? WHERE id=? AND uploader_id=?", payload.title, payload.subject_code, payload.publisher_name, payload.pages, filename[:255], len(content) if content is not None else row["size_bytes"], animation, animation_color, resource_id, user["sub"])
     if content is not None:
         await execute(db, "DELETE FROM academic_resource_chunks WHERE resource_id=?", resource_id)
         for index, offset in enumerate(range(0, len(content), 1_400_000)):

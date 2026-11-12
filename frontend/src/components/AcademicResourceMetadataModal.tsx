@@ -4,9 +4,10 @@ import { api, UserSummary } from '../services/api';
 import './AcademicResourceMetadataModal.css';
 
 export interface StagedAcademicResource { file: File; pages: number; }
-export interface EditableAcademicResource { id: string; title: string; subject_code: string; publisher_name: string; pages: number; original_filename: string; size_bytes: number; thumbnail_url?: string | null; banner_url?: string | null; }
+export interface EditableAcademicResource { id: string; title: string; subject_code: string; publisher_name: string; pages: number; original_filename: string; size_bytes: number; thumbnail_url?: string | null; banner_url?: string | null; animation?: string; animation_color?: string; }
 interface Props { staged?: StagedAcademicResource; resource?: EditableAcademicResource; user: UserSummary; onClose: () => void; onUploaded: () => void; }
 const formatSize = (size: number) => size >= 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(2)} MB` : `${(size / 1024).toFixed(1)} KB`;
+const hueFromHex = (hex: string) => { const [r, g, b] = hex.match(/[0-9a-f]{2}/gi)?.map(value => parseInt(value, 16) / 255) || [1, .4, 0]; const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min; if (!d) return 0; const hue = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4; return Math.round((hue * 60 - 22 + 360) % 360); };
 
 export const AcademicResourceMetadataModal: React.FC<Props> = ({ staged, resource, user, onClose, onUploaded }) => {
   const [title, setTitle] = useState(resource?.title || staged?.file.name.replace(/\.pdf$/i, '') || '');
@@ -15,6 +16,8 @@ export const AcademicResourceMetadataModal: React.FC<Props> = ({ staged, resourc
   const [useAccountName, setUseAccountName] = useState(!resource || resource.publisher_name === accountName);
   const [publisher, setPublisher] = useState(resource?.publisher_name || accountName);
   const [pages, setPages] = useState(resource?.pages || staged?.pages || 1);
+  const [animation, setAnimation] = useState(resource?.animation === 'fire-grid');
+  const [animationColor, setAnimationColor] = useState(resource?.animation_color || '#ff6a00');
   const [replacementPdf, setReplacementPdf] = useState<File | null>(null);
   const [thumbnail, setThumbnail] = useState<File | null>(null);
   const [banner, setBanner] = useState<File | null>(null);
@@ -52,6 +55,8 @@ export const AcademicResourceMetadataModal: React.FC<Props> = ({ staged, resourc
       form.append('subject_code', subjectCode.trim());
       form.append('publisher_name', (useAccountName ? accountName : publisher).trim());
       form.append('pages', String(pages));
+      form.append('animation', animation ? 'fire-grid' : 'none');
+      form.append('animation_color', animationColor);
       if (thumbnail) form.append('thumbnail', thumbnail, thumbnail.name);
       if (banner) form.append('banner', banner, banner.name);
       const saved = resource ? await api.updateResource(resource.id, form) : await api.uploadResource(form);
@@ -64,7 +69,7 @@ export const AcademicResourceMetadataModal: React.FC<Props> = ({ staged, resourc
   return <div className="academic-resource-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !saving) onClose(); }}>
     <form className="academic-resource-modal" role="dialog" aria-modal="true" aria-labelledby="academic-resource-modal-title" onSubmit={submit}>
       <header><div><span>ACADEMIC REPOSITORY</span><h2 id="academic-resource-modal-title">{resource ? 'Edit resource' : 'Add resource details'}</h2><p>{resource ? 'Update the details or replace the PDF.' : 'Your PDF is verified and ready to publish.'}</p></div><button type="button" aria-label="Close" onClick={onClose} disabled={saving}><X size={18} /></button></header>
-      <div className="academic-resource-file-summary"><span className="academic-resource-pdf">PDF</span><div><strong>{staged?.file.name || resource?.original_filename}</strong><small>{pages} pages · {formatSize(staged?.file.size || resource?.size_bytes || 0)}</small></div></div>
+      <div className="academic-resource-editor-layout"><div className="academic-resource-editor-fields"><div className="academic-resource-file-summary"><span className="academic-resource-pdf">PDF</span><div><strong>{staged?.file.name || replacementPdf?.name || resource?.original_filename}</strong><small>{pages} pages · {formatSize(staged?.file.size || replacementPdf?.size || resource?.size_bytes || 0)}</small></div></div>
       {resource && <label>Replace PDF (optional)<input type="file" accept="application/pdf,.pdf" onChange={async event => { const file = event.target.files?.[0]; if (!file) return; try { const [pdfjs, worker] = await Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]); pdfjs.GlobalWorkerOptions.workerSrc = worker.default; const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise; setPages(pdf.numPages); setReplacementPdf(file); setError(''); } catch { setError('Choose a valid PDF file.'); } }} /></label>}
       {resource && <label>Pages<input type="number" required min={1} max={100000} value={pages} onChange={event => setPages(Number(event.target.value))} /></label>}
       <label>Title<input required maxLength={200} value={title} onChange={event => setTitle(event.target.value)} placeholder="Resource title" /></label>
@@ -75,6 +80,7 @@ export const AcademicResourceMetadataModal: React.FC<Props> = ({ staged, resourc
         <label className="academic-resource-artwork-picker">File thumbnail <small>Optional square profile image · JPG, PNG, WebP · max 4 MB</small><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => chooseImage(event.target.files?.[0], setThumbnail)} />{thumbnailPreview && <img className="academic-resource-thumbnail-preview" src={thumbnailPreview} alt="Thumbnail preview" />}</label>
         <label className="academic-resource-artwork-picker">Banner image <small>Optional wide header image. Text and details stay in a separate panel.</small><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => chooseImage(event.target.files?.[0], setBanner)} />{bannerPreview && <img className="academic-resource-banner-preview" src={bannerPreview} alt="Banner preview" />}</label>
       </div>
+      </div><aside className="academic-resource-overview"><span>LIVE OVERVIEW</span><div className="academic-resource-animation-stage">{animation && <img src="/resource-grid-flame.gif" alt="Draft fire grid animation preview" style={{ filter: `hue-rotate(${hueFromHex(animationColor)}deg) saturate(1.8)` }} />}{!animation && <span>Animation preview</span>}</div><label className="academic-resource-animation-toggle"><input type="checkbox" checked={animation} onChange={event => setAnimation(event.target.checked)} /> Use fire grid animation</label><label className="academic-resource-animation-color">Animation color<input type="color" value={animationColor} onChange={event => setAnimationColor(event.target.value)} disabled={!animation} /></label><small>Preview only · animation stays in its own card panel, clear of text.</small></aside></div>
       {error && <p className="academic-resource-error" role="alert">{error}</p>}
       <footer><button type="button" className="academic-resource-discard" onClick={onClose} disabled={saving}>Discard</button><button type="submit" className="academic-resource-upload" disabled={saving}>{saving ? 'Saving…' : resource ? 'Save changes' : 'Upload file'}</button></footer>
     </form>
