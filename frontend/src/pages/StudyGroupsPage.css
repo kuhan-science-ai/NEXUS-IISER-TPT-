@@ -168,7 +168,7 @@
 .nexus-channel-empty strong { color:var(--text-primary); font-size:13px; }
 .nexus-channel-empty p { font-size:10px; }
 .nexus-chat-message { position:relative; display:flex; gap:9px; min-height:0; padding:0 34px 0 0; border-radius:3px; background:transparent; }
-.nexus-chat-message:hover { background:transparent; }
+.nexus-chat-message:hover { background:color-mix(in srgb,var(--text-primary) 4%,transparent); }
 .nexus-chat-message.grouped { min-height:0; padding:0 34px 0 0; }
 .nexus-chat-message:not(.grouped) + .nexus-chat-message:not(.grouped) { margin-top:10px; }
 .nexus-chat-avatar-slot { display:block; width:32px; min-width:32px; height:0; flex:none; }

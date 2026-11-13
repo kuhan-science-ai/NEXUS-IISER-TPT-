@@ -37,7 +37,7 @@
 .nexus-message-error { margin:0; padding:9px 16px; background:color-mix(in srgb,#ef4444 12%,var(--bg-surface)); color:#fca5a5; font-size:11px; }
 .nexus-message-row { display:flex; max-width:900px; align-self:flex-start; gap:10px; padding:8px; border-radius:8px; }
 .nexus-message-row.mine { align-self:flex-end; flex-direction:row-reverse; }
-.nexus-message-row:hover { background:transparent; }
+.nexus-message-row:hover { background:color-mix(in srgb,var(--text-primary) 4%,transparent); }
 .nexus-message-row { background:transparent; }
 .messenger-chat-messages.nexus-chat-messages { gap:0!important; padding:20px!important; }
 .nexus-message-row.nexus-chat-message { position:relative; display:flex!important; min-height:0; align-self:stretch!important; gap:9px; padding:0 34px 0 0; border-radius:3px; }
@@ -51,6 +51,7 @@
 .nexus-message-row.nexus-chat-message .nexus-message-meta { min-height:0; color:var(--primary); }
 .nexus-message-row.nexus-chat-message.grouped + .nexus-message-row.nexus-chat-message.grouped { margin-top:0; }
 .nexus-message-row.nexus-chat-message.is-jump-target { border-radius:5px; background:color-mix(in srgb,var(--primary) 11%,transparent); }
+.nexus-message-row.nexus-chat-message:hover:not(.is-jump-target) { border-radius:5px; background:color-mix(in srgb,var(--text-primary) 4%,transparent); }
 .nexus-message-avatar { display:grid; width:30px; height:30px; flex:none; place-items:center; border-radius:50%; background:var(--bg-elevated); color:var(--primary); font-size:12px; font-weight:800; }
 .nexus-message-avatar-spacer { width:30px; height:1px; flex:none; }
 .nexus-message-main { min-width:0; }
