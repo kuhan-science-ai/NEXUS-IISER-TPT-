@@ -59,6 +59,8 @@
 .nexus-message-meta time { color:var(--text-subtle); font-size:9px; }
 .nexus-message-text-line { position:relative; }
 .nexus-message-main > p,.nexus-message-text-line > p { margin:0; color:var(--text-primary); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+.nexus-message-main .nexus-message-emoji-only { font-size:38px; line-height:1.2; }
+.nexus-message-main .nexus-message-emoji-only .nexus-twemoji { width:1em; height:1em; vertical-align:-.12em; }
 .nexus-message-text-line > p.deleted { color:var(--text-subtle); font-style:italic; }
 .nexus-message-main > p.deleted { color:var(--text-subtle); font-style:italic; }
 .nexus-message-reply-preview { display:flex; width:fit-content; max-width:min(560px,100%); align-items:center; gap:7px; margin:0 0 2px; padding:0; border:0; background:transparent; color:var(--text-subtle); font-size:10px; line-height:1.45; text-align:left; cursor:pointer; }

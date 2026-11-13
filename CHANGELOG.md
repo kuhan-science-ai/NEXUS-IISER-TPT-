@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
+- Rendered Twemoji SVGs consistently in Messenger and Study Groups messages and reply previews, enlarged emoji-only messages, and overlaid the Messenger composer input with the same Twemoji art while preserving text editing.
 - Added a mutually exclusive no-animation/fire-frame/flower-frame choice to Academic Resource upload and edit. The flower frame uses the transparent animated WebP in previews and resource cards; both API backends preserve the selected option.
 - Added a Messenger-only Twemoji picker with local SVGs, searchable Unicode names/keywords and shortcode aliases, category tabs, recent emoji, cursor-aware insertion, shortcode autocomplete, and valid shortcode conversion.
 - Centered the Messenger reply connector, removed its decorative endpoint, and softened jump highlighting by removing the left edge bar.

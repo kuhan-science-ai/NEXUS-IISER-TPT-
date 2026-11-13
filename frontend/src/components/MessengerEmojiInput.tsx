@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Smile, Search, X } from 'lucide-react';
 import type { EmojiCategory, MessengerEmoji } from './messengerEmojiCatalog';
 import { activeShortcodeAt, convertCompletedShortcodes, type ShortcodeMatch, rankEmoji } from './messengerEmojiShortcodes';
+import { TwemojiText } from './TwemojiText';
 import './MessengerEmojiInput.css';
 
 interface MessengerEmojiInputProps {
@@ -34,6 +35,7 @@ export const MessengerEmojiInput: React.FC<MessengerEmojiInputProps> = ({ value,
   const [pickerPosition, setPickerPosition] = useState<FloatingPosition | null>(null);
   const [suggestionPosition, setSuggestionPosition] = useState<FloatingPosition | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const displayRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const selectionRef = useRef({ start: value.length, end: value.length });
   const rootRef = useRef<HTMLDivElement>(null);
@@ -197,20 +199,27 @@ export const MessengerEmojiInput: React.FC<MessengerEmojiInputProps> = ({ value,
     }
   };
 
+  const syncScroll = () => { if (displayRef.current && inputRef.current) displayRef.current.scrollLeft = inputRef.current.scrollLeft; };
+
   return <div className="nexus-emoji-composer-control" ref={rootRef}>
     <button ref={emojiButtonRef} type="button" className={`nexus-emoji-trigger${pickerOpen ? ' is-open' : ''}`} title="Choose emoji" aria-label="Choose emoji" aria-expanded={pickerOpen} onClick={togglePicker}><Smile size={17} /></button>
+    <div className="nexus-emoji-input-wrap">
+      <div className="nexus-emoji-input-display" aria-hidden="true" ref={displayRef}><TwemojiText eager>{value || placeholder}</TwemojiText></div>
     <input
       ref={inputRef}
       value={value}
       onChange={handleInputChange}
       onKeyDown={handleKeyDown}
-      onSelect={event => { const input = event.currentTarget; const start = input.selectionStart ?? value.length; selectionRef.current = { start, end: input.selectionEnd ?? value.length }; setCaret(start); }}
-      onClick={event => { const input = event.currentTarget; const start = input.selectionStart ?? value.length; selectionRef.current = { start, end: input.selectionEnd ?? value.length }; setCaret(start); }}
-      placeholder={placeholder}
+      onSelect={event => { const input = event.currentTarget; const start = input.selectionStart ?? value.length; selectionRef.current = { start, end: input.selectionEnd ?? value.length }; setCaret(start); syncScroll(); }}
+      onClick={event => { const input = event.currentTarget; const start = input.selectionStart ?? value.length; selectionRef.current = { start, end: input.selectionEnd ?? value.length }; setCaret(start); syncScroll(); }}
+      onScroll={syncScroll}
+      placeholder=""
       aria-label="Message"
       autoComplete="off"
       spellCheck
     />
+    {!value && <span className="nexus-emoji-input-placeholder" aria-hidden="true">{placeholder}</span>}
+    </div>
     {pickerOpen && pickerPosition && <section className="nexus-emoji-picker" style={{ left: pickerPosition.left, top: pickerPosition.top, width: pickerPosition.width }} aria-label="Emoji picker">
       <div className="nexus-emoji-picker-search"><Search size={15} /><input value={pickerSearch} onChange={event => setPickerSearch(event.target.value)} placeholder="Search all emoji" aria-label="Search emoji" autoComplete="off" /><button type="button" aria-label="Close emoji picker" onClick={() => setPickerOpen(false)}><X size={14} /></button></div>
       <div className="nexus-emoji-category-tabs" role="tablist" aria-label="Emoji categories">

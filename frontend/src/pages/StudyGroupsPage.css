@@ -228,6 +228,9 @@
 .nexus-message-row.mine { align-self:stretch; flex-direction:row; }
 .nexus-message-main { flex:1; }
 .nexus-message-main > p,.nexus-message-text-line > p { font-size:12px; }
+.nexus-message-content > p { margin:0; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+.nexus-message-content > p.nexus-message-emoji-only { font-size:38px; line-height:1.2; }
+.nexus-message-content > p.nexus-message-emoji-only .nexus-twemoji { width:1em; height:1em; vertical-align:-.12em; }
 .nexus-message-meta { color:#8b5cf6; }
 .nexus-message-reactions { min-height:0; margin-top:0; }
 .nexus-message-reactions:empty { display:none; }

@@ -28,6 +28,8 @@ Messenger replies now render a compact author-and-message preview with a connect
 
 Messenger now has a dedicated local Twemoji picker and shortcode autocomplete/conversion in the chat input only. The picker uses the extracted 4,009 SVG assets, Unicode names/categories and shortcode aliases, supports skin-tone variants and per-account recent emoji, and inserts at the current cursor without sending.
 
+Messenger and Study Groups render message and reply-preview emoji with the same local Twemoji SVGs. Emoji mixed with text stays at normal message size; emoji-only messages render larger. Messenger's composer visually overlays the native input with Twemoji while preserving cursor and editing behavior; the SVG index is loaded only when emoji appears.
+
 Messenger reply context now renders above the replying message with a compact connector and slight indent. Removed the extra empty reaction button that appeared below messages on hover; existing reactions remain visible and removable.
 
 The Messenger reply context now includes the referenced sender's small profile avatar and inline, truncated message text alongside the sender name. It uses the loaded original message when available and falls back gracefully to reply metadata.
