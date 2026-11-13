@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
+- Positioned Messenger reply context above the replying message with an indented connector, and removed the empty reaction button previously shown below messages on hover.
 - Updated Messenger reply previews to show the replied author's name and message with a compact connector, tightened consecutive message spacing, and collapsed empty reaction rows so reaction space appears only while reactions exist.
 - Removed remaining grouped-message avatar height and list gaps from Messenger and Study Groups; reaction rows collapse when empty.
 - Increased the breathing gap between separate author groups to 10px in Messenger and Study Groups while keeping same-author messages compact.

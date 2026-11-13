@@ -26,6 +26,8 @@ Last reviewed: 2026-11-13
 
 Messenger replies now render a compact author-and-message preview with a connector to the replied message. Message lists no longer reserve hidden avatar height for grouped messages; separate author groups have a 10px breathing gap, and empty reaction rows take no space until a reaction is added. The same spacing applies to Study Groups.
 
+Messenger reply context now renders above the replying message with a compact connector and slight indent. Removed the extra empty reaction button that appeared below messages on hover; existing reactions remain visible and removable.
+
 ## Overview
 
 NEXUS is a student community and academic platform for IISER Tirupati. The active frontend in this checkout is a React/TypeScript single-page app built with Vite. The backend is FastAPI with SQLAlchemy persistence, REST APIs, and WebSocket messaging.

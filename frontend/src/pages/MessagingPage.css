@@ -97,8 +97,6 @@
 .nexus-message-reactions.has-reactions { min-height:24px; margin-top:3px; }
 .nexus-message-reactions button { padding:3px 7px; border:1px solid var(--border); border-radius:11px; background:var(--bg-surface); color:var(--text-muted); font-size:10px; cursor:pointer; }
 .nexus-message-reactions button.is-reacted { border-color:var(--primary); background:color-mix(in srgb,var(--primary) 18%,var(--bg-surface)); color:var(--text-primary); }
-.nexus-message-reactions .nexus-add-reaction { display:none; width:26px; height:24px; place-items:center; padding:2px; border-radius:6px; opacity:0; pointer-events:none; }
-.nexus-message-row:hover .nexus-message-reactions .nexus-add-reaction,.nexus-message-row:focus-within .nexus-message-reactions .nexus-add-reaction { display:grid; opacity:1; pointer-events:auto; }
 .nexus-real-composer { display:grid; gap:6px; }
 .nexus-real-composer > div { display:flex; align-items:center; gap:7px; }
 .nexus-real-composer input { flex:1; min-height:38px; padding:0 10px; border:1px solid var(--border); border-radius:7px; background:var(--bg-raised); color:var(--text-primary); font:inherit; font-size:12px; }
