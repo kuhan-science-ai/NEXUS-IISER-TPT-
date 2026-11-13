@@ -55,6 +55,8 @@ export const VisualEditor: React.FC<{ currentUser: UserSummary | null }> = ({ cu
   const { pathname } = useLocation();
   const userId = currentUser?.id || 'guest';
   const [active, setActive] = useState(false);
+  const [toggleRevealed, setToggleRevealed] = useState(false);
+  const [toggleShining, setToggleShining] = useState(false);
   const [selected, setSelected] = useState<HTMLElement | null>(null);
   const [hovered, setHovered] = useState<HTMLElement | null>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -68,6 +70,31 @@ export const VisualEditor: React.FC<{ currentUser: UserSummary | null }> = ({ cu
   const dockPositionRef = useRef(dockPosition);
   const dockDragRef = useRef<{ pointerX: number; pointerY: number; left: number; top: number; width: number; height: number } | null>(null);
   const dockWasDragged = useRef(false);
+  const toggleShineTimer = useRef<number | null>(null);
+  const toggleRevealedRef = useRef(false);
+
+  useEffect(() => {
+    const onShortcut = (event: KeyboardEvent) => {
+      if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.key.toLowerCase() !== 'c') return;
+      const target = event.target as HTMLElement | null;
+      if (target?.matches('input, textarea, select, [contenteditable="true"]')) return;
+      event.preventDefault();
+      const reveal = !toggleRevealedRef.current;
+      toggleRevealedRef.current = reveal;
+      setToggleRevealed(reveal);
+      if (reveal) {
+        setToggleShining(true);
+        if (toggleShineTimer.current) window.clearTimeout(toggleShineTimer.current);
+        toggleShineTimer.current = window.setTimeout(() => setToggleShining(false), 2100);
+      } else {
+        setActive(false);
+        setToggleShining(false);
+        if (toggleShineTimer.current) window.clearTimeout(toggleShineTimer.current);
+      }
+    };
+    window.addEventListener('keydown', onShortcut);
+    return () => { window.removeEventListener('keydown', onShortcut); if (toggleShineTimer.current) window.clearTimeout(toggleShineTimer.current); };
+  }, []);
 
   useEffect(() => {
     const next = loadDockPosition(userId);
@@ -389,9 +416,9 @@ export const VisualEditor: React.FC<{ currentUser: UserSummary | null }> = ({ cu
           </> : <p className="nexus-editor-hint"><MousePointer2 size={14} /> Click any page element to inspect and adjust it.</p>}
           <button className="nexus-editor-reset nexus-editor-reset-page" onClick={resetPage}><RotateCcw size={13} /> Restore default page layout</button>
         </div>}
-        <button className={`nexus-editor-toggle${active ? ' active' : ''}`} onPointerDown={beginDockDrag} onClick={() => { if (dockWasDragged.current) { dockWasDragged.current = false; return; } setActive((value) => !value); }} title="Drag to move · click to customize" style={{ touchAction: 'none', cursor: 'grab' }} aria-pressed={active}>
-          <SlidersHorizontal size={15} /> {active ? 'Done' : 'Customize'}
-        </button>
+        {toggleRevealed && <button className={`nexus-editor-toggle${active ? ' active' : ''}${toggleShining ? ' is-shining' : ''}`} onPointerDown={beginDockDrag} onClick={() => { if (dockWasDragged.current) { dockWasDragged.current = false; return; } setActive((value) => !value); }} title="Drag to move · click to customize" style={{ touchAction: 'none', cursor: 'grab' }} aria-pressed={active}>
+          <span><SlidersHorizontal size={15} /> {active ? 'Done' : 'Customize'}</span>
+        </button>}
       </section>
     </>,
     document.body,
