@@ -1142,7 +1142,11 @@ async def insert_campus_group(db: Any, req: CampusGroupInput, user_id: str, grou
     is_pub = 1 if req.is_public else 0
     await execute(db, "INSERT INTO campus_groups(id,owner_id,name,description,icon,banner,is_public,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)", group_id, user_id, req.name.strip(), req.description.strip(), req.icon, req.banner, is_pub, stamp, stamp)
     await execute(db, "INSERT INTO campus_group_members(group_id,user_id,role,joined_at) VALUES(?,?,'owner',?)", group_id, user_id, stamp)
-    initial_channels = req.channels or [CampusGroupChannelInput(name="general", channel_type="text")]
+    initial_channels = list(req.channels or [])
+    if not any(channel.channel_type == "text" for channel in initial_channels):
+        initial_channels.append(CampusGroupChannelInput(name="general", channel_type="text"))
+    if not any(channel.channel_type == "voice" for channel in initial_channels):
+        initial_channels.append(CampusGroupChannelInput(name="general vc", channel_type="voice"))
     for position, channel in enumerate(initial_channels):
         await execute(db, "INSERT INTO campus_group_channels(id,group_id,name,position,created_at,channel_type) VALUES(?,?,?,?,?,?)", channel.id or new_id(), group_id, channel.name.strip().lower().replace(" ", "-")[:80], position, stamp, channel.channel_type)
     return group_id

@@ -153,10 +153,10 @@
 .nexus-channel-group-name { display:flex; align-items:center; justify-content:space-between; margin:14px 2px 8px; padding-bottom:10px; border-bottom:1px solid var(--border); color:var(--text-primary); font-size:11px; }
 .nexus-channel-group-name button,.nexus-channel-heading button { display:grid; width:25px; height:25px; place-items:center; border:0; border-radius:5px; background:transparent; color:var(--text-subtle); cursor:pointer; }
 .nexus-channel-group-name button:hover,.nexus-channel-heading button:hover { background:var(--bg-elevated); color:var(--text-primary); }
-.nexus-channel-heading { display:flex; align-items:center; justify-content:space-between; margin:4px 2px; color:var(--text-subtle); font-size:8px; font-weight:800; letter-spacing:.08em; }
+.nexus-channel-heading { display:flex; align-items:center; justify-content:space-between; margin:4px 2px; color:var(--text-muted); font-size:10px; font-weight:800; letter-spacing:.08em; }
 .nexus-channel-row { display:flex; align-items:center; border-radius:5px; }
 .nexus-channel-row.active,.nexus-channel-row:hover { background:var(--bg-elevated); }
-.nexus-channel-row button:first-child { display:flex; flex:1; align-items:center; gap:6px; min-width:0; padding:7px 6px; border:0; background:transparent; color:var(--text-muted); text-align:left; font-size:10px; cursor:pointer; }
+.nexus-channel-row button:first-child { display:flex; flex:1; align-items:center; gap:6px; min-width:0; padding:7px 6px; border:0; background:transparent; color:var(--text-muted); text-align:left; font-size:12px; cursor:pointer; }
 .nexus-channel-row.active button:first-child { color:var(--text-primary); font-weight:700; }
 .nexus-channel-row button:last-child { display:none; width:26px; height:26px; place-items:center; border:0; background:transparent; color:var(--text-subtle); cursor:pointer; }
 .nexus-channel-row:hover button:last-child { display:grid; }
