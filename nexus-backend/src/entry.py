@@ -1137,6 +1137,11 @@ async def list_campus_groups(user: dict[str, Any] = Depends(get_current_user), d
     return [{"id": row["id"], "name": row["name"], "description": row["description"], "icon": row["icon"], "banner": row["banner"], "owner_id": row["owner_id"], "is_public": bool(row.get("is_public", 1)), "joined": bool(row.get("viewer_role")), "role": row.get("viewer_role"), "member_count": int(row.get("member_count") or 0), "channels": by_group.get(row["id"], [])} for row in rows]
 
 
+async def campus_group_channel_snapshot(db: Any, group_id: str) -> list[dict[str, str]]:
+    rows = await query(db, "SELECT id,name,channel_type FROM campus_group_channels WHERE group_id=? ORDER BY position,name", group_id)
+    return [{"id": row["id"], "name": row["name"], "channel_type": row.get("channel_type") or "text"} for row in rows]
+
+
 async def insert_campus_group(db: Any, req: CampusGroupInput, user_id: str, group_id: str | None = None) -> str:
     stamp, group_id = now(), group_id or new_id()
     is_pub = 1 if req.is_public else 0
@@ -1155,8 +1160,12 @@ async def insert_campus_group(db: Any, req: CampusGroupInput, user_id: str, grou
 @app.post("/api/v1/groups", status_code=status.HTTP_201_CREATED)
 async def create_campus_group(req: CampusGroupInput, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     group_id = await insert_campus_group(db, req, user["sub"])
-    audience = await query(db, "SELECT id FROM users WHERE is_active=1")
-    await emit_realtime(request, [row["id"] for row in audience], "group.changed", group_id=group_id)
+    if req.is_public:
+        audience = await query(db, "SELECT id FROM users WHERE is_active=1")
+        recipients = [row["id"] for row in audience]
+    else:
+        recipients = [user["sub"]]
+    await emit_realtime(request, recipients, "group.changed", group_id=group_id, channels=await campus_group_channel_snapshot(db, group_id))
     return next(group for group in await list_campus_groups(user, db) if group["id"] == group_id)
 
 
@@ -1185,7 +1194,7 @@ async def join_campus_group(group_id: str, request: Request, user: dict[str, Any
         raise HTTPException(status_code=404, detail="Group not found")
     await execute(db, "INSERT OR IGNORE INTO campus_group_members(group_id,user_id,role,joined_at) VALUES(?,?,'member',?)", group_id, user["sub"], now())
     members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
-    await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id, channels=await campus_group_channel_snapshot(db, group_id))
     return {"message": "Joined group", "group_id": group_id}
 
 
@@ -1269,7 +1278,7 @@ async def create_campus_group_channel(group_id: str, payload: CampusGroupChannel
     channel_id = new_id()
     await execute(db, "INSERT INTO campus_group_channels(id,group_id,name,position,created_at,channel_type) VALUES(?,?,?,?,?,?)", channel_id, group_id, name, int(position["next_position"]), now(), payload.channel_type)
     members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
-    await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id, channels=await campus_group_channel_snapshot(db, group_id))
     return {"id": channel_id, "name": name, "channel_type": payload.channel_type}
 
 
@@ -1288,7 +1297,7 @@ async def delete_campus_group_channel(group_id: str, channel_id: str, request: R
     result = await execute(db, "DELETE FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id)
     if not getattr(result, "meta", {}).get("changes", 0):
         raise HTTPException(status_code=404, detail="Channel not found")
-    await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id, channels=await campus_group_channel_snapshot(db, group_id))
     return {"message": "Channel removed"}
 
 
