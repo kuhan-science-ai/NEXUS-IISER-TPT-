@@ -30,6 +30,8 @@ Messenger reply context now renders above the replying message with a compact co
 
 The Messenger reply context now includes the referenced sender's small profile avatar and inline, truncated message text alongside the sender name. It uses the loaded original message when available and falls back gracefully to reply metadata.
 
+Reply previews align their connector centrally, with the decorative endpoint removed. Jumping to the original message uses a soft background highlight without a left edge bar.
+
 ## Overview
 
 NEXUS is a student community and academic platform for IISER Tirupati. The active frontend in this checkout is a React/TypeScript single-page app built with Vite. The backend is FastAPI with SQLAlchemy persistence, REST APIs, and WebSocket messaging.
