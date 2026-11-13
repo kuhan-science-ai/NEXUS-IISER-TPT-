@@ -132,7 +132,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
             <div className="messenger-chat-messages nexus-chat-messages" style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column' }}>
               {loading && <p className="friends-empty">Loading messages…</p>}
               {!loading && !chatMessages.length && <div className="nexus-dm-empty"><MessagesSquare size={30} /><strong>This is the start of your conversation.</strong><p>Send a message to get things going.</p></div>}
-              {chatMessages.map((message, messageIndex) => {
+              {chatMessages.map(message => {
                 const mine = message.sender_id === currentUser.id;
                 const author = mine ? 'You' : message.sender_name || message.sender_username || 'Student';
                 const previous = chatMessages[chatMessages.indexOf(message) - 1];

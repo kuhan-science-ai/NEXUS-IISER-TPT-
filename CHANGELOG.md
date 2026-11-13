@@ -4,6 +4,7 @@ All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
 - Updated Messenger reply previews to show the replied author's name and message with a compact connector, tightened consecutive message spacing, and collapsed empty reaction rows so reaction space appears only while reactions exist.
+- Removed remaining grouped-message avatar height and list gaps from Messenger and Study Groups; reaction rows collapse when empty.
 - Mirrored live banner crop, zoom, rotation, and source changes into the profile card preview with a matching 16:5 frame.
 - Set profile photo and banner limits to 10 MB and 8 MB in the UI and APIs; reject oversized photos before preview, while oversized banners open with a short default trim and compression path. Enable smoother preloaded/hardware-composited banner playback on own and public profiles.
 - Optimized GIF preview/export resolution and bitrate, guarded oversized GIF dimensions, prevented duplicate simultaneous crop renders, and matched final banner framing/background to the crop preview.
