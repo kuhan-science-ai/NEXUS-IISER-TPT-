@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-14
+- Changed new Study Groups to start with only one `general` text channel and no voice channel. Empty channel categories are hidden; owner add controls let text/voice headings return when channels are created, with the first voice channel prefilled as `general vc`. Channel × controls now show a type-specific permanent-deletion confirmation, and owners can remove the last channel in a category.
 - Added LiveKit SFU voice/video calls for Messenger and Study Groups, including one-to-one invites, persistent voice-channel chat in its own D1 table, microphone/camera/screen-share/device controls, participant tiles and volumes, reconnection status, and a global minimize/reopen call bar. Added migration `0015_voice_calls.sql` and applied it locally and in production; deployed the Worker and Pages site. LiveKit Cloud Worker URL/key/secret still need to be configured before real calls can connect.
 - Added collapsible side panels to Friends and Messenger; removed the duplicate conversation-search shortcut from Friends while retaining both pages' primary search controls.
 - Added a collapsible Groups rail and owner-only channel creation with separate text and voice channel categories.

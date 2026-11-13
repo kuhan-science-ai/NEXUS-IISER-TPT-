@@ -1142,7 +1142,7 @@ async def insert_campus_group(db: Any, req: CampusGroupInput, user_id: str, grou
     is_pub = 1 if req.is_public else 0
     await execute(db, "INSERT INTO campus_groups(id,owner_id,name,description,icon,banner,is_public,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)", group_id, user_id, req.name.strip(), req.description.strip(), req.icon, req.banner, is_pub, stamp, stamp)
     await execute(db, "INSERT INTO campus_group_members(group_id,user_id,role,joined_at) VALUES(?,?,'owner',?)", group_id, user_id, stamp)
-    initial_channels = req.channels or [CampusGroupChannelInput(name=name) for name in ("general", "discussion", "hangout")]
+    initial_channels = req.channels or [CampusGroupChannelInput(name="general", channel_type="text")]
     for position, channel in enumerate(initial_channels):
         await execute(db, "INSERT INTO campus_group_channels(id,group_id,name,position,created_at,channel_type) VALUES(?,?,?,?,?,?)", channel.id or new_id(), group_id, channel.name.strip().lower().replace(" ", "-")[:80], position, stamp, channel.channel_type)
     return group_id
@@ -1274,13 +1274,16 @@ async def delete_campus_group_channel(group_id: str, channel_id: str, request: R
     member = await require_campus_group_member(db, group_id, user["sub"])
     if member["role"] != "owner":
         raise HTTPException(status_code=403, detail="Only the group owner can remove channels")
-    channels = await query(db, "SELECT id FROM campus_group_channels WHERE group_id=?", group_id)
-    if len(channels) < 2:
-        raise HTTPException(status_code=400, detail="A group must keep at least one channel")
+    channel = await first(db, "SELECT id FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id)
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    active_calls = await query(db, "SELECT id FROM voice_call_sessions WHERE channel_id=? AND status='active'", channel_id)
+    for call in active_calls:
+        await emit_realtime(request, [member["user_id"] for member in members], "call.ended", call_id=call["id"])
     result = await execute(db, "DELETE FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id)
     if not getattr(result, "meta", {}).get("changes", 0):
         raise HTTPException(status_code=404, detail="Channel not found")
-    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
     await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id)
     return {"message": "Channel removed"}
 

@@ -2,6 +2,8 @@
 
 Study Groups voice channels now join shared LiveKit SFU rooms, and Messenger voice/video call buttons create authenticated direct-call rooms. The app-level call surface persists across route navigation and supports minimize/reopen without disconnecting, mute, camera, screen sharing, device switching, participant tiles and volume controls, call invitations, and separate leave versus end-for-everyone actions. Voice-channel chat history uses its own D1 table and realtime event, separate from text-channel messages, with replies and message edit/delete. Migration `0015_voice_calls.sql` is applied locally and in production. The Worker and Pages site are deployed. LiveKit Cloud was selected, but its project URL/API key/API secret have not yet been configured on the Worker; real calls currently return a clear configuration error until these are set. See `VOICE_CALLS_SETUP.md`.
 
+New groups start with one `general` text channel and no voice channel. Empty category headings stay hidden; owner add controls create the first text or voice channel and restore its heading. First voice channel creation defaults its editable name to `general vc`. Deleting a channel requires a permanent-deletion confirmation, cascades its messages, and ends any live voice session before removing the channel. Owners may delete the last channel in either category.
+
 Last reviewed: 2026-11-14
 
 Profile avatar URLs and media types flow through friend/search, conversation member, direct-message, and group-message responses. Shared avatar rendering covers Friends, global search, DMs, and group chat. Profile saves refresh local views immediately; active people and conversation lists refresh every 15 seconds.
