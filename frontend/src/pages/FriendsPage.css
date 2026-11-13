@@ -9,6 +9,19 @@
 .friends-app-column { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .friends-discord-layout { display: grid; flex: 1; min-height: 0; grid-template-columns: 272px minmax(380px, 1fr) 286px; overflow: hidden; }
 .friends-dm-sidebar { display: flex; min-height: 0; flex-direction: column; gap: 5px; padding: 12px 10px 10px; border-right: 1px solid var(--border); background: var(--bg-navigation); }
+.friends-discord-layout,.messenger-discord-layout { transition: grid-template-columns .2s ease; }
+.friends-discord-layout.is-dm-sidebar-collapsed { grid-template-columns:48px minmax(380px,1fr) 286px; }
+.dm-sidebar-toggle-row { display:flex; min-height:32px; align-items:center; justify-content:flex-end; margin-bottom:8px; }
+.dm-sidebar-toggle { display:grid; width:30px; height:30px; flex:none; place-items:center; border:0; border-radius:6px; background:transparent; color:var(--text-subtle); cursor:pointer; }
+.dm-sidebar-toggle:hover { background:var(--bg-elevated); color:var(--text-primary); }
+.messenger-sidebar-top { display:flex; min-width:0; align-items:center; gap:5px; }
+.messenger-sidebar-top .messenger-conversation-search { min-width:0; flex:1; }
+.friends-discord-layout.is-dm-sidebar-collapsed .friends-dm-sidebar { align-items:center; padding-inline:6px; }
+.friends-discord-layout.is-dm-sidebar-collapsed .friends-dm-sidebar > :not(.dm-sidebar-toggle-row),
+.messenger-discord-layout.is-dm-sidebar-collapsed .messenger-dm-sidebar > :not(.messenger-sidebar-top) { display:none; }
+.messenger-discord-layout.is-dm-sidebar-collapsed .messenger-dm-sidebar { align-items:center; padding-inline:6px; }
+.messenger-discord-layout.is-dm-sidebar-collapsed .messenger-sidebar-top { justify-content:center; }
+.messenger-discord-layout.is-dm-sidebar-collapsed .messenger-conversation-search { display:none; }
 .friends-start-conversation { display: flex; height: 36px; align-items: center; gap: 9px; margin: 0 0 8px; padding: 0 11px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-raised); color: var(--text-subtle); text-align: left; font-size: 12px; }
 .friends-start-conversation:hover { background: var(--bg-elevated); color: var(--text-primary); }
 .friends-side-active { display: flex; height: 38px; align-items: center; gap: 10px; padding: 0 10px; border-radius: 6px; background: var(--bg-elevated); color: var(--text-primary); text-decoration: none; font-size: 13px; font-weight: 650; }
@@ -108,8 +121,13 @@
   .messenger-discord-layout { grid-template-columns:240px minmax(0,1fr)!important; }
   .messenger-discord-layout > div:last-child { display:none!important; }
 }
+@media (min-width: 761px) and (max-width: 1100px) {
+  .friends-discord-layout.is-dm-sidebar-collapsed { grid-template-columns:48px minmax(320px,1fr); }
+  .messenger-discord-layout.is-dm-sidebar-collapsed { grid-template-columns:48px minmax(0,1fr)!important; }
+}
 @media (max-width: 760px) {
   .friends-discord-layout { grid-template-columns: minmax(0, 1fr); }
+  .friends-discord-layout.is-dm-sidebar-collapsed { grid-template-columns: minmax(0,1fr); }
   .friends-dm-sidebar { display: none; }
   .messenger-discord-layout { grid-template-columns:minmax(0,1fr)!important; }
   .messenger-discord-layout .messenger-dm-sidebar { display:none; }

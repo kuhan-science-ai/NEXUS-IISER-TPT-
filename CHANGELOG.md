@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-14
+- Added collapsible side panels to Friends and Messenger; removed the duplicate conversation-search shortcut from Friends while retaining both pages' primary search controls.
 - Added a collapsible Groups rail and owner-only channel creation with separate text and voice channel categories. Voice channels are saved as tabs and show a not-yet-enabled placeholder.
 - Fixed resource animation saves to preserve existing choices when edits omit the field and report invalid or mismatched selections instead of silently falling back to none.
 - Added a user-scoped Cloudflare Durable Object WebSocket feed for direct messages, friend relationship changes, typing, Study Groups, and private AI conversation updates. Removed periodic polling from Friends, Messenger, Study Groups, and global people search; added session caches so recently viewed conversations render immediately while a single request syncs them.

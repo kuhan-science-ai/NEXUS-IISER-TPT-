@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CornerUpLeft, Forward, MessagesSquare, MoreHorizontal, Phone, Plus, Rocket, Search, SmilePlus, Trash2, UserRound, Video, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CornerUpLeft, Forward, MessagesSquare, MoreHorizontal, Phone, Plus, Rocket, Search, SmilePlus, Trash2, UserRound, Video, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api, UserSummary } from '../services/api';
 import { readUserPreference, writeUserPreference } from '../services/userPreferences';
@@ -24,6 +24,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const location = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
   const [conversationQuery, setConversationQuery] = useState('');
+  const [messengerSidebarCollapsed, setMessengerSidebarCollapsed] = useState(false);
   const [inputText, setInputText] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
   const [callPreview, setCallPreview] = useState<'voice' | 'video' | null>(null);
@@ -114,9 +115,9 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   return <div className="messenger-route" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-canvas)' }}>
     <SideNav currentUser={currentUser} onLogout={onLogout} onOpenSearch={() => setSearchOpen(true)} />
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh' }}><TopHeader breadcrumb="Workspace / Messenger" currentUser={currentUser} onOpenSearch={() => setSearchOpen(true)} />
-      <div className="messenger-discord-layout" style={{ flex: 1, display: 'grid', gridTemplateColumns: profileOpen ? '272px minmax(0, 1fr) 280px' : '272px minmax(0, 1fr)', overflow: 'hidden' }}>
+      <div className={`messenger-discord-layout${messengerSidebarCollapsed ? ' is-dm-sidebar-collapsed' : ''}`} style={{ flex: 1, display: 'grid', gridTemplateColumns: messengerSidebarCollapsed ? (profileOpen ? '48px minmax(0, 1fr) 280px' : '48px minmax(0, 1fr)') : (profileOpen ? '272px minmax(0, 1fr) 280px' : '272px minmax(0, 1fr)'), overflow: 'hidden' }}>
         <aside className="friends-dm-sidebar messenger-dm-sidebar">
-          <label className="friends-start-conversation messenger-conversation-search"><Search size={15} /><input ref={conversationSearchRef} value={conversationQuery} onChange={event => setConversationQuery(event.target.value)} placeholder="Find or start a conversation" aria-label="Find or start a conversation" /></label>
+          <div className="messenger-sidebar-top"><label className="friends-start-conversation messenger-conversation-search"><Search size={15} /><input ref={conversationSearchRef} value={conversationQuery} onChange={event => setConversationQuery(event.target.value)} placeholder="Find or start a conversation" aria-label="Find or start a conversation" /></label><button type="button" className="dm-sidebar-toggle" onClick={() => setMessengerSidebarCollapsed(value => !value)} aria-label={messengerSidebarCollapsed ? 'Expand Messenger sidebar' : 'Collapse Messenger sidebar'} aria-expanded={!messengerSidebarCollapsed} title={messengerSidebarCollapsed ? 'Expand Messenger sidebar' : 'Collapse Messenger sidebar'}>{messengerSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button></div>
           <div className="friends-side-active messenger-side-active"><MessagesSquare size={17} /> Messenger <span>{conversations.length}</span></div>
           <div className="friends-dm-heading">Conversations <button aria-label="Start a conversation" onClick={() => navigate('/friends')}><Plus size={17} /></button></div>
           <div className="friends-dm-list">{filteredConversations.map(conversation => <button key={conversation.id} className={`friends-dm-item ${conversation.id === activeConvId ? 'is-selected' : ''}`} onClick={() => { setActiveConvId(conversation.id); setProfileOpen(false); }}><ProfileAvatar className="friends-avatar" user={avatarForConversation(conversation)} label={initials(conversation)} /><span className="friends-dm-copy"><strong>{displayName(conversation)}</strong><small>{conversation.last_message?.content || 'No messages yet'}</small></span></button>)}

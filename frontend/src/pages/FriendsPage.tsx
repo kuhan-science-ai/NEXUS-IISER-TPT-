@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MessageCircle, MoreHorizontal, Plus, Search, UserPlus, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MessageCircle, MoreHorizontal, Plus, Search, UserPlus, Users } from 'lucide-react';
 import { api, UserSummary } from '../services/api';
 import { SideNav } from '../components/SideNav';
 import { TopHeader } from '../components/TopHeader';
@@ -13,6 +13,7 @@ const readFriendsCache = (userId: string, slot: string) => { try { return JSON.p
 
 export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout }) => {
   const [searchOpen, setSearchOpen] = useState(false);
+  const [friendsSidebarCollapsed, setFriendsSidebarCollapsed] = useState(true);
   const [activeTab, setActiveTab] = useState<'online' | 'all' | 'pending'>('all');
   const [query, setQuery] = useState('');
   const [friends, setFriends] = useState<any[]>(() => readFriendsCache(currentUser?.id || 'guest', 'friends'));
@@ -64,9 +65,9 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout 
     <SideNav currentUser={currentUser} onLogout={onLogout} onOpenSearch={() => setSearchOpen(true)} />
     <div className="friends-app-column">
       <TopHeader breadcrumb="Workspace / Friends" currentUser={currentUser} onOpenSearch={() => setSearchOpen(true)} />
-      <main className="friends-discord-layout">
+      <main className={`friends-discord-layout${friendsSidebarCollapsed ? ' is-dm-sidebar-collapsed' : ''}`}>
         <aside className="friends-dm-sidebar">
-          <button className="friends-start-conversation" onClick={() => navigate('/messaging')}><Search size={15} /> Find or start a conversation</button>
+          <div className="dm-sidebar-toggle-row"><button type="button" className="dm-sidebar-toggle" onClick={() => setFriendsSidebarCollapsed(value => !value)} aria-label={friendsSidebarCollapsed ? 'Expand Friends sidebar' : 'Collapse Friends sidebar'} aria-expanded={!friendsSidebarCollapsed} title={friendsSidebarCollapsed ? 'Expand Friends sidebar' : 'Collapse Friends sidebar'}>{friendsSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button></div>
           <Link to="/friends" className="friends-side-active"><Users size={17} /> Friends <span>{friends.length}</span></Link>
           <div className="friends-dm-heading">Direct Messages <button aria-label="Start a direct message" onClick={() => navigate('/messaging')}><Plus size={17} /></button></div>
           <p className="friends-empty">No contacts yet. Add a friend to start chatting.</p>
