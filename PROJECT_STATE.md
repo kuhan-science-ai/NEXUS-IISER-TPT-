@@ -28,6 +28,8 @@ Messenger replies now render a compact author-and-message preview with a connect
 
 Messenger reply context now renders above the replying message with a compact connector and slight indent. Removed the extra empty reaction button that appeared below messages on hover; existing reactions remain visible and removable.
 
+The Messenger reply context now includes the referenced sender's small profile avatar and inline, truncated message text alongside the sender name. It uses the loaded original message when available and falls back gracefully to reply metadata.
+
 ## Overview
 
 NEXUS is a student community and academic platform for IISER Tirupati. The active frontend in this checkout is a React/TypeScript single-page app built with Vite. The backend is FastAPI with SQLAlchemy persistence, REST APIs, and WebSocket messaging.

@@ -65,8 +65,10 @@
 .nexus-chat-reply-preview.nexus-message-reply-preview { max-width:min(560px,100%); margin:0 0 2px; padding:0; }
 .nexus-reply-connector { position:relative; width:22px; height:15px; flex:none; border-top:1px solid #51525a; border-left:1px solid #51525a; border-radius:7px 0 0 0; }
 .nexus-reply-connector::after { position:absolute; right:-1px; bottom:-2px; width:5px; height:5px; border-radius:50%; background:#8b8d98; content:""; }
+.nexus-reply-preview-content { display:flex; min-width:0; max-width:calc(100% - 29px); align-items:center; gap:5px; }
+.nexus-reply-avatar { display:grid; width:16px; height:16px; flex:none; place-items:center; overflow:hidden; border-radius:50%; background:var(--bg-elevated); color:var(--text-muted); font-size:7px; font-weight:700; }
 .nexus-reply-preview-copy { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.nexus-reply-preview-copy strong { color:var(--text-primary); font-weight:650; }
+.nexus-reply-preview-copy strong { margin-right:3px; color:var(--text-primary); font-weight:650; }
 .nexus-message-reply-preview:hover { color:var(--text-primary); background:color-mix(in srgb,var(--primary) 9%,transparent); }
 .nexus-message-row.is-jump-target { border-radius:5px; background:color-mix(in srgb,var(--primary) 17%,transparent); box-shadow:inset 2px 0 var(--primary); transition:background .2s ease; }
 .nexus-message-menu { position:absolute; top:-12px; right:0; margin-left:auto; opacity:0; }
