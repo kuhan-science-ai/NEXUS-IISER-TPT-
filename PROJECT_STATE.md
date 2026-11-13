@@ -4,6 +4,8 @@ Profile avatar URLs and media types flow through friend/search, conversation mem
 
 Academic resource upload/edit dialogs offer a mutually exclusive choice of no animation, recolorable fire frame, or transparent flower frame. The selected animation and fire color are stored with the resource and rendered as a narrow overlay around the card border while preserving the standard card and button layout. The flower animation is an alpha-transparent animated WebP derived from the provided GIF. Production D1 migration `0013_academic_resource_animation.sql` is applied; no schema change is needed for the additional animation value.
 
+Resource edits preserve the saved animation when an older client omits the animation field, reject unsupported animation values, and return the persisted selection so the editor can flag a mismatch instead of silently showing a successful save.
+
 Resource cards show a consistent fallback banner when no banner is uploaded. The fire and flower frames are animated WebPs with transparent backgrounds; the selected frame plays above the card and in upload/edit previews.
 
 The fire overlay preserves the standard resource card layout and button positions; its animation is clipped to a subtle border band.

@@ -245,7 +245,7 @@ async def upload_academic_resource(
     await db.commit()
     await db.refresh(resource)
 
-    return {"message": "Resource successfully uploaded", "id": resource.id, "resource_id": resource.id, "title": resource.title}
+    return {"message": "Resource successfully uploaded", "id": resource.id, "resource_id": resource.id, "title": resource.title, "animation": resource.animation, "animation_color": resource.animation_color}
 
 
 @router.put("/resources/{resource_id}")
@@ -259,7 +259,7 @@ async def edit_academic_resource(
     file: Optional[UploadFile] = File(None),
     thumbnail: Optional[UploadFile] = File(None),
     banner: Optional[UploadFile] = File(None),
-    animation: str = Form("none"),
+    animation: Optional[str] = Form(None),
     animation_color: str = Form("#ff6a00"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -271,7 +271,10 @@ async def edit_academic_resource(
         raise HTTPException(status_code=400, detail="Title, subject code, and publisher name are required")
     old_files: list[FileMetadata] = []
     resource.title, resource.subject_code, resource.publisher_name, resource.pages = title.strip(), subject_code.strip(), publisher_name.strip(), pages
-    resource.animation = animation if animation in {"fire-grid", "flower-grid"} else "none"
+    if animation is not None:
+        if animation not in {"none", "fire-grid", "flower-grid"}:
+            raise HTTPException(status_code=400, detail="Choose a valid resource animation")
+        resource.animation = animation
     resource.animation_color = animation_color if re.fullmatch(r"#[0-9a-fA-F]{6}", animation_color) else "#ff6a00"
     if file and file.filename:
         file.file.seek(0)
@@ -306,7 +309,7 @@ async def edit_academic_resource(
         await db.delete(old)
         await db.commit()
         storage_service.delete_file(old_path)
-    return {"message": "Resource updated", "id": resource.id, "title": resource.title}
+    return {"message": "Resource updated", "id": resource.id, "title": resource.title, "animation": resource.animation, "animation_color": resource.animation_color}
 
 
 async def academic_resources_for_user(db: AsyncSession, user_id: str, collection: str = "all"):

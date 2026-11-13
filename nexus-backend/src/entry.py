@@ -549,8 +549,13 @@ async def edit_academic_resource(resource_id: str, request: Request, user: dict[
         if not content or len(content) > 50 * 1024 * 1024 or not filename.lower().endswith(".pdf") or getattr(replacement, "content_type", "") != "application/pdf" or not content.startswith(b"%PDF-"):
             raise HTTPException(status_code=400, detail="Choose a valid PDF file smaller than 50 MB")
     artwork = {kind: await academic_artwork_content(form.get(kind)) for kind in ("thumbnail", "banner")}
-    animation_value = str(form.get("animation") or "")
-    animation = animation_value if animation_value in ("fire-grid", "flower-grid") else "none"
+    animation_value = form.get("animation")
+    if animation_value is None:
+        animation = row.get("animation") or "none"
+    else:
+        animation = str(animation_value)
+        if animation not in ("none", "fire-grid", "flower-grid"):
+            raise HTTPException(status_code=400, detail="Choose a valid resource animation")
     animation_color = str(form.get("animation_color") or row.get("animation_color") or "#ff6a00")
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", animation_color):
         animation_color = "#ff6a00"

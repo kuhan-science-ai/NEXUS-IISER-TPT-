@@ -79,11 +79,15 @@ export const AcademicResourceMetadataModal: React.FC<Props> = ({ staged, resourc
       form.append('subject_code', subjectCode.trim());
       form.append('publisher_name', (useAccountName ? accountName : publisher).trim());
       form.append('pages', String(pages));
-      form.append('animation', animation);
+      const chosenAnimation = animation;
+      form.append('animation', chosenAnimation);
       form.append('animation_color', animationColor);
       if (thumbnail) form.append('thumbnail', thumbnail, thumbnail.name);
       if (banner) form.append('banner', banner, banner.name);
       const saved = resource ? await api.updateResource(resource.id, form) : await api.uploadResource(form);
+      if (saved?.animation && saved.animation !== chosenAnimation) {
+        throw new Error(`The server saved “${saved.animation}” instead of the selected animation. Please try again.`);
+      }
       window.dispatchEvent(new CustomEvent('nexus-resource-uploaded', { detail: { title: saved.title, resourceId: saved.id } }));
       onUploaded();
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'The resource could not be uploaded.'); }
