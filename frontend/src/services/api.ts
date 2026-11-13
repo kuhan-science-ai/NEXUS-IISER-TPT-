@@ -198,7 +198,7 @@ class ApiService {
   async joinCampusGroup(groupId: string): Promise<any> { return this.request(`/groups/${groupId}/join`, { method: 'POST' }); }
   async updateCampusGroup(groupId: string, group: any): Promise<any> { return this.request(`/groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(group) }); }
   async deleteCampusGroup(groupId: string): Promise<any> { return this.request(`/groups/${groupId}`, { method: 'DELETE' }); }
-  async addCampusGroupChannel(groupId: string, name: string): Promise<any> { return this.request(`/groups/${groupId}/channels`, { method: 'POST', body: JSON.stringify({ name }) }); }
+  async addCampusGroupChannel(groupId: string, name: string, channelType: 'text' | 'voice' = 'text'): Promise<any> { return this.request(`/groups/${groupId}/channels`, { method: 'POST', body: JSON.stringify({ name, channel_type: channelType }) }); }
   async deleteCampusGroupChannel(groupId: string, channelId: string): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}`, { method: 'DELETE' }); }
   async listCampusGroupMessages(groupId: string, channelId: string): Promise<any[]> { return this.request(`/groups/${groupId}/channels/${channelId}/messages`); }
   async sendCampusGroupMessage(groupId: string, channelId: string, content: string, replyToId?: string): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}/messages`, { method: 'POST', body: JSON.stringify({ content, reply_to_id: replyToId || null }) }); }

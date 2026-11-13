@@ -30,6 +30,8 @@ Messenger replies now render a compact author-and-message preview with a connect
 
 Messaging, Friends, Study Groups, and private AI chat use a shared Cloudflare Durable Object WebSocket feed for cross-session updates; recent list/message data is session-cached and validated when opened. Discussion Forums is still sample-only UI state without a shared post/reply API, so it has no cross-user realtime updates yet.
 
+Study Groups has a collapsible group list rail. Owners can create named text or voice channel tabs; voice channels are stored and displayed separately but intentionally have no calling or messaging UI yet. The server enforces owner-only channel creation, and production D1 migration `0014_group_channel_types.sql` stores each channel type.
+
 Messenger now has a dedicated local Twemoji picker and shortcode autocomplete/conversion in the chat input only. The picker uses the extracted 4,009 SVG assets, Unicode names/categories and shortcode aliases, supports skin-tone variants and per-account recent emoji, and inserts at the current cursor without sending.
 
 Messenger and Study Groups render message and reply-preview emoji with the same local Twemoji SVGs. Emoji mixed with text stays at normal message size; emoji-only messages render larger. Messenger's composer visually overlays the native input with Twemoji while preserving cursor and editing behavior; the SVG index is loaded only when emoji appears.

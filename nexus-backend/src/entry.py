@@ -46,6 +46,7 @@ class AIChatRequest(BaseModel):
 class CampusGroupChannelInput(BaseModel):
     id: str | None = Field(default=None, max_length=36)
     name: str = Field(min_length=1, max_length=80)
+    channel_type: str = Field(default="text", pattern="^(text|voice)$")
 
 
 class CampusGroupInput(BaseModel):
@@ -942,10 +943,10 @@ async def list_campus_groups(user: dict[str, Any] = Depends(get_current_user), d
     if not rows:
         return []
     ids = [row["id"] for row in rows]
-    channels = await query(db, f"SELECT id,group_id,name FROM campus_group_channels WHERE group_id IN ({','.join('?' for _ in ids)}) ORDER BY position,name", *ids)
+    channels = await query(db, f"SELECT id,group_id,name,channel_type FROM campus_group_channels WHERE group_id IN ({','.join('?' for _ in ids)}) ORDER BY position,name", *ids)
     by_group: dict[str, list[dict[str, str]]] = {}
     for channel in channels:
-        by_group.setdefault(channel["group_id"], []).append({"id": channel["id"], "name": channel["name"]})
+        by_group.setdefault(channel["group_id"], []).append({"id": channel["id"], "name": channel["name"], "channel_type": channel.get("channel_type") or "text"})
     return [{"id": row["id"], "name": row["name"], "description": row["description"], "icon": row["icon"], "banner": row["banner"], "owner_id": row["owner_id"], "is_public": bool(row.get("is_public", 1)), "joined": bool(row.get("viewer_role")), "role": row.get("viewer_role"), "member_count": int(row.get("member_count") or 0), "channels": by_group.get(row["id"], [])} for row in rows]
 
 
@@ -956,7 +957,7 @@ async def insert_campus_group(db: Any, req: CampusGroupInput, user_id: str, grou
     await execute(db, "INSERT INTO campus_group_members(group_id,user_id,role,joined_at) VALUES(?,?,'owner',?)", group_id, user_id, stamp)
     initial_channels = req.channels or [CampusGroupChannelInput(name=name) for name in ("general", "discussion", "hangout")]
     for position, channel in enumerate(initial_channels):
-        await execute(db, "INSERT INTO campus_group_channels(id,group_id,name,position,created_at) VALUES(?,?,?,?,?)", channel.id or new_id(), group_id, channel.name.strip().lower().replace(" ", "-")[:80], position, stamp)
+        await execute(db, "INSERT INTO campus_group_channels(id,group_id,name,position,created_at,channel_type) VALUES(?,?,?,?,?,?)", channel.id or new_id(), group_id, channel.name.strip().lower().replace(" ", "-")[:80], position, stamp, channel.channel_type)
     return group_id
 
 
@@ -983,7 +984,7 @@ async def import_local_campus_groups(payload: CampusGroupImport, user: dict[str,
         if not existing or existing["owner_id"] == user["sub"]:
             for position, channel in enumerate(group.channels):
                 if channel.name.strip():
-                    await execute(db, "INSERT OR IGNORE INTO campus_group_channels(id,group_id,name,position,created_at) VALUES(?,?,?,?,?)", channel.id or new_id(), group.id, channel.name.strip().lower().replace(" ", "-")[:80], position, now())
+                    await execute(db, "INSERT OR IGNORE INTO campus_group_channels(id,group_id,name,position,created_at,channel_type) VALUES(?,?,?,?,?,?)", channel.id or new_id(), group.id, channel.name.strip().lower().replace(" ", "-")[:80], position, now(), channel.channel_type)
     return {"imported": imported}
 
 
@@ -1075,10 +1076,10 @@ async def create_campus_group_channel(group_id: str, payload: CampusGroupChannel
         raise HTTPException(status_code=409, detail="That channel already exists")
     position = await first(db, "SELECT COALESCE(MAX(position),-1)+1 AS next_position FROM campus_group_channels WHERE group_id=?", group_id)
     channel_id = new_id()
-    await execute(db, "INSERT INTO campus_group_channels(id,group_id,name,position,created_at) VALUES(?,?,?,?,?)", channel_id, group_id, name, int(position["next_position"]), now())
+    await execute(db, "INSERT INTO campus_group_channels(id,group_id,name,position,created_at,channel_type) VALUES(?,?,?,?,?,?)", channel_id, group_id, name, int(position["next_position"]), now(), payload.channel_type)
     members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
     await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id)
-    return {"id": channel_id, "name": name}
+    return {"id": channel_id, "name": name, "channel_type": payload.channel_type}
 
 
 @app.delete("/api/v1/groups/{group_id}/channels/{channel_id}")
