@@ -51,7 +51,7 @@
 .nexus-message-row.nexus-chat-message .nexus-message-meta { min-height:0; color:var(--primary); }
 .nexus-message-row.nexus-chat-message.grouped + .nexus-message-row.nexus-chat-message.grouped { margin-top:0; }
 .nexus-message-row.nexus-chat-message.is-jump-target { border-radius:5px; background:color-mix(in srgb,var(--primary) 11%,transparent); }
-.nexus-message-row.nexus-chat-message:hover:not(.is-jump-target) { border-radius:5px; background:color-mix(in srgb,var(--text-primary) 4%,transparent); }
+.nexus-message-row.nexus-chat-message:hover { border-radius:5px; background:color-mix(in srgb,var(--text-primary) 4%,transparent); }
 .nexus-message-avatar { display:grid; width:30px; height:30px; flex:none; place-items:center; border-radius:50%; background:var(--bg-elevated); color:var(--primary); font-size:12px; font-weight:800; }
 .nexus-message-avatar-spacer { width:30px; height:1px; flex:none; }
 .nexus-message-main { min-width:0; }
