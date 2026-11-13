@@ -24,7 +24,7 @@ Academic Repository resources can be edited by their uploader only. Editing supp
 
 Last reviewed: 2026-11-13
 
-Messenger replies now render a compact author-and-message preview with a connector to the replied message. Message lists no longer reserve hidden avatar height for grouped messages; separate author groups have a small 6px breathing gap, and empty reaction rows take no space until a reaction is added. The same spacing applies to Study Groups.
+Messenger replies now render a compact author-and-message preview with a connector to the replied message. Message lists no longer reserve hidden avatar height for grouped messages; separate author groups have a 10px breathing gap, and empty reaction rows take no space until a reaction is added. The same spacing applies to Study Groups.
 
 ## Overview
 
