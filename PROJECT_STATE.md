@@ -24,6 +24,8 @@ Academic Repository resources can be edited by their uploader only. Editing supp
 
 Last reviewed: 2026-11-13
 
+Messenger replies now render a compact author-and-message preview with a connector to the replied message. Consecutive messages sit tightly together, and empty reaction rows take no space; adding a reaction creates the row and removing the last reaction collapses it.
+
 ## Overview
 
 NEXUS is a student community and academic platform for IISER Tirupati. The active frontend in this checkout is a React/TypeScript single-page app built with Vite. The backend is FastAPI with SQLAlchemy persistence, REST APIs, and WebSocket messaging.
