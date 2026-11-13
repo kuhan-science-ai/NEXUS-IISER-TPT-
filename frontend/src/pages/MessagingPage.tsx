@@ -8,6 +8,7 @@ import { SideNav } from '../components/SideNav';
 import { TopHeader } from '../components/TopHeader';
 import { GlobalSearchModal } from '../components/GlobalSearchModal';
 import { ProfileAvatar } from '../components/ProfileAvatar';
+import { MessengerEmojiInput } from '../components/MessengerEmojiInput';
 import './FriendsPage.css';
 import './MessagingPage.css';
 
@@ -96,6 +97,13 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const displayName = (conversation: Conversation) => conversation.title || conversation.members?.filter(member => member.user_id !== currentUser.id).map(member => member.full_name || member.username).join(', ') || 'Conversation';
   const initials = (conversation: Conversation) => displayName(conversation).split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase();
   const avatarForConversation = (conversation: Conversation) => conversation.type.toLowerCase() === 'direct' ? conversation.members?.find(member => member.user_id !== currentUser.id) || conversation : conversation;
+  const updateComposerText = (value: string) => {
+    setInputText(value);
+    if (!activeConvId) return;
+    void api.setTyping(activeConvId, Boolean(value.trim())).catch(() => undefined);
+    if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+    if (value.trim()) typingTimerRef.current = window.setTimeout(() => { void api.setTyping(activeConvId, false).catch(() => undefined); }, 3000);
+  };
   const sendMessage = async (event: React.FormEvent) => {
     event.preventDefault(); if (!activeConvId || !inputText.trim()) return;
     const content = inputText.trim(); setInputText('');
@@ -159,7 +167,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
               <div id="messenger-bottom-anchor" ref={messagesEndRef} />
             </div>
             {typingNames.length > 0 && <div className="nexus-typing-indicator" aria-live="polite"><span>{typingNames.length === 1 ? typingNames[0] : `${typingNames.slice(0, 2).join(' and ')}${typingNames.length > 2 ? ` and ${typingNames.length - 2} others` : ''}`} is typing</span><i /><i /><i /></div>}
-            <form className="messenger-chat-composer nexus-real-composer" onSubmit={sendMessage}>{replyTo && <div className="nexus-replying"><span>Replying to <strong>{replyTo.sender_name || replyTo.sender_username}</strong><small>{replyTo.content.slice(0, 90)}</small></span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><X size={14} /></button></div>}<div><button type="button" title="Insert emoji" onClick={() => setInputText(value => `${value}🙂`)}>☺</button><input value={inputText} onChange={event => { const value = event.target.value; setInputText(value); if (!activeConvId) return; void api.setTyping(activeConvId, Boolean(value.trim())).catch(() => undefined); if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current); if (value.trim()) typingTimerRef.current = window.setTimeout(() => { void api.setTyping(activeConvId, false).catch(() => undefined); }, 3000); }} placeholder={`Message ${displayName(activeConv)}…`} /><button type="submit" aria-label="Send message" title="Send message"><Rocket size={17} /></button></div><small>Messages are saved to your conversation history.</small></form>
+            <form className="messenger-chat-composer nexus-real-composer" onSubmit={sendMessage}>{replyTo && <div className="nexus-replying"><span>Replying to <strong>{replyTo.sender_name || replyTo.sender_username}</strong><small>{replyTo.content.slice(0, 90)}</small></span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><X size={14} /></button></div>}<div className="nexus-composer-input-row"><MessengerEmojiInput key={currentUser.id} value={inputText} onChange={updateComposerText} placeholder={`Message ${displayName(activeConv)}…`} userId={currentUser.id} /><button type="submit" aria-label="Send message" title="Send message"><Rocket size={17} /></button></div><small>Messages are saved to your conversation history.</small></form>
           </> : <div className="nexus-dm-empty"><MessagesSquare size={34} /><strong>{conversations.length ? 'Choose a conversation' : 'No conversations yet'}</strong><p>{conversations.length ? 'Select a chat from the list to see its messages.' : 'No contacts or chats here yet. Add a friend to start a conversation.'}</p><button onClick={() => navigate('/friends')}>Find people</button></div>}
         </section>
         {profileOpen && activeConv && <aside className="messenger-profile-panel nexus-conversation-details"><button type="button" className="messenger-profile-close" onClick={() => setProfileOpen(false)} aria-label="Close"><X size={17} /></button><ProfileAvatar className="nexus-details-avatar" user={avatarForConversation(activeConv)} label={initials(activeConv)} /><h3>{displayName(activeConv)}</h3><p>{activeConv.description || `${activeConv.members?.length || 0} conversation members`}</p><div className="nexus-details-members"><strong>Members</strong>{activeConv.members?.map(member => <span key={member.user_id}><ProfileAvatar className="friends-avatar" user={member} size={28} />{member.full_name || member.username}</span>)}</div><button className="nexus-clear-history" onClick={() => void clearHistory()}><Trash2 size={15} /> Clear history</button><small>Clearing permanently removes messages from this conversation.</small></aside>}

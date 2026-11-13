@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-13
+- Added a Messenger-only Twemoji picker with local SVGs, searchable Unicode names/keywords and shortcode aliases, category tabs, recent emoji, cursor-aware insertion, shortcode autocomplete, and valid shortcode conversion.
 - Centered the Messenger reply connector, removed its decorative endpoint, and softened jump highlighting by removing the left edge bar.
 - Added the referenced sender avatar and compact inline sender/message preview to Messenger replies, with truncation and fallback to reply metadata when the original is unavailable.
 - Positioned Messenger reply context above the replying message with an indented connector, and removed the empty reaction button previously shown below messages on hover.
