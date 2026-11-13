@@ -9,14 +9,15 @@ import { ProfileAvatar } from '../components/ProfileAvatar';
 import './FriendsPage.css';
 
 interface FriendsPageProps { currentUser: UserSummary | null; onLogout?: () => void; }
+const readFriendsCache = (userId: string, slot: string) => { try { return JSON.parse(sessionStorage.getItem(`nexus-friends:${userId}:${slot}`) || '[]'); } catch { return []; } };
 
 export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout }) => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'online' | 'all' | 'pending'>('all');
   const [query, setQuery] = useState('');
-  const [friends, setFriends] = useState<any[]>([]);
-  const [requests, setRequests] = useState<any[]>([]);
-  const [sentRequests, setSentRequests] = useState<any[]>([]);
+  const [friends, setFriends] = useState<any[]>(() => readFriendsCache(currentUser?.id || 'guest', 'friends'));
+  const [requests, setRequests] = useState<any[]>(() => readFriendsCache(currentUser?.id || 'guest', 'requests'));
+  const [sentRequests, setSentRequests] = useState<any[]>(() => readFriendsCache(currentUser?.id || 'guest', 'sent'));
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<any | null>(null);
   const [profileTab, setProfileTab] = useState<'activity' | 'friends' | 'groups'>('activity');
@@ -29,17 +30,19 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout 
       setFriends(friendRows);
       setRequests(requestRows);
       setSentRequests(sentRows);
+      sessionStorage.setItem(`nexus-friends:${currentUser?.id}:friends`, JSON.stringify(friendRows));
+      sessionStorage.setItem(`nexus-friends:${currentUser?.id}:requests`, JSON.stringify(requestRows));
+      sessionStorage.setItem(`nexus-friends:${currentUser?.id}:sent`, JSON.stringify(sentRows));
     } catch { setFriends([]); setRequests([]); setSentRequests([]); }
   };
-  useEffect(() => { void load(); const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void load(); }, 15000); return () => window.clearInterval(timer); }, [currentUser?.avatar_url, currentUser?.avatar_file_id]);
+  useEffect(() => { void load(); const onRealtime = (event: Event) => { if ((event as CustomEvent).detail?.event === 'friends.changed') { void load(); if (query.trim()) void api.searchUsers(query.trim()).then(setSearchResults).catch(() => undefined); if (selectedProfile) void api.getPublicProfile(selectedProfile.username).then(setSelectedProfile).catch(() => undefined); } }; window.addEventListener('nexus-realtime-event', onRealtime); return () => window.removeEventListener('nexus-realtime-event', onRealtime); }, [currentUser?.id, currentUser?.avatar_url, currentUser?.avatar_file_id, query, selectedProfile?.username]);
 
   useEffect(() => {
     let active = true;
     if (query.trim()) {
       const refreshSearch = () => void api.searchUsers(query.trim()).then(rows => { if (active) setSearchResults(rows); }).catch(() => { if (active) setSearchResults([]); });
       const timer = window.setTimeout(refreshSearch, 180);
-      const interval = window.setInterval(() => { if (document.visibilityState === 'visible') refreshSearch(); }, 15000);
-      return () => { active = false; window.clearTimeout(timer); window.clearInterval(interval); };
+      return () => { active = false; window.clearTimeout(timer); };
     } else setSearchResults([]);
     return () => { active = false; };
   }, [activeTab, query]);

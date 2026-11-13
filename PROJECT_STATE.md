@@ -26,6 +26,8 @@ Last reviewed: 2026-11-13
 
 Messenger replies now render a compact author-and-message preview with a connector to the replied message. Message lists no longer reserve hidden avatar height for grouped messages; separate author groups have a 10px breathing gap, and empty reaction rows take no space until a reaction is added. The same spacing applies to Study Groups.
 
+Messaging, Friends, Study Groups, and private AI chat use a shared Cloudflare Durable Object WebSocket feed for cross-session updates; recent list/message data is session-cached and validated when opened. Discussion Forums is still sample-only UI state without a shared post/reply API, so it has no cross-user realtime updates yet.
+
 Messenger now has a dedicated local Twemoji picker and shortcode autocomplete/conversion in the chat input only. The picker uses the extracted 4,009 SVG assets, Unicode names/categories and shortcode aliases, supports skin-tone variants and per-account recent emoji, and inserts at the current cursor without sending.
 
 Messenger and Study Groups render message and reply-preview emoji with the same local Twemoji SVGs. Emoji mixed with text stays at normal message size; emoji-only messages render larger. Messenger's composer visually overlays the native input with Twemoji while preserving cursor and editing behavior; the SVG index is loaded only when emoji appears.

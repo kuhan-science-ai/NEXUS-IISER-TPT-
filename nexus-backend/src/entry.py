@@ -8,6 +8,7 @@ import re
 import secrets
 import time
 import uuid
+from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -16,7 +17,8 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, EmailStr, Field
 from js import Object, crypto, fetch
 from pyodide.ffi import to_js
-from workers import WorkerEntrypoint, asgi
+from workers import WorkerEntrypoint, DurableObject, Response as WorkerResponse, asgi
+from js import WebSocketPair
 
 app = FastAPI(title="NEXUS API", version="1.0.0")
 
@@ -161,6 +163,19 @@ async def execute(db: Any, sql: str, *params: Any) -> Any:
     if params:
         statement = statement.bind(*params)
     return await statement.run()
+
+
+async def emit_realtime(request: Request, user_ids: list[str], event: str, **payload: Any) -> None:
+    env = request.scope.get("env")
+    binding = getattr(env, "REALTIME_HUB", None) if env is not None else None
+    if binding is None or not user_ids:
+        return
+    hub = binding.get(binding.idFromName("nexus-live-events"))
+    try:
+        await hub.publish(list(dict.fromkeys(user_ids)), event, payload)
+    except Exception:
+        # A live transport outage must not turn a committed write into a failed API response.
+        return
 
 
 def get_secret(request: Request) -> str:
@@ -821,7 +836,7 @@ async def sent_friend_requests(user: dict[str, Any] = Depends(get_current_user),
 
 
 @app.post("/api/v1/friends/request/{target_user_id}")
-async def send_friend_request(target_user_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def send_friend_request(target_user_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     current_id, stamp = user["sub"], now()
     if target_user_id == current_id:
         raise HTTPException(status_code=400, detail="Cannot send friend request to yourself")
@@ -839,11 +854,12 @@ async def send_friend_request(target_user_id: str, user: dict[str, Any] = Depend
         await execute(db, "UPDATE friend_requests SET sender_id=?,receiver_id=?,status='pending',created_at=?,updated_at=? WHERE id=?", current_id, target_user_id, stamp, stamp, existing["id"])
     else:
         await execute(db, "INSERT INTO friend_requests(id,sender_id,receiver_id,status,created_at,updated_at) VALUES(?,?,?,'pending',?,?)", new_id(), current_id, target_user_id, stamp, stamp)
+    await emit_realtime(request, [current_id, target_user_id], "friends.changed", actor_id=current_id)
     return {"message": "Friend request sent"}
 
 
 @app.post("/api/v1/friends/accept/{request_id}")
-async def accept_friend_request(request_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def accept_friend_request(request_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     req = await first(db, "SELECT * FROM friend_requests WHERE id=? AND receiver_id=? AND status='pending'", request_id, user["sub"])
     if not req:
         raise HTTPException(status_code=404, detail="Pending request not found")
@@ -852,37 +868,44 @@ async def accept_friend_request(request_id: str, user: dict[str, Any] = Depends(
     await execute(db, "UPDATE friend_requests SET status='accepted',updated_at=? WHERE id=?", stamp, request_id)
     await execute(db, "INSERT OR IGNORE INTO friendships(id,user_id_1,user_id_2,created_at) VALUES(?,?,?,?)", new_id(), low, high, stamp)
     conversation_id = await ensure_direct_conversation(db, low, high)
+    await emit_realtime(request, [req["sender_id"], req["receiver_id"]], "friends.changed", actor_id=user["sub"], conversation_id=conversation_id)
+    await emit_realtime(request, [req["sender_id"], req["receiver_id"]], "conversation.created", conversation_id=conversation_id)
     return {"message": "Friend request accepted", "conversation_id": conversation_id}
 
 
 @app.post("/api/v1/friends/reject/{request_id}")
-async def reject_friend_request(request_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
-    req = await first(db, "SELECT id FROM friend_requests WHERE id=? AND receiver_id=? AND status='pending'", request_id, user["sub"])
+async def reject_friend_request(request_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    req = await first(db, "SELECT id,sender_id,receiver_id FROM friend_requests WHERE id=? AND receiver_id=? AND status='pending'", request_id, user["sub"])
     if not req:
         raise HTTPException(status_code=404, detail="Pending request not found")
     await execute(db, "UPDATE friend_requests SET status='rejected',updated_at=? WHERE id=?", now(), request_id)
+    await emit_realtime(request, [req["sender_id"], req["receiver_id"]], "friends.changed", actor_id=user["sub"])
     return {"message": "Friend request rejected"}
 
 
 @app.delete("/api/v1/friends/requests/{request_id}")
-async def cancel_friend_request(request_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def cancel_friend_request(request_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    pending = await first(db, "SELECT receiver_id FROM friend_requests WHERE id=? AND sender_id=? AND status='pending'", request_id, user["sub"])
     result = await execute(db, "DELETE FROM friend_requests WHERE id=? AND sender_id=? AND status='pending'", request_id, user["sub"])
     if not getattr(result, "meta", {}).get("changes", 0):
         raise HTTPException(status_code=404, detail="Outgoing friend request not found")
+    if pending:
+        await emit_realtime(request, [user["sub"], pending["receiver_id"]], "friends.changed", actor_id=user["sub"])
     return {"message": "Friend request cancelled"}
 
 
 @app.delete("/api/v1/friends/{target_user_id}")
-async def remove_friend(target_user_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def remove_friend(target_user_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     low, high = sorted([user["sub"], target_user_id])
     result = await execute(db, "DELETE FROM friendships WHERE user_id_1=? AND user_id_2=?", low, high)
     if not getattr(result, "meta", {}).get("changes", 0):
         raise HTTPException(status_code=404, detail="Friendship not found")
+    await emit_realtime(request, [user["sub"], target_user_id], "friends.changed", actor_id=user["sub"])
     return {"message": "Friend removed"}
 
 
 @app.post("/api/v1/messages/direct/{target_user_id}")
-async def open_direct_message(target_user_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def open_direct_message(target_user_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     current_id = user["sub"]
     if target_user_id == current_id:
         raise HTTPException(status_code=400, detail="Cannot message yourself")
@@ -892,6 +915,7 @@ async def open_direct_message(target_user_id: str, user: dict[str, Any] = Depend
     if await first(db, "SELECT 1 AS ok FROM blocked_users WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)", current_id, target_user_id, target_user_id, current_id):
         raise HTTPException(status_code=403, detail="Cannot message a blocked user")
     conversation_id = await ensure_direct_conversation(db, low, high)
+    await emit_realtime(request, [current_id, target_user_id], "conversation.created", conversation_id=conversation_id)
     conversation = await first(db, "SELECT * FROM conversations WHERE id=?", conversation_id)
     return await conversation_summary(db, conversation, current_id)
 
@@ -932,8 +956,10 @@ async def insert_campus_group(db: Any, req: CampusGroupInput, user_id: str, grou
 
 
 @app.post("/api/v1/groups", status_code=status.HTTP_201_CREATED)
-async def create_campus_group(req: CampusGroupInput, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def create_campus_group(req: CampusGroupInput, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     group_id = await insert_campus_group(db, req, user["sub"])
+    audience = await query(db, "SELECT id FROM users WHERE is_active=1")
+    await emit_realtime(request, [row["id"] for row in audience], "group.changed", group_id=group_id)
     return next(group for group in await list_campus_groups(user, db) if group["id"] == group_id)
 
 
@@ -957,10 +983,12 @@ async def import_local_campus_groups(payload: CampusGroupImport, user: dict[str,
 
 
 @app.post("/api/v1/groups/{group_id}/join")
-async def join_campus_group(group_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def join_campus_group(group_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     if not await first(db, "SELECT 1 AS ok FROM campus_groups WHERE id=?", group_id):
         raise HTTPException(status_code=404, detail="Group not found")
     await execute(db, "INSERT OR IGNORE INTO campus_group_members(group_id,user_id,role,joined_at) VALUES(?,?,'member',?)", group_id, user["sub"], now())
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id)
     return {"message": "Joined group", "group_id": group_id}
 
 
@@ -1005,7 +1033,7 @@ async def admin_delete_message(message_id: str, user: dict[str, Any] = Depends(g
 
 
 @app.patch("/api/v1/groups/{group_id}")
-async def update_campus_group(group_id: str, payload: CampusGroupUpdate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def update_campus_group(group_id: str, payload: CampusGroupUpdate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     group = await first(db, "SELECT owner_id FROM campus_groups WHERE id=?", group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
@@ -1013,23 +1041,27 @@ async def update_campus_group(group_id: str, payload: CampusGroupUpdate, user: d
         raise HTTPException(status_code=403, detail="Only the group owner can update its profile")
     is_pub = 1 if payload.is_public else 0
     await execute(db, "UPDATE campus_groups SET name=?,description=?,icon=?,banner=?,is_public=?,updated_at=? WHERE id=?", payload.name.strip(), payload.description.strip(), payload.icon, payload.banner, is_pub, now(), group_id)
+    audience = await query(db, "SELECT id FROM users WHERE is_active=1")
+    await emit_realtime(request, [row["id"] for row in audience], "group.changed", group_id=group_id)
     return next(item for item in await list_campus_groups(user, db) if item["id"] == group_id)
 
 
 @app.delete("/api/v1/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_campus_group(group_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def delete_campus_group(group_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     group = await first(db, "SELECT owner_id FROM campus_groups WHERE id=?", group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     if group["owner_id"] != user["sub"]:
         raise HTTPException(status_code=403, detail="Only the group owner can delete this group")
+    audience = await query(db, "SELECT id FROM users WHERE is_active=1")
+    await emit_realtime(request, [row["id"] for row in audience], "group.changed", group_id=group_id, deleted=True)
     # Child channels and messages cascade from the group foreign key in D1.
     await execute(db, "DELETE FROM campus_groups WHERE id=?", group_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.post("/api/v1/groups/{group_id}/channels", status_code=status.HTTP_201_CREATED)
-async def create_campus_group_channel(group_id: str, payload: CampusGroupChannelInput, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def create_campus_group_channel(group_id: str, payload: CampusGroupChannelInput, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     member = await require_campus_group_member(db, group_id, user["sub"])
     if member["role"] != "owner":
         raise HTTPException(status_code=403, detail="Only the group owner can add channels")
@@ -1039,11 +1071,13 @@ async def create_campus_group_channel(group_id: str, payload: CampusGroupChannel
     position = await first(db, "SELECT COALESCE(MAX(position),-1)+1 AS next_position FROM campus_group_channels WHERE group_id=?", group_id)
     channel_id = new_id()
     await execute(db, "INSERT INTO campus_group_channels(id,group_id,name,position,created_at) VALUES(?,?,?,?,?)", channel_id, group_id, name, int(position["next_position"]), now())
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id)
     return {"id": channel_id, "name": name}
 
 
 @app.delete("/api/v1/groups/{group_id}/channels/{channel_id}")
-async def delete_campus_group_channel(group_id: str, channel_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def delete_campus_group_channel(group_id: str, channel_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     member = await require_campus_group_member(db, group_id, user["sub"])
     if member["role"] != "owner":
         raise HTTPException(status_code=403, detail="Only the group owner can remove channels")
@@ -1053,6 +1087,8 @@ async def delete_campus_group_channel(group_id: str, channel_id: str, user: dict
     result = await execute(db, "DELETE FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id)
     if not getattr(result, "meta", {}).get("changes", 0):
         raise HTTPException(status_code=404, detail="Channel not found")
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id)
     return {"message": "Channel removed"}
 
 
@@ -1074,7 +1110,7 @@ async def list_campus_group_messages(group_id: str, channel_id: str, user: dict[
 
 
 @app.post("/api/v1/groups/{group_id}/channels/{channel_id}/messages", status_code=status.HTTP_201_CREATED)
-async def send_campus_group_message(group_id: str, channel_id: str, payload: CampusGroupMessageCreate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def send_campus_group_message(group_id: str, channel_id: str, payload: CampusGroupMessageCreate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     await require_campus_group_member(db, group_id, user["sub"])
     if not await first(db, "SELECT 1 AS ok FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id):
         raise HTTPException(status_code=404, detail="Channel not found")
@@ -1083,22 +1119,27 @@ async def send_campus_group_message(group_id: str, channel_id: str, payload: Cam
     message_id, stamp = new_id(), now()
     await execute(db, "INSERT INTO campus_group_messages(id,group_id,channel_id,sender_id,content,reply_to_id,created_at) VALUES(?,?,?,?,?,?,?)", message_id, group_id, channel_id, user["sub"], payload.content.strip(), payload.reply_to_id, stamp)
     row = await first(db, "SELECT u.username,p.full_name,p.avatar_url,p.avatar_mime_type FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?", user["sub"])
-    return {"id": message_id, "text": payload.content.strip(), "sender": row.get("full_name") or row["username"], "sender_id": user["sub"], "avatar_url": row.get("avatar_url"), "avatar_mime_type": row.get("avatar_mime_type"), "at": stamp, "reactions": [], "replyToId": payload.reply_to_id}
+    message = {"id": message_id, "text": payload.content.strip(), "sender": row.get("full_name") or row["username"], "sender_id": user["sub"], "avatar_url": row.get("avatar_url"), "avatar_mime_type": row.get("avatar_mime_type"), "at": stamp, "reactions": [], "replyToId": payload.reply_to_id}
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "group.message.new", group_id=group_id, channel_id=channel_id, message=message)
+    return message
 
 
 @app.delete("/api/v1/groups/{group_id}/channels/{channel_id}/messages")
-async def clear_campus_group_channel(group_id: str, channel_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def clear_campus_group_channel(group_id: str, channel_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     member = await require_campus_group_member(db, group_id, user["sub"])
     if member["role"] != "owner":
         raise HTTPException(status_code=403, detail="Only the group owner can clear shared channel history")
     if not await first(db, "SELECT 1 AS ok FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id):
         raise HTTPException(status_code=404, detail="Channel not found")
     result = await execute(db, "DELETE FROM campus_group_messages WHERE channel_id=?", channel_id)
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "group.channel.cleared", group_id=group_id, channel_id=channel_id)
     return {"cleared_count": getattr(result, "meta", {}).get("changes", 0)}
 
 
 @app.delete("/api/v1/groups/{group_id}/messages/{message_id}")
-async def delete_campus_group_message(group_id: str, message_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def delete_campus_group_message(group_id: str, message_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     await require_campus_group_member(db, group_id, user["sub"])
     row = await first(db, "SELECT sender_id,is_deleted FROM campus_group_messages WHERE id=? AND group_id=?", message_id, group_id)
     if not row:
@@ -1106,16 +1147,21 @@ async def delete_campus_group_message(group_id: str, message_id: str, user: dict
     if row["sender_id"] != user["sub"]:
         raise HTTPException(status_code=403, detail="You can only delete your own messages")
     await execute(db, "UPDATE campus_group_messages SET is_deleted=1,content='' WHERE id=?", message_id)
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "group.message.changed", group_id=group_id, message_id=message_id)
     return {"message": "Message deleted"}
 
 
 @app.post("/api/v1/groups/{group_id}/channels/{channel_id}/typing")
-async def update_campus_group_typing(group_id: str, channel_id: str, payload: TypingStatusUpdate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def update_campus_group_typing(group_id: str, channel_id: str, payload: TypingStatusUpdate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     await require_campus_group_member(db, group_id, user["sub"])
     if payload.is_typing:
         await execute(db, "INSERT INTO campus_group_typing(group_id,channel_id,user_id,updated_at) VALUES(?,?,?,?) ON CONFLICT(channel_id,user_id) DO UPDATE SET updated_at=excluded.updated_at", group_id, channel_id, user["sub"], now())
     else:
         await execute(db, "DELETE FROM campus_group_typing WHERE channel_id=? AND user_id=?", channel_id, user["sub"])
+    member_ids = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=? AND user_id<>?", group_id, user["sub"])
+    name = await first(db, "SELECT COALESCE(p.full_name,u.username) AS name FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?", user["sub"])
+    await emit_realtime(request, [member["user_id"] for member in member_ids], "group.typing.changed", group_id=group_id, channel_id=channel_id, user_id=user["sub"], name=name["name"] if name else "Student", is_typing=payload.is_typing)
     return {"is_typing": payload.is_typing}
 
 
@@ -1130,7 +1176,7 @@ async def get_campus_group_typing(group_id: str, channel_id: str, user: dict[str
 
 
 @app.post("/api/v1/groups/{group_id}/messages/{message_id}/reactions")
-async def toggle_campus_group_reaction(group_id: str, message_id: str, payload: ReactionBody, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def toggle_campus_group_reaction(group_id: str, message_id: str, payload: ReactionBody, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     await require_campus_group_member(db, group_id, user["sub"])
     if not await first(db, "SELECT 1 AS ok FROM campus_group_messages WHERE id=? AND group_id=? AND is_deleted=0", message_id, group_id):
         raise HTTPException(status_code=404, detail="Message not found")
@@ -1139,6 +1185,8 @@ async def toggle_campus_group_reaction(group_id: str, message_id: str, payload: 
         await execute(db, "DELETE FROM campus_group_message_reactions WHERE message_id=? AND user_id=? AND emoji=?", message_id, user["sub"], payload.emoji)
     else:
         await execute(db, "INSERT INTO campus_group_message_reactions(message_id,user_id,emoji,created_at) VALUES(?,?,?,?)", message_id, user["sub"], payload.emoji, now())
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "group.message.changed", group_id=group_id, message_id=message_id)
     return {"emoji": payload.emoji, "is_reacted": not bool(existing)}
 
 
@@ -1208,7 +1256,7 @@ async def list_conversations(user: dict[str, Any] = Depends(get_current_user), d
 
 
 @app.post("/api/v1/messages/direct/{target_user_id}")
-async def open_direct_message(target_user_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def open_direct_message(target_user_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     current_id = user["sub"]
     if target_user_id == current_id:
         raise HTTPException(status_code=400, detail="Cannot open a direct message with yourself")
@@ -1218,12 +1266,13 @@ async def open_direct_message(target_user_id: str, user: dict[str, Any] = Depend
     if await first(db, "SELECT 1 AS ok FROM blocked_users WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)", current_id, target_user_id, target_user_id, current_id):
         raise HTTPException(status_code=403, detail="Cannot message a blocked user")
     conv_id = await ensure_direct_conversation(db, current_id, target_user_id)
+    await emit_realtime(request, [current_id, target_user_id], "conversation.created", conversation_id=conv_id)
     conversation = await first(db, "SELECT * FROM conversations WHERE id=?", conv_id)
     return await conversation_summary(db, conversation, current_id)
 
 
 @app.post("/api/v1/messages/conversations", status_code=status.HTTP_201_CREATED)
-async def create_conversation(req: ConversationBody, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def create_conversation(req: ConversationBody, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     if req.type not in {"direct", "group"}:
         raise HTTPException(status_code=422, detail="Conversation type must be direct or group")
     participant_ids = set(req.participant_user_ids) | {user["sub"]}
@@ -1246,6 +1295,7 @@ async def create_conversation(req: ConversationBody, user: dict[str, Any] = Depe
     for uid in participant_ids:
         await execute(db, "INSERT INTO conversation_members(conversation_id,user_id,role,joined_at) VALUES(?,?,?,?)", conv_id, uid, "admin" if req.type == "group" and uid == user["sub"] else "member", stamp)
     conversation = await first(db, "SELECT * FROM conversations WHERE id=?", conv_id)
+    await emit_realtime(request, list(participant_ids), "conversation.created", conversation_id=conv_id)
     return await conversation_summary(db, conversation, user["sub"])
 
 
@@ -1263,7 +1313,7 @@ async def get_messages(conv_id: str, before_id: str | None = None, limit: int = 
 
 
 @app.post("/api/v1/messages/conversations/{conv_id}/messages", status_code=status.HTTP_201_CREATED)
-async def send_message(conv_id: str, req: MessageBody, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def send_message(conv_id: str, req: MessageBody, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     await require_member(db, conv_id, user["sub"])
     if req.message_type not in {"text", "image", "document", "voice", "system"}:
         raise HTTPException(status_code=422, detail="Unsupported message type")
@@ -1273,11 +1323,14 @@ async def send_message(conv_id: str, req: MessageBody, user: dict[str, Any] = De
     await execute(db, "INSERT INTO messages(id,conversation_id,sender_id,content,message_type,reply_to_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", msg_id, conv_id, user["sub"], req.content, req.message_type, req.reply_to_id, stamp, stamp)
     await execute(db, "UPDATE conversations SET updated_at=? WHERE id=?", stamp, conv_id)
     message = await first(db, "SELECT * FROM messages WHERE id=?", msg_id)
-    return await format_message(db, message)
+    formatted = await format_message(db, message)
+    members = await query(db, "SELECT user_id FROM conversation_members WHERE conversation_id=?", conv_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "message.new", conversation_id=conv_id, message=formatted)
+    return formatted
 
 
 @app.put("/api/v1/messages/messages/{message_id}")
-async def edit_message(message_id: str, req: MessageUpdate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def edit_message(message_id: str, req: MessageUpdate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     message = await first(db, "SELECT * FROM messages WHERE id=?", message_id)
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -1288,11 +1341,14 @@ async def edit_message(message_id: str, req: MessageUpdate, user: dict[str, Any]
         raise HTTPException(status_code=400, detail="Cannot edit a deleted message")
     await execute(db, "UPDATE messages SET content=?,is_edited=1,updated_at=? WHERE id=?", req.content, now(), message_id)
     updated = await first(db, "SELECT * FROM messages WHERE id=?", message_id)
-    return await format_message(db, updated)
+    formatted = await format_message(db, updated)
+    members = await query(db, "SELECT user_id FROM conversation_members WHERE conversation_id=?", message["conversation_id"])
+    await emit_realtime(request, [member["user_id"] for member in members], "message.edited", conversation_id=message["conversation_id"], message=formatted)
+    return formatted
 
 
 @app.delete("/api/v1/messages/messages/{message_id}")
-async def delete_message(message_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def delete_message(message_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     message = await first(db, "SELECT * FROM messages WHERE id=?", message_id)
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -1302,24 +1358,31 @@ async def delete_message(message_id: str, user: dict[str, Any] = Depends(get_cur
     await execute(db, "UPDATE messages SET content='',is_deleted=1,updated_at=? WHERE id=?", now(), message_id)
     await execute(db, "DELETE FROM message_reactions WHERE message_id=?", message_id)
     updated = await first(db, "SELECT * FROM messages WHERE id=?", message_id)
+    members = await query(db, "SELECT user_id FROM conversation_members WHERE conversation_id=?", message["conversation_id"])
+    await emit_realtime(request, [member["user_id"] for member in members], "message.deleted", conversation_id=message["conversation_id"], message_id=message_id)
     return await format_message(db, updated)
 
 
 @app.delete("/api/v1/messages/conversations/{conv_id}/messages")
-async def clear_conversation(conv_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def clear_conversation(conv_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     await require_member(db, conv_id, user["sub"])
     result = await execute(db, "DELETE FROM messages WHERE conversation_id=?", conv_id)
     changes = getattr(result, "meta", {}).get("changes", 0)
+    members = await query(db, "SELECT user_id FROM conversation_members WHERE conversation_id=?", conv_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "conversation.cleared", conversation_id=conv_id)
     return {"message": "Conversation history cleared", "cleared_count": changes}
 
 
 @app.post("/api/v1/messages/conversations/{conv_id}/typing")
-async def update_typing_status(conv_id: str, payload: TypingStatusUpdate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def update_typing_status(conv_id: str, payload: TypingStatusUpdate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     await require_member(db, conv_id, user["sub"])
     if payload.is_typing:
         await execute(db, "INSERT INTO typing_indicators(conversation_id,user_id,updated_at) VALUES(?,?,?) ON CONFLICT(conversation_id,user_id) DO UPDATE SET updated_at=excluded.updated_at", conv_id, user["sub"], now())
     else:
         await execute(db, "DELETE FROM typing_indicators WHERE conversation_id=? AND user_id=?", conv_id, user["sub"])
+    name = await first(db, "SELECT COALESCE(p.full_name,u.username) AS name FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?", user["sub"])
+    member_ids = await query(db, "SELECT user_id FROM conversation_members WHERE conversation_id=? AND user_id<>?", conv_id, user["sub"])
+    await emit_realtime(request, [member["user_id"] for member in member_ids], "typing.changed", conversation_id=conv_id, user_id=user["sub"], name=name["name"] if name else "Student", is_typing=payload.is_typing)
     return {"is_typing": payload.is_typing}
 
 
@@ -1334,7 +1397,7 @@ async def get_typing_status(conv_id: str, user: dict[str, Any] = Depends(get_cur
 
 
 @app.post("/api/v1/messages/messages/{message_id}/reactions")
-async def toggle_reaction(message_id: str, req: ReactionBody, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def toggle_reaction(message_id: str, req: ReactionBody, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     message = await first(db, "SELECT conversation_id,is_deleted FROM messages WHERE id=?", message_id)
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -1346,6 +1409,8 @@ async def toggle_reaction(message_id: str, req: ReactionBody, user: dict[str, An
         await execute(db, "DELETE FROM message_reactions WHERE message_id=? AND user_id=? AND emoji=?", message_id, user["sub"], req.emoji)
     else:
         await execute(db, "INSERT INTO message_reactions(message_id,user_id,emoji,created_at) VALUES(?,?,?,?)", message_id, user["sub"], req.emoji, now())
+    members = await query(db, "SELECT user_id FROM conversation_members WHERE conversation_id=?", message["conversation_id"])
+    await emit_realtime(request, [member["user_id"] for member in members], "message.reaction", conversation_id=message["conversation_id"], message_id=message_id)
     return await format_message(db, await first(db, "SELECT * FROM messages WHERE id=?", message_id))
 
 
@@ -1401,26 +1466,28 @@ async def list_ai_conversations(user: dict[str, Any] = Depends(get_current_user)
 
 
 @app.post("/api/v1/ai/conversations", status_code=status.HTTP_201_CREATED)
-async def create_ai_conversation(req: AIConversationCreate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def create_ai_conversation(req: AIConversationCreate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     stamp, conv_id = now(), new_id()
     title = (req.title or "New AI Conversation").strip()[:150] or "New AI Conversation"
     await execute(db, "INSERT INTO ai_conversations(id,user_id,title,parent_id,created_at,updated_at) VALUES(?,?,?,NULL,?,?)", conv_id, user["sub"], title, stamp, stamp)
+    await emit_realtime(request, [user["sub"]], "ai.changed")
     return {"id": conv_id, "title": title, "parent_id": None, "created_at": stamp, "updated_at": stamp, "model_key": "qwen3"}
 
 
 @app.post("/api/v1/ai/conversations/{conv_id}/threads", status_code=status.HTTP_201_CREATED)
-async def create_ai_thread(conv_id: str, req: AIConversationCreate, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def create_ai_thread(conv_id: str, req: AIConversationCreate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     parent = await first(db, "SELECT id FROM ai_conversations WHERE id=? AND user_id=?", conv_id, user["sub"])
     if not parent:
         raise HTTPException(status_code=404, detail="Conversation not found")
     stamp, thread_id = now(), new_id()
     title = (req.title or "New thread").strip()[:150] or "New thread"
     await execute(db, "INSERT INTO ai_conversations(id,user_id,title,parent_id,created_at,updated_at) VALUES(?,?,?,?,?,?)", thread_id, user["sub"], title, conv_id, stamp, stamp)
+    await emit_realtime(request, [user["sub"]], "ai.changed")
     return {"id": thread_id, "title": title, "parent_id": conv_id, "created_at": stamp, "updated_at": stamp, "model_key": "qwen3"}
 
 
 @app.delete("/api/v1/ai/conversations/{conv_id}")
-async def delete_ai_conversation(conv_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+async def delete_ai_conversation(conv_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     if not await first(db, "SELECT 1 AS ok FROM ai_conversations WHERE id=? AND user_id=?", conv_id, user["sub"]):
         raise HTTPException(status_code=404, detail="Conversation not found")
     deleted_ids, frontier = [conv_id], [conv_id]
@@ -1431,6 +1498,7 @@ async def delete_ai_conversation(conv_id: str, user: dict[str, Any] = Depends(ge
         frontier = [child_id for child_id in children if child_id not in deleted_ids]
         deleted_ids.extend(frontier)
     await execute(db, "DELETE FROM ai_conversations WHERE id=? AND user_id=?", conv_id, user["sub"])
+    await emit_realtime(request, [user["sub"]], "ai.changed")
     return {"status": "deleted", "deleted_ids": deleted_ids}
 
 
@@ -1507,6 +1575,7 @@ async def send_ai_message(conv_id: str, payload: AIChatRequest, request: Request
     await execute(db, "INSERT INTO ai_messages(id,conversation_id,role,content,created_at) VALUES(?,?,?,?,?)", assistant_message_id, conv_id, "assistant", answer.strip(), stamp)
     title = payload.prompt.strip()[:60] or conversation["title"]
     await execute(db, "UPDATE ai_conversations SET title=CASE WHEN title IN ('New AI Conversation','Session') THEN ? ELSE title END,updated_at=? WHERE id=? AND user_id=?", title, stamp, conv_id, user["sub"])
+    await emit_realtime(request, [user["sub"]], "ai.messages.changed", conversation_id=conv_id)
 
     async def events():
         yield "data: " + json.dumps({"stage": "accepted", "message": f"Generating with {model['label']} on your laptop"}) + "\n\n"
@@ -1618,4 +1687,48 @@ async def spa_fallback(path: str, request: Request):
 
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
+        parsed = urlparse(request.url)
+        if parsed.path == "/ws/nexus":
+            from urllib.parse import parse_qs
+            token = parse_qs(parsed.query).get("token", [""])[0]
+            secret = getattr(self.env, "JWT_SECRET", None)
+            claims = decode_token(token, str(secret)) if token and secret else None
+            if not claims:
+                return WorkerResponse("Unauthorized", status=401)
+            hub = self.env.REALTIME_HUB.get(self.env.REALTIME_HUB.idFromName("nexus-live-events"))
+            return await hub.fetch(request.url + "&user_id=" + claims["sub"])
         return await asgi.fetch(app, request, self.env)
+
+
+class RealtimeHub(DurableObject):
+    def __init__(self, ctx, env):
+        super().__init__(ctx, env)
+        self.ctx = ctx
+
+    async def fetch(self, request):
+        from urllib.parse import parse_qs
+        user_id = parse_qs(urlparse(request.url).query).get("user_id", [""])[0]
+        if not user_id:
+            return WorkerResponse("Missing authenticated user", status=401)
+        if request.headers.get("Upgrade", "").lower() != "websocket":
+            return WorkerResponse("WebSocket upgrade required", status=426)
+        client, server = WebSocketPair.new().object_values()
+        self.ctx.accept_web_socket(server, [user_id])
+        server.send(json.dumps({"event": "system.ready", "user_id": user_id}))
+        return WorkerResponse(None, status=101, web_socket=client)
+
+    async def publish(self, user_ids, event, payload):
+        message = json.dumps({"event": event, **payload})
+        for user_id in user_ids:
+            for socket in self.ctx.get_websockets(user_id):
+                try:
+                    socket.send(message)
+                except Exception:
+                    pass
+
+    def webSocketMessage(self, socket, message):
+        if message == '{"event":"ping"}':
+            socket.send(json.dumps({"event": "pong"}))
+
+    def webSocketClose(self, socket, code, reason, was_clean):
+        socket.close(code, reason)

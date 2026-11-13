@@ -44,8 +44,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     let active = true;
     const refresh = () => void api.searchUsers(query.trim()).then(rows => { if (active) setPeople(rows); }).catch(() => { if (active) setPeople([]); });
     const timer = window.setTimeout(refresh, 180);
-    const interval = window.setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 15000);
-    return () => { active = false; window.clearTimeout(timer); window.clearInterval(interval); };
+    const onFriendsChanged = (event: Event) => { if ((event as CustomEvent).detail?.event === 'friends.changed') refresh(); };
+    window.addEventListener('nexus-realtime-event', onFriendsChanged);
+    return () => { active = false; window.clearTimeout(timer); window.removeEventListener('nexus-realtime-event', onFriendsChanged); };
   }, [isOpen, query]);
 
   if (!isOpen) return null;

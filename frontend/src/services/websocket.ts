@@ -3,31 +3,26 @@ type MessageHandler = (data: any) => void;
 class WebSocketClient {
   private socket: WebSocket | null = null;
   private listeners: Set<MessageHandler> = new Set();
-  private pingInterval: any = null;
   private reconnectTimeout: any = null;
   private isConnecting: boolean = false;
+  private shouldReconnect = true;
 
   connect(token: string) {
-    if (this.socket || this.isConnecting) return;
+    if (!token || this.socket || this.isConnecting) return;
+    this.shouldReconnect = true;
     this.isConnecting = true;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    // Connect directly or via Vite proxy
-    const wsUrl = `${protocol}//${host}/ws/nexus?token=${encodeURIComponent(token)}`;
+    const wsHost = host.includes('localhost') || host.includes('127.0.0.1') ? host : 'nexus-backend.kuhan200973.workers.dev';
+    const wsUrl = `${protocol}//${wsHost}/ws/nexus?token=${encodeURIComponent(token)}`;
 
     try {
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
         this.isConnecting = false;
-        console.log('[NEXUS WebSocket] Connected');
-        // Start heartbeat ping every 25s
-        this.pingInterval = setInterval(() => {
-          if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            this.socket.send(JSON.stringify({ event: 'ping' }));
-          }
-        }, 25000);
+        this.listeners.forEach(listener => listener({ event: 'system.connected' }));
       };
 
       this.socket.onmessage = (event) => {
@@ -41,7 +36,7 @@ class WebSocketClient {
 
       this.socket.onclose = () => {
         this.cleanup();
-        console.log('[NEXUS WebSocket] Closed. Scheduling reconnect in 3s...');
+        if (!this.shouldReconnect) return;
         this.reconnectTimeout = setTimeout(() => {
           this.connect(token);
         }, 3000);
@@ -58,7 +53,6 @@ class WebSocketClient {
 
   private cleanup() {
     this.isConnecting = false;
-    if (this.pingInterval) clearInterval(this.pingInterval);
     if (this.socket) {
       this.socket.close();
       this.socket = null;
@@ -66,9 +60,12 @@ class WebSocketClient {
   }
 
   disconnect() {
+    this.shouldReconnect = false;
     if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
     this.cleanup();
   }
+
+  isConnected() { return this.socket?.readyState === WebSocket.OPEN; }
 
   addListener(handler: MessageHandler) {
     this.listeners.add(handler);

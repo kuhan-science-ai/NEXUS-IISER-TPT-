@@ -34,6 +34,7 @@ import { signOut } from 'firebase/auth';
 import { customPaletteStyle, CustomUiPalette, readCustomUiPalettes, readUiPalette, UiPaletteId, writeUiPalette } from './services/appearance';
 import { recordDashboardHistory } from './services/dashboard';
 import { readUserPreference, writeUserPreference } from './services/userPreferences';
+import { wsClient } from './services/websocket';
 
 const queryClient = new QueryClient();
 
@@ -222,6 +223,14 @@ export const App: React.FC = () => {
   useEffect(() => {
     currentUserRef.current = currentUser;
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) { wsClient.disconnect(); return; }
+    const token = api.getToken();
+    if (token) wsClient.connect(token);
+    const remove = wsClient.addListener(event => window.dispatchEvent(new CustomEvent('nexus-realtime-event', { detail: event })));
+    return () => { remove(); wsClient.disconnect(); };
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (!currentUser) return;

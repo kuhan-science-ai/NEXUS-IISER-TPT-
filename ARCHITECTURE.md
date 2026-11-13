@@ -4,6 +4,8 @@
 
 NEXUS is designed following a clean, modular, layered architecture to ensure separation of concerns, testability, and seamless future integration of Figma UI designs.
 
+The deployed Cloudflare Python Worker uses a SQLite-backed Durable Object WebSocket hub for authenticated user-scoped live events. Worker/D1 mutations publish conversation, friend, group, and AI invalidations to affected connected accounts; the React client shares one socket and keeps session caches for fast route reopening. Discussion Forums is currently mock UI state and is not part of this shared data flow.
+
 ```
 +-------------------------------------------------------------------------+
 |                              FRONTEND                                   |

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api, UserSummary } from '../services/api';
+import { wsClient } from '../services/websocket';
 import { MathRenderer } from '../components/MathRenderer';
 import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 import { SideNav } from '../components/SideNav';
@@ -35,10 +36,11 @@ const stageBorderColor = (stage: string) => {
 };
 
 const readAssistantName = (userId: string) => readUserPreference('nexus-ai-name', userId, 'NEXUS').trim().slice(0, 10) || 'NEXUS';
+const readAiCache = <T,>(key: string, fallback: T): T => { try { return JSON.parse(sessionStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } };
 
 export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout }) => {
-  const [conversations, setConversations] = useState<any[]>([]);
-  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<any[]>(() => readAiCache(`nexus-ai-conversations:${currentUser?.id}`, []));
+  const [activeConvId, setActiveConvId] = useState<string | null>(() => readAiCache<any[]>(`nexus-ai-conversations:${currentUser?.id}`, [])[0]?.id || null);
   const [prompt, setPrompt] = useState('');
   const [stages, setStages] = useState<any[]>([]);
   const [streamedText, setStreamedText] = useState('');
@@ -46,13 +48,18 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
   const [requestError, setRequestError] = useState('');
   const [pendingConfirmation, setPendingConfirmation] = useState<any | null>(null);
   const [tools, setTools] = useState<any[]>([]);
-  const [conversationMessages, setConversationMessages] = useState<any[]>([]);
+  const [conversationMessages, setConversationMessages] = useState<any[]>(() => activeConvId ? readAiCache(`nexus-ai-messages:${currentUser?.id}:${activeConvId}`, []) : []);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [messageOffset, setMessageOffset] = useState(0);
   const [loadingEarlierMessages, setLoadingEarlierMessages] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [assistantName, setAssistantName] = useState(() => readAssistantName(currentUser?.id || 'guest'));
   const requestController = useRef<AbortController | null>(null);
+
+  useEffect(() => { const remove = wsClient.addListener(event => {
+    if (event.event === 'ai.changed') void loadConversations();
+    if (event.event === 'ai.messages.changed' && event.conversation_id === activeConvId) void loadMessages(activeConvId);
+  }); return () => { remove(); }; }, [activeConvId]);
 
   const copyMessage = async (content: string) => { try { await navigator.clipboard.writeText(content); } catch { setRequestError('Could not copy this message in this browser.'); } };
   const quoteMessage = (content: string) => { setPrompt(value => `${value}${value ? '\n' : ''}> ${content.split('\n').join('\n> ')}\n\n`); document.querySelector<HTMLInputElement>('[data-ai-prompt]')?.focus(); };
@@ -88,6 +95,9 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
     api.listAITools().then(setTools);
   }, []);
 
+  useEffect(() => { if (currentUser) sessionStorage.setItem(`nexus-ai-conversations:${currentUser.id}`, JSON.stringify(conversations)); }, [conversations, currentUser?.id]);
+  useEffect(() => { if (currentUser && activeConvId) sessionStorage.setItem(`nexus-ai-messages:${currentUser.id}:${activeConvId}`, JSON.stringify(conversationMessages)); }, [conversationMessages, activeConvId, currentUser?.id]);
+
   const loadConversations = async () => {
     try {
       const convs = await api.listAIConversations();
@@ -104,6 +114,7 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
       const data = await api.getAIMessages(id, offset);
       const messages = data.messages || [];
       setConversationMessages(prev => append ? [...messages, ...prev] : messages);
+      if (!append && currentUser) sessionStorage.setItem(`nexus-ai-messages:${currentUser.id}:${id}`, JSON.stringify(messages));
       setHasMoreMessages(Boolean(data.has_more));
       setMessageOffset(data.next_offset ?? offset + messages.length);
       return true;
@@ -112,7 +123,7 @@ export const AILoopPage: React.FC<AILoopPageProps> = ({ currentUser, onLogout })
   };
 
   useEffect(() => {
-    setConversationMessages([]);
+    setConversationMessages(activeConvId && currentUser ? readAiCache(`nexus-ai-messages:${currentUser.id}:${activeConvId}`, []) : []);
     setHasMoreMessages(false);
     setMessageOffset(0);
     if (activeConvId) void loadMessages(activeConvId);

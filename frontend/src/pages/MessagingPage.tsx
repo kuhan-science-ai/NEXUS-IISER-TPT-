@@ -17,6 +17,8 @@ interface MessagingPageProps { currentUser: UserSummary | null; onLogout?: () =>
 type Conversation = { id: string; type: string; title?: string; description?: string; members?: any[]; last_message?: Message | null };
 type Message = { id: string; conversation_id: string; sender_id: string; sender_name?: string; sender_username?: string; avatar_url?: string | null; avatar_mime_type?: string | null; content: string; created_at: string; reactions?: { emoji: string; count: number; user_ids: string[] }[]; reply_to_id?: string | null; reply_preview?: string | null; is_deleted?: boolean; is_pinned?: boolean };
 
+const readMessengerCache = <T,>(key: string, fallback: T): T => { try { return JSON.parse(sessionStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } };
+
 export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLogout }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -25,8 +27,8 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const [inputText, setInputText] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
   const [callPreview, setCallPreview] = useState<'voice' | 'video' | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>(() => readMessengerCache(`nexus-dm-conversations:${currentUser?.id}`, []));
+  const [activeConvId, setActiveConvId] = useState<string | null>(() => new URLSearchParams(location.search).get('conversationId') || readMessengerCache<Conversation[]>(`nexus-dm-conversations:${currentUser?.id}`, [])[0]?.id || null);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -42,43 +44,32 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
     try { const rows = await api.listConversations(); setConversations(rows); const requested = new URLSearchParams(location.search).get('conversationId'); setActiveConvId(current => requested && rows.some((row: Conversation) => row.id === requested) ? requested : current && rows.some((row: Conversation) => row.id === current) ? current : null); }
     catch { setConversations([]); }
   }, [location.search]);
-  useEffect(() => { void loadConversations(); const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void loadConversations(); }, 15000); const refreshOnProfile = () => void loadConversations(); window.addEventListener('nexus-profile-updated', refreshOnProfile); return () => { window.clearInterval(timer); window.removeEventListener('nexus-profile-updated', refreshOnProfile); }; }, [loadConversations]);
+  useEffect(() => { void loadConversations(); const refreshOnProfile = () => void loadConversations(); window.addEventListener('nexus-profile-updated', refreshOnProfile); return () => window.removeEventListener('nexus-profile-updated', refreshOnProfile); }, [loadConversations]);
   useEffect(() => {
     if (!activeConvId) { setChatMessages([]); return; }
-    let alive = true; setLoading(true); setError('');
+    let alive = true; const cached = readMessengerCache<Message[]>(`nexus-dm-messages:${currentUser?.id}:${activeConvId}`, []); setChatMessages(cached); setLoading(cached.length === 0); setError('');
     api.getMessages(activeConvId).then(rows => { if (alive) setChatMessages(rows); }).catch(() => { if (alive) { setChatMessages([]); setError('Messages could not be loaded. Check your connection and try again.'); } }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [activeConvId]);
+  }, [activeConvId, currentUser?.id]);
+  useEffect(() => { if (currentUser) sessionStorage.setItem(`nexus-dm-conversations:${currentUser.id}`, JSON.stringify(conversations)); }, [conversations, currentUser?.id]);
+  useEffect(() => { if (currentUser && activeConvId) sessionStorage.setItem(`nexus-dm-messages:${currentUser.id}:${activeConvId}`, JSON.stringify(chatMessages)); }, [chatMessages, activeConvId, currentUser?.id]);
   useEffect(() => {
     if (!activeConvId) { setTypingNames([]); return; }
-    let alive = true;
-    const refresh = () => void api.getTyping(activeConvId).then(rows => { if (alive) setTypingNames(rows.map(row => row.name)); }).catch(() => undefined);
-    refresh(); const timer = window.setInterval(refresh, 1800);
-    return () => { alive = false; window.clearInterval(timer); };
+    setTypingNames([]);
+    return () => setTypingNames([]);
   }, [activeConvId]);
   useEffect(() => () => { if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current); }, []);
   useEffect(() => {
-    if (!activeConvId) return;
-    let active = true;
-    const refresh = async () => {
-      if (document.visibilityState !== 'visible') return;
-      try {
-        const rows = await api.getMessages(activeConvId);
-        if (active) setChatMessages(current => JSON.stringify(current) === JSON.stringify(rows) ? current : rows);
-      } catch { /* keep the current history visible during a brief connection interruption */ }
-    };
-    const timer = window.setInterval(() => void refresh(), 5000);
-    return () => { active = false; window.clearInterval(timer); };
-  }, [activeConvId]);
-  useEffect(() => {
     const removeListener = wsClient.addListener(event => {
-    if (event.event === 'message.new' && event.message) {
+    if (event.event === 'conversation.created' || event.event === 'friends.changed') { void loadConversations(); }
+    else if (event.event === 'message.new' && event.message) {
       if (event.conversation_id === activeConvId) setChatMessages(items => items.some(item => item.id === event.message.id) ? items : [...items, event.message]);
       void loadConversations();
     } else if (event.event === 'message.deleted' && event.conversation_id === activeConvId) setChatMessages(items => items.map(item => item.id === event.message_id ? { ...item, is_deleted: true, content: 'This message was deleted.' } : item));
-    else if (event.event === 'conversation.cleared' && event.conversation_id === activeConvId) setChatMessages(items => items.map(item => ({ ...item, is_deleted: true, content: 'This message was deleted.' })));
+    else if (event.event === 'conversation.cleared' && event.conversation_id === activeConvId) setChatMessages([]);
     else if (event.event === 'message.edited' && event.conversation_id === activeConvId && event.message) setChatMessages(items => items.map(item => item.id === event.message.id ? event.message : item));
     else if (event.event === 'message.reaction' && event.conversation_id === activeConvId) void api.getMessages(activeConvId).then(setChatMessages).catch(() => undefined);
+    else if (event.event === 'typing.changed' && event.conversation_id === activeConvId) setTypingNames(names => event.is_typing ? names.includes(event.name) ? names : [...names, event.name] : names.filter(name => name !== event.name));
     });
     return () => { removeListener(); };
   }, [activeConvId, loadConversations]);
