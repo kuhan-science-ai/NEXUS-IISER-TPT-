@@ -77,6 +77,10 @@ class CampusGroupMessageCreate(BaseModel):
     reply_to_id: str | None = Field(default=None, max_length=36)
 
 
+class CallStartInput(BaseModel):
+    video: bool = False
+
+
 class TypingStatusUpdate(BaseModel):
     is_typing: bool
 
@@ -931,6 +935,189 @@ async def require_campus_group_member(db: Any, group_id: str, user_id: str) -> d
     if not row:
         raise HTTPException(status_code=403, detail="Join this group to view its channels")
     return row
+
+
+def livekit_settings(request: Request) -> tuple[str, str, str]:
+    env = request.scope.get("env")
+    host = str(getattr(env, "LIVEKIT_URL", "") or "").strip()
+    api_key = str(getattr(env, "LIVEKIT_API_KEY", "") or "").strip()
+    api_secret = str(getattr(env, "LIVEKIT_API_SECRET", "") or "").strip()
+    if not host or not api_key or not api_secret:
+        raise HTTPException(status_code=503, detail="LiveKit is not configured. Set LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET on the Worker.")
+    if not host.startswith(("wss://", "ws://", "https://", "http://")):
+        raise HTTPException(status_code=503, detail="LIVEKIT_URL must include its ws:// or wss:// scheme")
+    return host, api_key, api_secret
+
+
+async def livekit_access(request: Request, db: Any, user_id: str, room_name: str) -> dict[str, str]:
+    host, api_key, api_secret = livekit_settings(request)
+    account = await first(db, "SELECT u.username,p.full_name,p.avatar_url FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=? AND u.is_active=1", user_id)
+    if not account:
+        raise HTTPException(status_code=401, detail="Account is unavailable")
+    issued = int(time.time())
+    header = b64url(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
+    payload = b64url(json.dumps({
+        "iss": api_key,
+        "sub": user_id,
+        "name": account.get("full_name") or account.get("username") or "NEXUS member",
+        "metadata": json.dumps({"avatar_url": account.get("avatar_url")}, separators=(",", ":")),
+        "nbf": issued,
+        "iat": issued,
+        "exp": issued + 21600,
+        "jti": new_id(),
+        "video": {"roomJoin": True, "room": room_name, "canPublish": True, "canSubscribe": True, "canPublishData": True},
+    }, separators=(",", ":")).encode())
+    signature = b64url(hmac.new(api_secret.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
+    return {"server_url": host, "token": f"{header}.{payload}.{signature}", "room_name": room_name}
+
+
+@app.post("/api/v1/calls/direct/{conversation_id}/start")
+async def start_direct_call(conversation_id: str, payload: CallStartInput, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    livekit_settings(request)
+    await require_member(db, conversation_id, user["sub"])
+    conversation = await first(db, "SELECT type,title FROM conversations WHERE id=?", conversation_id)
+    if not conversation or conversation["type"] != "direct":
+        raise HTTPException(status_code=400, detail="Direct calls require a one-to-one conversation")
+    members = await query(db, "SELECT user_id FROM conversation_members WHERE conversation_id=?", conversation_id)
+    targets = [row["user_id"] for row in members if row["user_id"] != user["sub"]]
+    if not targets:
+        raise HTTPException(status_code=400, detail="This conversation has no other participant")
+    call_id = new_id()
+    room_name = f"nexus-dm-{call_id}"
+    stamp = now()
+    await execute(db, "INSERT INTO voice_call_sessions(id,room_name,room_type,conversation_id,created_by,status,created_at) VALUES(?,?,'direct',?,?,'active',?)", call_id, room_name, conversation_id, user["sub"], stamp)
+    profile = await first(db, "SELECT u.username,p.full_name FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?", user["sub"])
+    await emit_realtime(request, targets, "call.invite", call_id=call_id, room_type="direct", conversation_id=conversation_id, room_name=room_name, video=payload.video, caller_id=user["sub"], caller_name=(profile or {}).get("full_name") or (profile or {}).get("username") or "NEXUS member")
+    return {"call_id": call_id, "conversation_id": conversation_id, "can_end": True, **(await livekit_access(request, db, user["sub"], room_name))}
+
+
+@app.post("/api/v1/calls/{call_id}/join")
+async def join_call(call_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    call = await first(db, "SELECT * FROM voice_call_sessions WHERE id=? AND status='active'", call_id)
+    if not call:
+        raise HTTPException(status_code=404, detail="Call is no longer available")
+    can_end = False
+    if call["room_type"] == "direct":
+        await require_member(db, call["conversation_id"], user["sub"])
+    else:
+        member = await require_campus_group_member(db, call["group_id"], user["sub"])
+        can_end = member["role"] == "owner"
+    return {"call_id": call_id, "conversation_id": call.get("conversation_id"), "room_type": call["room_type"], "can_end": can_end or call["created_by"] == user["sub"], **(await livekit_access(request, db, user["sub"], call["room_name"]))}
+
+
+@app.post("/api/v1/calls/{call_id}/decline")
+async def decline_call(call_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    call = await first(db, "SELECT conversation_id,created_by,status FROM voice_call_sessions WHERE id=?", call_id)
+    if not call or call["status"] != "active" or not call.get("conversation_id"):
+        raise HTTPException(status_code=404, detail="Call invitation is no longer available")
+    await require_member(db, call["conversation_id"], user["sub"])
+    await emit_realtime(request, [call["created_by"]], "call.declined", call_id=call_id, user_id=user["sub"])
+    return {"declined": True}
+
+
+@app.post("/api/v1/groups/{group_id}/voice/{channel_id}/join")
+async def join_group_voice_channel(group_id: str, channel_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    member = await require_campus_group_member(db, group_id, user["sub"])
+    channel = await first(db, "SELECT id,name,channel_type FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id)
+    if not channel or channel.get("channel_type") != "voice":
+        raise HTTPException(status_code=404, detail="Voice channel not found")
+    livekit_settings(request)
+    call = await first(db, "SELECT id,room_name FROM voice_call_sessions WHERE channel_id=? AND status='active' ORDER BY created_at DESC LIMIT 1", channel_id)
+    if not call:
+        call_id = new_id()
+        room_name = f"nexus-group-voice-{channel_id}"
+        await execute(db, "INSERT INTO voice_call_sessions(id,room_name,room_type,group_id,channel_id,created_by,status,created_at) VALUES(?,?,'group_channel',?,?,?,'active',?)", call_id, room_name, group_id, channel_id, user["sub"], now())
+        call = {"id": call_id, "room_name": room_name}
+    return {"call_id": call["id"], "channel_name": channel["name"], "can_end": member["role"] == "owner", **(await livekit_access(request, db, user["sub"], call["room_name"]))}
+
+
+@app.post("/api/v1/calls/{call_id}/end")
+async def end_call(call_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    call = await first(db, "SELECT * FROM voice_call_sessions WHERE id=? AND status='active'", call_id)
+    if not call:
+        return {"ended": True}
+    if call["room_type"] == "group_channel":
+        member = await require_campus_group_member(db, call["group_id"], user["sub"])
+        if member["role"] != "owner":
+            raise HTTPException(status_code=403, detail="Only the group owner can end this voice session for everyone")
+    elif call["created_by"] != user["sub"]:
+        raise HTTPException(status_code=403, detail="Only the caller can end this call for everyone")
+    await execute(db, "UPDATE voice_call_sessions SET status='ended',ended_at=? WHERE id=?", now(), call_id)
+    if call["conversation_id"]:
+        audience = await query(db, "SELECT user_id FROM conversation_members WHERE conversation_id=?", call["conversation_id"])
+    else:
+        audience = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", call["group_id"])
+    await emit_realtime(request, [row["user_id"] for row in audience], "call.ended", call_id=call_id)
+    return {"ended": True}
+
+
+@app.get("/api/v1/groups/{group_id}/voice/{channel_id}/messages")
+async def list_voice_channel_messages(group_id: str, channel_id: str, before: str | None = Query(default=None, max_length=80), user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_campus_group_member(db, group_id, user["sub"])
+    channel = await first(db, "SELECT 1 AS ok FROM campus_group_channels WHERE id=? AND group_id=? AND channel_type='voice'", channel_id, group_id)
+    if not channel:
+        raise HTTPException(status_code=404, detail="Voice channel not found")
+    if before:
+        rows = await query(db, "SELECT m.id,m.sender_id,m.content,m.reply_to_id,m.created_at,m.is_deleted,u.username,p.full_name,p.avatar_url,p.avatar_mime_type FROM voice_channel_messages m LEFT JOIN users u ON u.id=m.sender_id LEFT JOIN user_profiles p ON p.user_id=u.id WHERE m.channel_id=? AND m.created_at<? ORDER BY m.created_at DESC LIMIT 100", channel_id, before)
+    else:
+        rows = await query(db, "SELECT m.id,m.sender_id,m.content,m.reply_to_id,m.created_at,m.is_deleted,u.username,p.full_name,p.avatar_url,p.avatar_mime_type FROM voice_channel_messages m LEFT JOIN users u ON u.id=m.sender_id LEFT JOIN user_profiles p ON p.user_id=u.id WHERE m.channel_id=? ORDER BY m.created_at DESC LIMIT 100", channel_id)
+    rows.reverse()
+    return [{"id": row["id"], "sender_id": row["sender_id"], "sender_name": row.get("full_name") or row.get("username") or "Former member", "avatar_url": row.get("avatar_url"), "avatar_mime_type": row.get("avatar_mime_type"), "content": "This message was deleted." if row["is_deleted"] else row["content"], "reply_to_id": row.get("reply_to_id"), "created_at": row["created_at"]} for row in rows]
+
+
+@app.post("/api/v1/groups/{group_id}/voice/{channel_id}/messages", status_code=status.HTTP_201_CREATED)
+async def send_voice_channel_message(group_id: str, channel_id: str, payload: CampusGroupMessageCreate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_campus_group_member(db, group_id, user["sub"])
+    channel = await first(db, "SELECT 1 AS ok FROM campus_group_channels WHERE id=? AND group_id=? AND channel_type='voice'", channel_id, group_id)
+    if not channel:
+        raise HTTPException(status_code=404, detail="Voice channel not found")
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="Message cannot be empty")
+    if payload.reply_to_id and not await first(db, "SELECT 1 AS ok FROM voice_channel_messages WHERE id=? AND channel_id=?", payload.reply_to_id, channel_id):
+        raise HTTPException(status_code=404, detail="Reply target not found")
+    message_id, stamp = new_id(), now()
+    await execute(db, "INSERT INTO voice_channel_messages(id,group_id,channel_id,sender_id,content,reply_to_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", message_id, group_id, channel_id, user["sub"], content, payload.reply_to_id, stamp, stamp)
+    profile = await first(db, "SELECT u.username,p.full_name,p.avatar_url,p.avatar_mime_type FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?", user["sub"])
+    message = {"id": message_id, "sender_id": user["sub"], "sender_name": profile.get("full_name") or profile["username"], "avatar_url": profile.get("avatar_url"), "avatar_mime_type": profile.get("avatar_mime_type"), "content": content, "reply_to_id": payload.reply_to_id, "created_at": stamp}
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [row["user_id"] for row in members], "voice.message.new", group_id=group_id, channel_id=channel_id, message=message)
+    return message
+
+
+@app.delete("/api/v1/groups/{group_id}/voice/{channel_id}/messages/{message_id}")
+async def delete_voice_channel_message(group_id: str, channel_id: str, message_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    member = await require_campus_group_member(db, group_id, user["sub"])
+    message = await first(db, "SELECT sender_id FROM voice_channel_messages WHERE id=? AND group_id=? AND channel_id=?", message_id, group_id, channel_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if message["sender_id"] != user["sub"] and member["role"] != "owner":
+        raise HTTPException(status_code=403, detail="You cannot delete this message")
+    await execute(db, "UPDATE voice_channel_messages SET is_deleted=1,content='',updated_at=? WHERE id=?", now(), message_id)
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [row["user_id"] for row in members], "voice.message.deleted", group_id=group_id, channel_id=channel_id, message_id=message_id)
+    return {"deleted": True}
+
+
+@app.put("/api/v1/groups/{group_id}/voice/{channel_id}/messages/{message_id}")
+async def edit_voice_channel_message(group_id: str, channel_id: str, message_id: str, payload: MessageUpdate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_campus_group_member(db, group_id, user["sub"])
+    row = await first(db, "SELECT sender_id,is_deleted FROM voice_channel_messages WHERE id=? AND group_id=? AND channel_id=?", message_id, group_id, channel_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if row["sender_id"] != user["sub"]:
+        raise HTTPException(status_code=403, detail="You can only edit your own messages")
+    if row["is_deleted"]:
+        raise HTTPException(status_code=400, detail="Cannot edit a deleted message")
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="Message cannot be empty")
+    await execute(db, "UPDATE voice_channel_messages SET content=?,updated_at=? WHERE id=?", content, now(), message_id)
+    edited = await first(db, "SELECT m.id,m.sender_id,m.content,m.reply_to_id,m.created_at,u.username,p.full_name,p.avatar_url,p.avatar_mime_type FROM voice_channel_messages m LEFT JOIN users u ON u.id=m.sender_id LEFT JOIN user_profiles p ON p.user_id=u.id WHERE m.id=?", message_id)
+    message = {"id": edited["id"], "sender_id": edited["sender_id"], "sender_name": edited.get("full_name") or edited.get("username") or "Member", "avatar_url": edited.get("avatar_url"), "avatar_mime_type": edited.get("avatar_mime_type"), "content": edited["content"], "reply_to_id": edited.get("reply_to_id"), "created_at": edited["created_at"], "is_edited": True}
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [row["user_id"] for row in members], "voice.message.edited", group_id=group_id, channel_id=channel_id, message=message)
+    return message
 
 
 @app.get("/api/v1/groups")

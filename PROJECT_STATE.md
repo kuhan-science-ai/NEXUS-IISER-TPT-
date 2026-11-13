@@ -1,5 +1,9 @@
 # NEXUS Project State
 
+Study Groups voice channels now join shared LiveKit SFU rooms, and Messenger voice/video call buttons create authenticated direct-call rooms. The app-level call surface persists across route navigation and supports minimize/reopen without disconnecting, mute, camera, screen sharing, device switching, participant tiles and volume controls, call invitations, and separate leave versus end-for-everyone actions. Voice-channel chat history uses its own D1 table and realtime event, separate from text-channel messages, with replies and message edit/delete. Migration `0015_voice_calls.sql` is applied locally and in production. The Worker and Pages site are deployed. LiveKit Cloud was selected, but its project URL/API key/API secret have not yet been configured on the Worker; real calls currently return a clear configuration error until these are set. See `VOICE_CALLS_SETUP.md`.
+
+Last reviewed: 2026-11-14
+
 Profile avatar URLs and media types flow through friend/search, conversation member, direct-message, and group-message responses. Shared avatar rendering covers Friends, global search, DMs, and group chat. Profile saves refresh local views immediately; active people and conversation lists refresh every 15 seconds.
 
 Academic resource upload/edit dialogs offer a mutually exclusive choice of no animation, recolorable fire frame, or transparent flower frame. The selected animation and fire color are stored with the resource and rendered as a narrow overlay around the card border while preserving the standard card and button layout. The flower animation is an alpha-transparent animated WebP derived from the provided GIF. Production D1 migration `0013_academic_resource_animation.sql` is applied; no schema change is needed for the additional animation value.
@@ -24,13 +28,13 @@ Animated profile previews provide trim start/end handles, loop playback within t
 
 Academic Repository resources can be edited by their uploader only. Editing supports title, subject code, publisher, page count, optional PDF replacement with automatic page recount, and replacing artwork. Worker and FastAPI APIs enforce ownership.
 
-Last reviewed: 2026-11-13
+Last reviewed: 2026-11-14
 
 Messenger replies now render a compact author-and-message preview with a connector to the replied message. Message lists no longer reserve hidden avatar height for grouped messages; separate author groups have a 10px breathing gap, and empty reaction rows take no space until a reaction is added. The same spacing applies to Study Groups.
 
 Messaging, Friends, Study Groups, and private AI chat use a shared Cloudflare Durable Object WebSocket feed for cross-session updates; recent list/message data is session-cached and validated when opened. Discussion Forums is still sample-only UI state without a shared post/reply API, so it has no cross-user realtime updates yet.
 
-Study Groups has a collapsible group list rail. Owners can create named text or voice channel tabs; voice channels are stored and displayed separately but intentionally have no calling or messaging UI yet. The server enforces owner-only channel creation, and production D1 migration `0014_group_channel_types.sql` stores each channel type.
+Study Groups has a collapsible group list rail. Owners can create named text or voice channel tabs; voice rooms and independent persistent voice chat are now connected to the shared LiveKit call surface. Migration `0015_voice_calls.sql` adds session and voice-message persistence and is applied to both local and production D1. LiveKit Cloud URL/key/secret configuration is the remaining setup prerequisite for real media calls.
 
 Friends and Messenger side panels can be collapsed and reopened with an arrow control. The Friends page starts with its redundant conversation-search shortcut hidden; its main friend search and Messenger conversation search remain available.
 

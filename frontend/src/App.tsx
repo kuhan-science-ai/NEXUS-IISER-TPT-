@@ -35,6 +35,7 @@ import { customPaletteStyle, CustomUiPalette, readCustomUiPalettes, readUiPalett
 import { recordDashboardHistory } from './services/dashboard';
 import { readUserPreference, writeUserPreference } from './services/userPreferences';
 import { wsClient } from './services/websocket';
+import { CallProvider } from './components/VoiceCalls';
 
 const queryClient = new QueryClient();
 
@@ -316,6 +317,7 @@ export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <CallProvider currentUser={currentUser}>
         <Navigation user={currentUser} onLogout={handleLogout} />
         <RouteShell theme={theme} uiPalette={uiPalette} uiPalettePreview={uiPalettePreview} currentUser={currentUser} onProfileUpdated={fetchUser}>
         <Routes>
@@ -433,6 +435,7 @@ export const App: React.FC = () => {
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
         </RouteShell>
+        </CallProvider>
       </BrowserRouter>
     </QueryClientProvider>
   );

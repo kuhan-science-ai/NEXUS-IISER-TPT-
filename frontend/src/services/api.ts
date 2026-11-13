@@ -192,6 +192,16 @@ class ApiService {
   async setTyping(conversationId: string, isTyping: boolean): Promise<any> { return this.request(`/messages/conversations/${conversationId}/typing`, { method: 'POST', body: JSON.stringify({ is_typing: isTyping }) }); }
   async getTyping(conversationId: string): Promise<any[]> { return this.request(`/messages/conversations/${conversationId}/typing`); }
 
+  async startDirectCall(conversationId: string, video = false): Promise<any> { return this.request(`/calls/direct/${encodeURIComponent(conversationId)}/start`, { method: 'POST', body: JSON.stringify({ video }) }); }
+  async joinCall(callId: string): Promise<any> { return this.request(`/calls/${encodeURIComponent(callId)}/join`, { method: 'POST' }); }
+  async endCall(callId: string): Promise<any> { return this.request(`/calls/${encodeURIComponent(callId)}/end`, { method: 'POST' }); }
+  async declineCall(callId: string): Promise<any> { return this.request(`/calls/${encodeURIComponent(callId)}/decline`, { method: 'POST' }); }
+  async joinGroupVoiceChannel(groupId: string, channelId: string): Promise<any> { return this.request(`/groups/${encodeURIComponent(groupId)}/voice/${encodeURIComponent(channelId)}/join`, { method: 'POST' }); }
+  async listVoiceChannelMessages(groupId: string, channelId: string): Promise<any[]> { return this.request(`/groups/${encodeURIComponent(groupId)}/voice/${encodeURIComponent(channelId)}/messages`); }
+  async sendVoiceChannelMessage(groupId: string, channelId: string, content: string, replyToId?: string): Promise<any> { return this.request(`/groups/${encodeURIComponent(groupId)}/voice/${encodeURIComponent(channelId)}/messages`, { method: 'POST', body: JSON.stringify({ content, reply_to_id: replyToId || null }) }); }
+  async deleteVoiceChannelMessage(groupId: string, channelId: string, messageId: string): Promise<any> { return this.request(`/groups/${encodeURIComponent(groupId)}/voice/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' }); }
+  async editVoiceChannelMessage(groupId: string, channelId: string, messageId: string, content: string): Promise<any> { return this.request(`/groups/${encodeURIComponent(groupId)}/voice/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`, { method: 'PUT', body: JSON.stringify({ content }) }); }
+
   async listCampusGroups(): Promise<any[]> { return this.request('/groups'); }
   async importCampusGroups(groups: any[]): Promise<any> { return this.request('/groups/import', { method: 'POST', body: JSON.stringify({ groups }) }); }
   async createCampusGroup(group: any): Promise<any> { return this.request('/groups', { method: 'POST', body: JSON.stringify(group) }); }

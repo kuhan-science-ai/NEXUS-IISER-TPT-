@@ -178,6 +178,7 @@
 .nexus-chat-panel.is-voice-channel .nexus-voice-placeholder strong { color:var(--text-primary); font-size:14px; }
 .nexus-chat-panel.is-voice-channel .nexus-voice-placeholder p { margin:0; font-size:11px; }
 .nexus-chat-panel.is-voice-channel > .nexus-chat-tools,.nexus-chat-panel.is-voice-channel > .nexus-typing-indicator,.nexus-chat-panel.is-voice-channel > .nexus-chat-composer { display:none; }
+.nexus-voice-placeholder>button{margin-top:8px;padding:9px 18px;border:0;border-radius:8px;background:var(--primary);color:#fff;font-weight:700;cursor:pointer}.nexus-voice-placeholder>button:hover{filter:brightness(1.1)}.nexus-voice-error{max-width:min(420px,90%);color:#ff9299;font-size:11px}
 .nexus-channel-empty { display:grid; flex:1; align-content:center; justify-items:center; color:var(--text-subtle); text-align:center; }
 .nexus-channel-empty svg { margin-bottom:10px; }
 .nexus-channel-empty strong { color:var(--text-primary); font-size:13px; }

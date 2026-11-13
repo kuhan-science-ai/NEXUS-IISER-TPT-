@@ -10,6 +10,7 @@ import { GlobalSearchModal } from '../components/GlobalSearchModal';
 import { ProfileAvatar } from '../components/ProfileAvatar';
 import { MessengerEmojiInput } from '../components/MessengerEmojiInput';
 import { isEmojiOnly, TwemojiText } from '../components/TwemojiText';
+import { useVoiceCalls } from '../components/VoiceCalls';
 import './FriendsPage.css';
 import './MessagingPage.css';
 
@@ -27,7 +28,8 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const [messengerSidebarCollapsed, setMessengerSidebarCollapsed] = useState(false);
   const [inputText, setInputText] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
-  const [callPreview, setCallPreview] = useState<'voice' | 'video' | null>(null);
+  const { startDirectCall } = useVoiceCalls();
+  const [callStartError, setCallStartError] = useState('');
   const [conversations, setConversations] = useState<Conversation[]>(() => readMessengerCache(`nexus-dm-conversations:${currentUser?.id}`, []));
   const [activeConvId, setActiveConvId] = useState<string | null>(() => new URLSearchParams(location.search).get('conversationId') || readMessengerCache<Conversation[]>(`nexus-dm-conversations:${currentUser?.id}`, [])[0]?.id || null);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
@@ -126,8 +128,8 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
         </aside>
         <section className="messenger-chat-panel" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-canvas)', height: '100%', minWidth: 0, position: 'relative' }}>
           {activeConv ? <>
-            <header className="messenger-chat-header" style={{ height: 56, borderBottom: '1px solid var(--border)', padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: 'var(--bg-surface)' }}><div className="nexus-dm-heading"><ProfileAvatar className="friends-avatar" user={avatarForConversation(activeConv)} label={initials(activeConv)} /><div><strong>{displayName(activeConv)}</strong><small>{activeConv.type === 'GROUP' ? 'Group conversation' : 'Direct conversation'}</small></div></div><div className="messenger-chat-actions"><button type="button" aria-label="Start voice call" title="Voice call" onClick={() => setCallPreview('voice')}><Phone size={17} /></button><button type="button" aria-label="Start video call" title="Video call" onClick={() => setCallPreview('video')}><Video size={17} /></button><button type="button" aria-label="Clear conversation history" title="Clear conversation history" onClick={() => void clearHistory()}><Trash2 size={17} /></button><button type="button" className={`messenger-profile-toggle ${profileOpen ? 'is-open' : ''}`} aria-label="Open conversation details" onClick={() => setProfileOpen(value => !value)}><UserRound size={17} /></button></div></header>
-            {callPreview && <div className="messenger-call-notice" role="status"><span>{callPreview === 'voice' ? 'Voice' : 'Video'} calls are not connected yet.</span><button onClick={() => setCallPreview(null)} aria-label="Dismiss"><X size={15} /></button></div>}
+            <header className="messenger-chat-header" style={{ height: 56, borderBottom: '1px solid var(--border)', padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: 'var(--bg-surface)' }}><div className="nexus-dm-heading"><ProfileAvatar className="friends-avatar" user={avatarForConversation(activeConv)} label={initials(activeConv)} /><div><strong>{displayName(activeConv)}</strong><small>{activeConv.type === 'GROUP' ? 'Group conversation' : 'Direct conversation'}</small></div></div><div className="messenger-chat-actions"><button type="button" aria-label="Start voice call" title="Voice call" onClick={() => { setCallStartError(''); void startDirectCall(activeConv.id, displayName(activeConv)).catch(cause => setCallStartError(cause instanceof Error ? cause.message : 'Could not start the call.')); }}><Phone size={17} /></button><button type="button" aria-label="Start video call" title="Video call" onClick={() => { setCallStartError(''); void startDirectCall(activeConv.id, displayName(activeConv), true).catch(cause => setCallStartError(cause instanceof Error ? cause.message : 'Could not start the call.')); }}><Video size={17} /></button><button type="button" aria-label="Clear conversation history" title="Clear conversation history" onClick={() => void clearHistory()}><Trash2 size={17} /></button><button type="button" className={`messenger-profile-toggle ${profileOpen ? 'is-open' : ''}`} aria-label="Open conversation details" onClick={() => setProfileOpen(value => !value)}><UserRound size={17} /></button></div></header>
+            {callStartError && <div className="messenger-call-notice" role="status"><span>{callStartError}</span><button onClick={() => setCallStartError('')} aria-label="Dismiss"><X size={15} /></button></div>}
             
             {error && <p className="nexus-message-error" role="alert">{error}</p>}{menuNotice && <div className="nexus-chat-toast" role="status">{menuNotice}</div>}
             <div className="messenger-chat-messages nexus-chat-messages" style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column' }}>
