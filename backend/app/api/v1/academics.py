@@ -232,7 +232,7 @@ async def upload_academic_resource(
         size_bytes=size_bytes,
         thumbnail_file_id=thumbnail_meta.id if thumbnail_meta else None,
         banner_file_id=banner_meta.id if banner_meta else None,
-        animation="fire-grid" if animation == "fire-grid" else "none",
+        animation=animation if animation in {"fire-grid", "flower-grid"} else "none",
         animation_color=animation_color if re.fullmatch(r"#[0-9a-fA-F]{6}", animation_color) else "#ff6a00",
         academic_year=academic_year,
         semester=semester,
@@ -271,7 +271,7 @@ async def edit_academic_resource(
         raise HTTPException(status_code=400, detail="Title, subject code, and publisher name are required")
     old_files: list[FileMetadata] = []
     resource.title, resource.subject_code, resource.publisher_name, resource.pages = title.strip(), subject_code.strip(), publisher_name.strip(), pages
-    resource.animation = "fire-grid" if animation == "fire-grid" else "none"
+    resource.animation = animation if animation in {"fire-grid", "flower-grid"} else "none"
     resource.animation_color = animation_color if re.fullmatch(r"#[0-9a-fA-F]{6}", animation_color) else "#ff6a00"
     if file and file.filename:
         file.file.seek(0)

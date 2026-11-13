@@ -4,7 +4,8 @@ import { api, UserSummary } from '../services/api';
 import './AcademicResourceMetadataModal.css';
 
 export interface StagedAcademicResource { file: File; pages: number; }
-export interface EditableAcademicResource { id: string; title: string; subject_code: string; publisher_name: string; pages: number; original_filename: string; size_bytes: number; thumbnail_url?: string | null; banner_url?: string | null; animation?: string; animation_color?: string; }
+export type AcademicResourceAnimation = 'none' | 'fire-grid' | 'flower-grid';
+export interface EditableAcademicResource { id: string; title: string; subject_code: string; publisher_name: string; pages: number; original_filename: string; size_bytes: number; thumbnail_url?: string | null; banner_url?: string | null; animation?: AcademicResourceAnimation; animation_color?: string; }
 interface Props { staged?: StagedAcademicResource; resource?: EditableAcademicResource; user: UserSummary; onClose: () => void; onUploaded: () => void; }
 const formatSize = (size: number) => size >= 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(2)} MB` : `${(size / 1024).toFixed(1)} KB`;
 const hueFromHex = (hex: string) => { const [r, g, b] = hex.match(/[0-9a-f]{2}/gi)?.map(value => parseInt(value, 16) / 255) || [1, .4, 0]; const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min; if (!d) return 0; const hue = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4; return Math.round((hue * 60 - 22 + 360) % 360); };
@@ -18,7 +19,7 @@ export const AcademicResourceMetadataModal: React.FC<Props> = ({ staged, resourc
   const [useAccountName, setUseAccountName] = useState(!resource || resource.publisher_name === accountName);
   const [publisher, setPublisher] = useState(resource?.publisher_name || accountName);
   const [pages, setPages] = useState(resource?.pages || staged?.pages || 1);
-  const [animation, setAnimation] = useState(resource?.animation === 'fire-grid');
+  const [animation, setAnimation] = useState<AcademicResourceAnimation>(resource?.animation === 'fire-grid' || resource?.animation === 'flower-grid' ? resource.animation : 'none');
   const [animationColor, setAnimationColor] = useState(resource?.animation_color || '#ff6a00');
   const [replacementPdf, setReplacementPdf] = useState<File | null>(null);
   const [thumbnail, setThumbnail] = useState<File | null>(null);
@@ -78,7 +79,7 @@ export const AcademicResourceMetadataModal: React.FC<Props> = ({ staged, resourc
       form.append('subject_code', subjectCode.trim());
       form.append('publisher_name', (useAccountName ? accountName : publisher).trim());
       form.append('pages', String(pages));
-      form.append('animation', animation ? 'fire-grid' : 'none');
+      form.append('animation', animation);
       form.append('animation_color', animationColor);
       if (thumbnail) form.append('thumbnail', thumbnail, thumbnail.name);
       if (banner) form.append('banner', banner, banner.name);
@@ -103,7 +104,7 @@ export const AcademicResourceMetadataModal: React.FC<Props> = ({ staged, resourc
         <label className="academic-resource-artwork-picker">File thumbnail <small>Optional square profile image · JPG, PNG, WebP, GIF · max 4 MB</small><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={event => { chooseImage(event.target.files?.[0], 'thumbnail'); event.currentTarget.value = ''; }} />{thumbnailPreview && <img className="academic-resource-thumbnail-preview" src={thumbnailPreview} alt="Thumbnail preview" />}</label>
         <label className="academic-resource-artwork-picker">Banner image <small>Optional wide header image · JPG, PNG, WebP, GIF. Drag, zoom, and rotate to fit.</small><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={event => { chooseImage(event.target.files?.[0], 'banner'); event.currentTarget.value = ''; }} />{bannerPreview && <img className="academic-resource-banner-preview" src={bannerPreview} alt="Banner preview" />}</label>
       </div>
-      </div><aside className="academic-resource-overview"><span>LIVE OVERVIEW</span><div className="academic-resource-animation-stage">{animation && <img src="/resource-grid-flame-frame.webp" alt="Draft fire grid animation preview" style={{ filter: `hue-rotate(${hueFromHex(animationColor)}deg) saturate(1.8)` }} />}{!animation && <span>Animation preview</span>}</div><label className="academic-resource-animation-toggle"><input type="checkbox" checked={animation} onChange={event => setAnimation(event.target.checked)} /> Use fire grid animation</label><label className="academic-resource-animation-color">Animation color<input type="color" value={animationColor} onChange={event => setAnimationColor(event.target.value)} disabled={!animation} /></label><small>Preview only · animation stays in its own card panel, clear of text.</small></aside></div>
+      </div><aside className="academic-resource-overview"><span>LIVE OVERVIEW</span><div className="academic-resource-animation-stage">{animation === 'fire-grid' && <img src="/resource-grid-flame-frame.webp" alt="Transparent fire frame preview" style={{ filter: `hue-rotate(${hueFromHex(animationColor)}deg) saturate(1.8)` }} />}{animation === 'flower-grid' && <img src="/resource-flower-frame.webp" alt="Transparent flower frame preview" />}{animation === 'none' && <span>No animation selected</span>}</div><fieldset className="academic-resource-animation-options"><legend>Card animation</legend><label className={animation === 'fire-grid' ? 'is-selected' : ''}><input type="radio" name="academic-resource-animation" value="fire-grid" checked={animation === 'fire-grid'} onChange={() => setAnimation('fire-grid')} /><span><strong>Fire frame</strong><small>Recolorable animated border</small></span></label><label className={animation === 'flower-grid' ? 'is-selected' : ''}><input type="radio" name="academic-resource-animation" value="flower-grid" checked={animation === 'flower-grid'} onChange={() => setAnimation('flower-grid')} /><span><strong>Flower frame</strong><small>Transparent animated border</small></span></label><label className={animation === 'none' ? 'is-selected' : ''}><input type="radio" name="academic-resource-animation" value="none" checked={animation === 'none'} onChange={() => setAnimation('none')} /><span><strong>None</strong><small>No card animation</small></span></label></fieldset>{animation === 'fire-grid' && <label className="academic-resource-animation-color">Fire color<input type="color" value={animationColor} onChange={event => setAnimationColor(event.target.value)} /></label>}<small>Choose one option. The selected animation plays in this preview and around the resource card.</small></aside></div>
       {error && <p className="academic-resource-error" role="alert">{error}</p>}
       <footer><button type="button" className="academic-resource-discard" onClick={onClose} disabled={saving}>Discard</button><button type="submit" className="academic-resource-upload" disabled={saving}>{saving ? 'Saving…' : resource ? 'Save changes' : 'Upload file'}</button></footer>
     </form>

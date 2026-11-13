@@ -2,13 +2,13 @@
 
 Profile avatar URLs and media types flow through friend/search, conversation member, direct-message, and group-message responses. Shared avatar rendering covers Friends, global search, DMs, and group chat. Profile saves refresh local views immediately; active people and conversation lists refresh every 15 seconds.
 
-Academic resource upload/edit dialogs preview an optional recolorable fire-grid animation. Selection and hex color are stored with the resource and rendered as a soft, narrow overlay around the full card border while preserving the standard card and button layout. Production D1 migration `0013_academic_resource_animation.sql` is applied; local D1/FastAPI need migrations.
+Academic resource upload/edit dialogs offer a mutually exclusive choice of no animation, recolorable fire frame, or transparent flower frame. The selected animation and fire color are stored with the resource and rendered as a narrow overlay around the card border while preserving the standard card and button layout. The flower animation is an alpha-transparent animated WebP derived from the provided GIF. Production D1 migration `0013_academic_resource_animation.sql` is applied; no schema change is needed for the additional animation value.
 
-Resource cards show a consistent fallback banner when no banner is uploaded. The fire frame is an animated WebP with a transparent center, derived from the provided GIF, and plays above the card and in upload/edit previews without changing layout.
+Resource cards show a consistent fallback banner when no banner is uploaded. The fire and flower frames are animated WebPs with transparent backgrounds; the selected frame plays above the card and in upload/edit previews.
 
 The fire overlay preserves the standard resource card layout and button positions; its animation is clipped to a subtle border band.
 
-Clicking an Academic Repository resource card opens a scaled preview modal with its original banner, metadata, thumbnail, and animated fire frame. Card action buttons remain independent of the preview.
+Clicking an Academic Repository resource card opens a scaled preview modal with its original banner, metadata, thumbnail, and selected animated frame. Card action buttons remain independent of the preview.
 
 The repository preview layers its content and controls above the animated frame, clips frame overflow to avoid inner scrollbars, and reflects updated save/download state while actions are running and after refresh.
 

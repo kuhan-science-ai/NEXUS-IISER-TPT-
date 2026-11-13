@@ -495,7 +495,8 @@ async def upload_academic_resource(request: Request, user: dict[str, Any] = Depe
         raise HTTPException(status_code=400, detail="The uploaded file is not a valid PDF")
     thumbnail_art = await academic_artwork_content(form.get("thumbnail"))
     banner_art = await academic_artwork_content(form.get("banner"))
-    animation = "fire-grid" if form.get("animation") == "fire-grid" else "none"
+    animation_value = str(form.get("animation") or "")
+    animation = animation_value if animation_value in ("fire-grid", "flower-grid") else "none"
     animation_color = str(form.get("animation_color") or "#ff6a00")
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", animation_color):
         animation_color = "#ff6a00"
@@ -533,7 +534,8 @@ async def edit_academic_resource(resource_id: str, request: Request, user: dict[
         if not content or len(content) > 50 * 1024 * 1024 or not filename.lower().endswith(".pdf") or getattr(replacement, "content_type", "") != "application/pdf" or not content.startswith(b"%PDF-"):
             raise HTTPException(status_code=400, detail="Choose a valid PDF file smaller than 50 MB")
     artwork = {kind: await academic_artwork_content(form.get(kind)) for kind in ("thumbnail", "banner")}
-    animation = "fire-grid" if form.get("animation") == "fire-grid" else "none"
+    animation_value = str(form.get("animation") or "")
+    animation = animation_value if animation_value in ("fire-grid", "flower-grid") else "none"
     animation_color = str(form.get("animation_color") or row.get("animation_color") or "#ff6a00")
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", animation_color):
         animation_color = "#ff6a00"
