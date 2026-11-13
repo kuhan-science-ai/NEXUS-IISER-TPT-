@@ -3,7 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-14
-- Group creation, joining, and channel create/delete realtime events now include the current shared channel list; open group views apply that snapshot immediately and refresh from D1 as a consistency check.
+- Group creation, joining, and channel create/delete realtime events now include the current shared channel list; open group views apply that snapshot immediately and refresh from D1 as a consistency check. Joined group views also fetch the authorized channel list directly when opened, avoiding reliance on cached channels embedded in the group summary.
 - New groups start with one `general` text channel and one `general vc` voice channel. Empty channel categories remain hidden; owners can add channels back. Channel names display with spaces, category labels and channel rows are more legible, and channel × controls confirm permanent deletion. Migration `0016_group_default_channels.sql` backfills a missing starter category for existing groups.
 - Added LiveKit SFU voice/video calls for Messenger and Study Groups, including one-to-one invites, persistent voice-channel chat in its own D1 table, microphone/camera/screen-share/device controls, participant tiles and volumes, reconnection status, and a global minimize/reopen call bar. Added migration `0015_voice_calls.sql` and applied it locally and in production; deployed the Worker and Pages site. LiveKit Cloud URL/key/secret are configured on the Worker; end-to-end media still needs a two-client call check.
 - Added collapsible side panels to Friends and Messenger; removed the duplicate conversation-search shortcut from Friends while retaining both pages' primary search controls.

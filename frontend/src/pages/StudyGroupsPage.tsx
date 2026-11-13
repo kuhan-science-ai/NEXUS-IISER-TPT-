@@ -63,6 +63,19 @@ export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, o
   const joinGroup = async (group: CampusGroup) => { await api.joinCampusGroup(group.id); await refreshGroups(); };
   const visibleGroups = useMemo(() => groups.filter(group => (section === 'joined' ? group.joined : (group.is_public !== false || group.joined)) && `${group.name} ${group.description}`.toLowerCase().includes(query.toLowerCase())), [groups, query, section]);
   const activeGroup = groups.find(group => group.id === activeGroupId) || null;
+  useEffect(() => {
+    if (!activeGroup?.joined) return;
+    let current = true;
+    void api.listCampusGroupChannels(activeGroup.id).then(channels => {
+      if (!current) return;
+      setGroups(items => {
+        const next = items.map(group => group.id === activeGroup.id ? { ...group, channels } : group);
+        try { sessionStorage.setItem(`nexus-groups:${currentUser.id}`, JSON.stringify(next)); } catch { /* Session cache is optional. */ }
+        return next;
+      });
+    }).catch(() => undefined);
+    return () => { current = false; };
+  }, [activeGroup?.id, activeGroup?.joined, currentUser.id]);
   const activeChannel = activeGroup?.channels.find(channel => channel.id === activeChannelId) || activeGroup?.channels[0] || null;
   const messageKey = activeGroup && activeChannel ? `${activeGroup.id}:${activeChannel.id}` : '';
   const addGroup = async () => {

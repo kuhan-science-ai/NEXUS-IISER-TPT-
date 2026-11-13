@@ -1142,6 +1142,12 @@ async def campus_group_channel_snapshot(db: Any, group_id: str) -> list[dict[str
     return [{"id": row["id"], "name": row["name"], "channel_type": row.get("channel_type") or "text"} for row in rows]
 
 
+@app.get("/api/v1/groups/{group_id}/channels")
+async def list_campus_group_channels(group_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_campus_group_member(db, group_id, user["sub"])
+    return await campus_group_channel_snapshot(db, group_id)
+
+
 async def insert_campus_group(db: Any, req: CampusGroupInput, user_id: str, group_id: str | None = None) -> str:
     stamp, group_id = now(), group_id or new_id()
     is_pub = 1 if req.is_public else 0

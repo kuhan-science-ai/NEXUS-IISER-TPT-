@@ -203,6 +203,7 @@ class ApiService {
   async editVoiceChannelMessage(groupId: string, channelId: string, messageId: string, content: string): Promise<any> { return this.request(`/groups/${encodeURIComponent(groupId)}/voice/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`, { method: 'PUT', body: JSON.stringify({ content }) }); }
 
   async listCampusGroups(): Promise<any[]> { return this.request('/groups'); }
+  async listCampusGroupChannels(groupId: string): Promise<any[]> { return this.request(`/groups/${encodeURIComponent(groupId)}/channels`); }
   async importCampusGroups(groups: any[]): Promise<any> { return this.request('/groups/import', { method: 'POST', body: JSON.stringify({ groups }) }); }
   async createCampusGroup(group: any): Promise<any> { return this.request('/groups', { method: 'POST', body: JSON.stringify(group) }); }
   async joinCampusGroup(groupId: string): Promise<any> { return this.request(`/groups/${groupId}/join`, { method: 'POST' }); }
