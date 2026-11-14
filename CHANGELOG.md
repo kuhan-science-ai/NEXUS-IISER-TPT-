@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-14
+- Deployed Worker version `050ace0d-3070-4e60-971f-fd064553ef9f` with the rebuilt frontend assets; production health check confirms D1 connectivity. Two-account delivery and typing checks remain outstanding.
 - Repaired realtime reconnect handling so a failed socket cannot clear a replacement connection; a lightweight heartbeat detects idle transport loss and reconnects resync the active conversation, groups, and open text channel.
 - Fixed the Worker-to-Durable-Object WebSocket proxy to forward the original upgrade request; the previous URL-only fetch dropped upgrade headers and trusted a caller-controlled user ID query parameter.
 - Deduplicated live group/DM message insertion, added per-user typing expiry and typing-state recovery on opening a conversation, and reduced typing persistence to start/stop transitions.
