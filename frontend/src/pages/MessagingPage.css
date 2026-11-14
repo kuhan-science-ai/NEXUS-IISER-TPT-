@@ -48,9 +48,7 @@
 .nexus-message-row.nexus-chat-message .nexus-chat-avatar-slot { display:block; width:32px; min-width:32px; height:0; flex:none; }
 .nexus-message-row.nexus-chat-message:not(.grouped) .nexus-chat-avatar-slot { height:32px; }
 .nexus-message-row.nexus-chat-message .nexus-chat-message-avatar { width:32px; height:32px; }
-.nexus-message-row.nexus-chat-message.has-reply-preview { gap:14px!important; }
-.nexus-message-row.nexus-chat-message.has-reply-preview .nexus-chat-avatar-slot { width:46px; min-width:46px; }
-.nexus-message-row.nexus-chat-message.has-reply-preview:not(.grouped) .nexus-chat-avatar-slot { box-sizing:border-box; height:71px; padding:29px 0 0 3px; }
+.nexus-message-row.nexus-chat-message.has-reply-preview:not(.grouped) .nexus-chat-avatar-slot { box-sizing:border-box; height:71px; padding:29px 0 0; }
 .nexus-message-row.nexus-chat-message.has-reply-preview .nexus-chat-message-avatar { width:42px; height:42px; }
 .nexus-message-row.nexus-chat-message .nexus-message-main { flex:1; }
 .nexus-message-row.nexus-chat-message .nexus-message-meta { min-height:17px; align-items:flex-start; padding-top:1px; color:var(--primary); }
