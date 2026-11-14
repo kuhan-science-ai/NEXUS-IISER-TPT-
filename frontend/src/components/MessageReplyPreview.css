@@ -1,10 +1,10 @@
 .nexus-message-reply-preview {
   position: relative;
   display: flex;
-  width: min(560px, 100%);
+  width: 100%;
   height: 34px;
   align-items: center;
-  margin: 0 0 5px;
+  margin: 0;
   padding: 0;
   overflow: visible;
   border: 0;
@@ -13,6 +13,7 @@
   font-size: 12px;
   line-height: 14px;
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -47,12 +48,16 @@
   color: var(--text-muted);
   font-size: 7px;
   font-weight: 700;
+  position: relative;
+  z-index: 1;
 }
 
 .nexus-reply-preview-copy {
   display: flex;
   min-width: 0;
   flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
   gap: 1px;
   margin-left: 6px;
   overflow: hidden;
@@ -69,10 +74,10 @@
   white-space: nowrap;
 }
 
-.nexus-reply-author { font-weight: 600; }
+.nexus-reply-author { flex: 0 0 auto; font-weight: 600; }
 .nexus-message-reply-preview:hover .nexus-reply-quoted-message,
 .nexus-message-reply-preview:hover .nexus-reply-author { color: var(--text-primary); }
 
 @media (max-width: 480px) {
-  .nexus-message-reply-preview { max-width: 100%; }
+  .nexus-reply-quoted-message { max-width: 180px; }
 }
