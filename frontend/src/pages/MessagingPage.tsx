@@ -69,6 +69,21 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
       setTypingNames({});
     };
   }, [activeConvId]);
+  useEffect(() => {
+    if (!activeConvId) return;
+    const sync = () => {
+      if (wsClient.isConnected()) return;
+      void api.getMessages(activeConvId).then(rows => setChatMessages(current => {
+        const byId = new Map(current.map(message => [message.id, message]));
+        rows.forEach((message: Message) => byId.set(message.id, message));
+        return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
+      })).catch(() => undefined);
+      void api.getTyping(activeConvId).then(rows => setTypingNames(Object.fromEntries(rows.map((row: any) => [row.user_id, row.name])))).catch(() => undefined);
+      void loadConversations();
+    };
+    const timer = window.setInterval(sync, 2500);
+    return () => window.clearInterval(timer);
+  }, [activeConvId, loadConversations]);
   useEffect(() => () => { if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current); }, []);
   useEffect(() => {
     const typingTimers = new Map<string, number>();

@@ -87,7 +87,7 @@ cd ..\frontend
 npm ci
 npm run build
 cd ..\nexus-backend
-uv run pywrangler deploy
+npm run deploy
 ```
 
 The current config points to the existing `nexus-database`. Migrations through `0005_global_groups_typing.sql` are applied in production. Do not use `--remote` for local experiments.
@@ -99,7 +99,7 @@ The current config points to the existing `nexus-database`. Migrations through `
 - Friends, friend requests, profiles, conversations, messages, reactions, pin/edit/delete, and history clearing are persisted in D1.
 - AI conversations, threads, and messages are persisted in D1. All conversations use Qwen3 14B through the bearer-token-protected local proxy and one Cloudflare Tunnel; prompts are capped at 4,000 characters, recent history at ten turns, and page context at 2,500 characters. The laptop and tunnel must be online for responses.
 - QOTD/AOTD questions, archive entries, answer submissions, points, and comments use D1. The migration seeds one initial question. PDF attachments are not supported by this Worker yet.
-- The Messenger refreshes visible conversations every five seconds to receive messages across sessions. Cloudflare Durable Objects/WebSockets are not wired yet, so this is polling rather than push delivery.
+- Direct messages and Study Group channels use an authenticated Durable Object WebSocket for push delivery. Open chats also sync messages and typing state every 2.5 seconds while the socket has not received a recent pong, so a stale connection recovers without a page refresh.
 - Uploads, settings, password reset, notifications, academic features, and other application APIs are not migrated.
 - The four beta credentials are intentionally public testing credentials. They are unsuitable for real accounts.
 

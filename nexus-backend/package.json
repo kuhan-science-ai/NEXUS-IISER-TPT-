@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "deploy": "uv run pywrangler deploy",
+    "deploy": "npx wrangler deploy",
     "dev": "uv run pywrangler dev",
     "start": "uv run pywrangler dev"
   },

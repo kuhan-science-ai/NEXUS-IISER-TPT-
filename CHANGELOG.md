@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-14
+- Added pong-based WebSocket health detection and a 2.5-second message/typing sync fallback for active direct and group chats when the socket is stale. Changed the backend deploy script to call Wrangler directly, avoiding the Windows-blocked Python launcher. Deployed Worker `37f11c89-5850-45a6-810a-4558204fe08e` and the rebuilt frontend to Pages; production health and bundle checks passed.
 - Deployed Worker version `050ace0d-3070-4e60-971f-fd064553ef9f` with the rebuilt frontend assets; production health check confirms D1 connectivity. Two-account delivery and typing checks remain outstanding.
 - Repaired realtime reconnect handling so a failed socket cannot clear a replacement connection; a lightweight heartbeat detects idle transport loss and reconnects resync the active conversation, groups, and open text channel.
 - Fixed the Worker-to-Durable-Object WebSocket proxy to forward the original upgrade request; the previous URL-only fetch dropped upgrade headers and trusted a caller-controlled user ID query parameter.

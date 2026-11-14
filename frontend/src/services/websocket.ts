@@ -8,6 +8,7 @@ class WebSocketClient {
   private isConnecting = false;
   private shouldReconnect = true;
   private token: string | null = null;
+  private lastPongAt = 0;
 
   connect(token: string) {
     if (!token) return;
@@ -34,18 +35,25 @@ class WebSocketClient {
     socket.onopen = () => {
       if (this.socket !== socket) return;
       this.isConnecting = false;
+      this.lastPongAt = 0;
       this.notify({ event: 'system.connected' });
-      this.heartbeatTimer = window.setInterval(() => this.send('ping', {}), 25_000);
+      this.send('ping', {});
+      this.heartbeatTimer = window.setInterval(() => this.send('ping', {}), 10_000);
     };
     socket.onmessage = event => {
       if (this.socket !== socket) return;
-      try { this.notify(JSON.parse(event.data)); }
+      try {
+        const message = JSON.parse(event.data);
+        if (message?.event === 'pong') this.lastPongAt = Date.now();
+        this.notify(message);
+      }
       catch (error) { console.error('[NEXUS WebSocket] Parse error:', error); }
     };
     socket.onclose = () => {
       if (this.socket !== socket) return;
       this.socket = null;
       this.isConnecting = false;
+      this.lastPongAt = 0;
       if (this.heartbeatTimer !== null) window.clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
       if (this.shouldReconnect) this.scheduleReconnect();
@@ -80,7 +88,7 @@ class WebSocketClient {
     if (socket && socket.readyState < WebSocket.CLOSING) socket.close();
   }
 
-  isConnected() { return this.socket?.readyState === WebSocket.OPEN; }
+  isConnected() { return this.socket?.readyState === WebSocket.OPEN && Date.now() - this.lastPongAt < 25_000; }
   addListener(handler: MessageHandler) { this.listeners.add(handler); return () => this.listeners.delete(handler); }
   send(event: string, payload: any) {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ event, ...payload }));
