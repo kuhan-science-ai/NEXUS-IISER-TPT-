@@ -49,6 +49,10 @@ class CampusGroupChannelInput(BaseModel):
     channel_type: str = Field(default="text", pattern="^(text|voice)$")
 
 
+class CampusGroupChannelUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
 class CampusGroupInput(BaseModel):
     id: str | None = Field(default=None, max_length=36)
     name: str = Field(min_length=1, max_length=60)
@@ -70,6 +74,10 @@ class CampusGroupUpdate(BaseModel):
     icon: str = Field(default="✦", max_length=350_000)
     banner: str = Field(default="#7c5cff", max_length=100)
     is_public: bool = True
+
+
+class CampusGroupMemberInvite(BaseModel):
+    username: str = Field(min_length=3, max_length=30, pattern=r"^[a-zA-Z0-9_]+$")
 
 
 class CampusGroupMessageCreate(BaseModel):
@@ -1134,7 +1142,7 @@ async def list_campus_groups(user: dict[str, Any] = Depends(get_current_user), d
     by_group: dict[str, list[dict[str, str]]] = {}
     for channel in channels:
         by_group.setdefault(channel["group_id"], []).append({"id": channel["id"], "name": channel["name"], "channel_type": channel.get("channel_type") or "text"})
-    return [{"id": row["id"], "name": row["name"], "description": row["description"], "icon": row["icon"], "banner": row["banner"], "owner_id": row["owner_id"], "is_public": bool(row.get("is_public", 1)), "joined": bool(row.get("viewer_role")), "role": row.get("viewer_role"), "member_count": int(row.get("member_count") or 0), "channels": by_group.get(row["id"], [])} for row in rows]
+    return [{"id": row["id"], "name": row["name"], "description": row["description"], "icon": row["icon"], "banner": row["banner"], "owner_id": row["owner_id"], "is_public": bool(row.get("is_public", 1)), "joined": bool(row.get("viewer_role")), "role": row.get("viewer_role"), "member_count": int(row.get("member_count") or 0), "channels": by_group.get(row["id"], []) if row.get("viewer_role") else []} for row in rows]
 
 
 async def campus_group_channel_snapshot(db: Any, group_id: str) -> list[dict[str, str]]:
@@ -1166,11 +1174,10 @@ async def insert_campus_group(db: Any, req: CampusGroupInput, user_id: str, grou
 @app.post("/api/v1/groups", status_code=status.HTTP_201_CREATED)
 async def create_campus_group(req: CampusGroupInput, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     group_id = await insert_campus_group(db, req, user["sub"])
+    recipients = [user["sub"]]
     if req.is_public:
-        audience = await query(db, "SELECT id FROM users WHERE is_active=1")
-        recipients = [row["id"] for row in audience]
-    else:
-        recipients = [user["sub"]]
+        audience = await query(db, "SELECT id FROM users WHERE is_active=1 AND id<>?", user["sub"])
+        await emit_realtime(request, [row["id"] for row in audience], "group.changed", group_id=group_id)
     await emit_realtime(request, recipients, "group.changed", group_id=group_id, channels=await campus_group_channel_snapshot(db, group_id))
     return next(group for group in await list_campus_groups(user, db) if group["id"] == group_id)
 
@@ -1196,12 +1203,31 @@ async def import_local_campus_groups(payload: CampusGroupImport, user: dict[str,
 
 @app.post("/api/v1/groups/{group_id}/join")
 async def join_campus_group(group_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
-    if not await first(db, "SELECT 1 AS ok FROM campus_groups WHERE id=?", group_id):
+    group = await first(db, "SELECT is_public FROM campus_groups WHERE id=?", group_id)
+    if not group:
         raise HTTPException(status_code=404, detail="Group not found")
+    existing = await first(db, "SELECT 1 AS ok FROM campus_group_members WHERE group_id=? AND user_id=?", group_id, user["sub"])
+    if not bool(group.get("is_public", 1)) and not existing:
+        raise HTTPException(status_code=403, detail="This private group requires an invitation")
     await execute(db, "INSERT OR IGNORE INTO campus_group_members(group_id,user_id,role,joined_at) VALUES(?,?,'member',?)", group_id, user["sub"], now())
     members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
     await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id, channels=await campus_group_channel_snapshot(db, group_id))
     return {"message": "Joined group", "group_id": group_id}
+
+
+@app.post("/api/v1/groups/{group_id}/members", status_code=status.HTTP_201_CREATED)
+async def invite_campus_group_member(group_id: str, payload: CampusGroupMemberInvite, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    owner = await require_campus_group_member(db, group_id, user["sub"])
+    if owner["role"] != "owner":
+        raise HTTPException(status_code=403, detail="Only the group owner can invite members")
+    target = await first(db, "SELECT id FROM users WHERE lower(username)=lower(?) AND is_active=1", payload.username.strip())
+    if not target:
+        raise HTTPException(status_code=404, detail="Active account not found")
+    stamp = now()
+    await execute(db, "INSERT OR IGNORE INTO campus_group_members(group_id,user_id,role,joined_at) VALUES(?,?,'member',?)", group_id, target["id"], stamp)
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "group.changed", group_id=group_id, channels=await campus_group_channel_snapshot(db, group_id))
+    return {"group_id": group_id, "user_id": target["id"], "message": "Member added"}
 
 
 def require_admin(user: dict[str, Any]) -> None:
@@ -1288,6 +1314,26 @@ async def create_campus_group_channel(group_id: str, payload: CampusGroupChannel
     return {"id": channel_id, "name": name, "channel_type": payload.channel_type}
 
 
+@app.patch("/api/v1/groups/{group_id}/channels/{channel_id}")
+async def rename_campus_group_channel(group_id: str, channel_id: str, payload: CampusGroupChannelUpdate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    member = await require_campus_group_member(db, group_id, user["sub"])
+    if member["role"] != "owner":
+        raise HTTPException(status_code=403, detail="Only the group owner can rename channels")
+    channel = await first(db, "SELECT id,channel_type FROM campus_group_channels WHERE id=? AND group_id=?", channel_id, group_id)
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    name = payload.name.strip().lower().replace(" ", "-")
+    if not name:
+        raise HTTPException(status_code=422, detail="Channel name cannot be blank")
+    duplicate = await first(db, "SELECT 1 AS ok FROM campus_group_channels WHERE group_id=? AND name=? AND id<>?", group_id, name, channel_id)
+    if duplicate:
+        raise HTTPException(status_code=409, detail="That channel already exists")
+    await execute(db, "UPDATE campus_group_channels SET name=? WHERE id=? AND group_id=?", name, channel_id, group_id)
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [row["user_id"] for row in members], "group.changed", group_id=group_id, channels=await campus_group_channel_snapshot(db, group_id))
+    return {"id": channel_id, "name": name, "channel_type": channel["channel_type"]}
+
+
 @app.delete("/api/v1/groups/{group_id}/channels/{channel_id}")
 async def delete_campus_group_channel(group_id: str, channel_id: str, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     member = await require_campus_group_member(db, group_id, user["sub"])
@@ -1367,9 +1413,30 @@ async def delete_campus_group_message(group_id: str, message_id: str, request: R
     return {"message": "Message deleted"}
 
 
+@app.put("/api/v1/groups/{group_id}/messages/{message_id}")
+async def edit_campus_group_message(group_id: str, message_id: str, payload: MessageUpdate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    await require_campus_group_member(db, group_id, user["sub"])
+    message = await first(db, "SELECT sender_id,is_deleted FROM campus_group_messages WHERE id=? AND group_id=?", message_id, group_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if message["sender_id"] != user["sub"]:
+        raise HTTPException(status_code=403, detail="You can only edit your own messages")
+    if message["is_deleted"]:
+        raise HTTPException(status_code=400, detail="Cannot edit a deleted message")
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="Message cannot be blank")
+    await execute(db, "UPDATE campus_group_messages SET content=? WHERE id=? AND group_id=?", content, message_id, group_id)
+    members = await query(db, "SELECT user_id FROM campus_group_members WHERE group_id=?", group_id)
+    await emit_realtime(request, [member["user_id"] for member in members], "group.message.changed", group_id=group_id, message_id=message_id)
+    return {"id": message_id, "text": content, "is_edited": True}
+
+
 @app.post("/api/v1/groups/{group_id}/channels/{channel_id}/typing")
 async def update_campus_group_typing(group_id: str, channel_id: str, payload: TypingStatusUpdate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     await require_campus_group_member(db, group_id, user["sub"])
+    if not await first(db, "SELECT 1 AS ok FROM campus_group_channels WHERE id=? AND group_id=? AND channel_type='text'", channel_id, group_id):
+        raise HTTPException(status_code=404, detail="Text channel not found")
     if payload.is_typing:
         await execute(db, "INSERT INTO campus_group_typing(group_id,channel_id,user_id,updated_at) VALUES(?,?,?,?) ON CONFLICT(channel_id,user_id) DO UPDATE SET updated_at=excluded.updated_at", group_id, channel_id, user["sub"], now())
     else:
@@ -1383,6 +1450,8 @@ async def update_campus_group_typing(group_id: str, channel_id: str, payload: Ty
 @app.get("/api/v1/groups/{group_id}/channels/{channel_id}/typing")
 async def get_campus_group_typing(group_id: str, channel_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
     await require_campus_group_member(db, group_id, user["sub"])
+    if not await first(db, "SELECT 1 AS ok FROM campus_group_channels WHERE id=? AND group_id=? AND channel_type='text'", channel_id, group_id):
+        raise HTTPException(status_code=404, detail="Text channel not found")
     since = (datetime.now(timezone.utc) - timedelta(seconds=6)).isoformat()
     rows = await query(db, """SELECT u.id,p.full_name,u.username FROM campus_group_typing t
         JOIN users u ON u.id=t.user_id LEFT JOIN user_profiles p ON p.user_id=u.id
@@ -1911,7 +1980,10 @@ class Default(WorkerEntrypoint):
             if not claims:
                 return WorkerResponse("Unauthorized", status=401)
             hub = self.env.REALTIME_HUB.get(self.env.REALTIME_HUB.idFromName("nexus-live-events"))
-            return await hub.fetch(request.url + "&user_id=" + claims["sub"])
+            # Forward the original Request so the Upgrade header and WebSocket
+            # handshake survive the hop to the Durable Object. The hub validates
+            # the signed token itself and derives the user ID from its claims.
+            return await hub.fetch(request)
         return await asgi.fetch(app, request, self.env)
 
 
@@ -1922,9 +1994,12 @@ class RealtimeHub(DurableObject):
 
     async def fetch(self, request):
         from urllib.parse import parse_qs
-        user_id = parse_qs(urlparse(request.url).query).get("user_id", [""])[0]
+        token = parse_qs(urlparse(request.url).query).get("token", [""])[0]
+        secret = getattr(self.env, "JWT_SECRET", None)
+        claims = decode_token(token, str(secret)) if token and secret else None
+        user_id = claims.get("sub") if claims else None
         if not user_id:
-            return WorkerResponse("Missing authenticated user", status=401)
+            return WorkerResponse("Unauthorized", status=401)
         if request.headers.get("Upgrade", "").lower() != "websocket":
             return WorkerResponse("WebSocket upgrade required", status=426)
         client, server = WebSocketPair.new().object_values()

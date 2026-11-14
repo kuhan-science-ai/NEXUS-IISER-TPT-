@@ -3,79 +3,87 @@ type MessageHandler = (data: any) => void;
 class WebSocketClient {
   private socket: WebSocket | null = null;
   private listeners: Set<MessageHandler> = new Set();
-  private reconnectTimeout: any = null;
-  private isConnecting: boolean = false;
+  private reconnectTimeout: number | null = null;
+  private heartbeatTimer: number | null = null;
+  private isConnecting = false;
   private shouldReconnect = true;
+  private token: string | null = null;
 
   connect(token: string) {
-    if (!token || this.socket || this.isConnecting) return;
+    if (!token) return;
+    if (this.token !== token) this.disconnect();
     this.shouldReconnect = true;
+    this.token = token;
+    if (this.socket || this.isConnecting) return;
     this.isConnecting = true;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     const wsHost = host.includes('localhost') || host.includes('127.0.0.1') ? host : 'nexus-backend.kuhan200973.workers.dev';
     const wsUrl = `${protocol}//${wsHost}/ws/nexus?token=${encodeURIComponent(token)}`;
-
+    let socket: WebSocket;
     try {
-      this.socket = new WebSocket(wsUrl);
-
-      this.socket.onopen = () => {
-        this.isConnecting = false;
-        this.listeners.forEach(listener => listener({ event: 'system.connected' }));
-      };
-
-      this.socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          this.listeners.forEach((listener) => listener(data));
-        } catch (e) {
-          console.error('[NEXUS WebSocket] Parse error:', e);
-        }
-      };
-
-      this.socket.onclose = () => {
-        this.cleanup();
-        if (!this.shouldReconnect) return;
-        this.reconnectTimeout = setTimeout(() => {
-          this.connect(token);
-        }, 3000);
-      };
-
-      this.socket.onerror = (err) => {
-        console.warn('[NEXUS WebSocket] Error:', err);
-        this.cleanup();
-      };
-    } catch (e) {
-      this.cleanup();
+      socket = new WebSocket(wsUrl);
+      this.socket = socket;
+    } catch {
+      this.isConnecting = false;
+      this.scheduleReconnect();
+      return;
     }
+
+    socket.onopen = () => {
+      if (this.socket !== socket) return;
+      this.isConnecting = false;
+      this.notify({ event: 'system.connected' });
+      this.heartbeatTimer = window.setInterval(() => this.send('ping', {}), 25_000);
+    };
+    socket.onmessage = event => {
+      if (this.socket !== socket) return;
+      try { this.notify(JSON.parse(event.data)); }
+      catch (error) { console.error('[NEXUS WebSocket] Parse error:', error); }
+    };
+    socket.onclose = () => {
+      if (this.socket !== socket) return;
+      this.socket = null;
+      this.isConnecting = false;
+      if (this.heartbeatTimer !== null) window.clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+      if (this.shouldReconnect) this.scheduleReconnect();
+    };
+    socket.onerror = error => {
+      console.warn('[NEXUS WebSocket] Error:', error);
+      // The close handler owns reconnection and avoids closing a newer socket.
+      if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) socket.close();
+    };
   }
 
-  private cleanup() {
-    this.isConnecting = false;
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
-    }
+  private notify(event: any) { this.listeners.forEach(listener => listener(event)); }
+
+  private scheduleReconnect() {
+    if (!this.shouldReconnect || this.reconnectTimeout !== null) return;
+    this.reconnectTimeout = window.setTimeout(() => {
+      this.reconnectTimeout = null;
+      if (this.token && this.shouldReconnect) this.connect(this.token);
+    }, 2000);
   }
 
   disconnect() {
     this.shouldReconnect = false;
-    if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-    this.cleanup();
+    if (this.reconnectTimeout !== null) window.clearTimeout(this.reconnectTimeout);
+    this.reconnectTimeout = null;
+    if (this.heartbeatTimer !== null) window.clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = null;
+    this.token = null;
+    const socket = this.socket;
+    this.socket = null;
+    this.isConnecting = false;
+    if (socket && socket.readyState < WebSocket.CLOSING) socket.close();
   }
 
   isConnected() { return this.socket?.readyState === WebSocket.OPEN; }
-
-  addListener(handler: MessageHandler) {
-    this.listeners.add(handler);
-    return () => this.listeners.delete(handler);
-  }
-
+  addListener(handler: MessageHandler) { this.listeners.add(handler); return () => this.listeners.delete(handler); }
   send(event: string, payload: any) {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify({ event, ...payload }));
-    }
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ event, ...payload }));
   }
 }
 

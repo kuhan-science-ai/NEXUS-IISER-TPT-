@@ -207,14 +207,17 @@ class ApiService {
   async importCampusGroups(groups: any[]): Promise<any> { return this.request('/groups/import', { method: 'POST', body: JSON.stringify({ groups }) }); }
   async createCampusGroup(group: any): Promise<any> { return this.request('/groups', { method: 'POST', body: JSON.stringify(group) }); }
   async joinCampusGroup(groupId: string): Promise<any> { return this.request(`/groups/${groupId}/join`, { method: 'POST' }); }
+  async inviteCampusGroupMember(groupId: string, username: string): Promise<any> { return this.request(`/groups/${encodeURIComponent(groupId)}/members`, { method: 'POST', body: JSON.stringify({ username }) }); }
   async updateCampusGroup(groupId: string, group: any): Promise<any> { return this.request(`/groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(group) }); }
   async deleteCampusGroup(groupId: string): Promise<any> { return this.request(`/groups/${groupId}`, { method: 'DELETE' }); }
   async addCampusGroupChannel(groupId: string, name: string, channelType: 'text' | 'voice' = 'text'): Promise<any> { return this.request(`/groups/${groupId}/channels`, { method: 'POST', body: JSON.stringify({ name, channel_type: channelType }) }); }
+  async renameCampusGroupChannel(groupId: string, channelId: string, name: string): Promise<any> { return this.request(`/groups/${encodeURIComponent(groupId)}/channels/${encodeURIComponent(channelId)}`, { method: 'PATCH', body: JSON.stringify({ name }) }); }
   async deleteCampusGroupChannel(groupId: string, channelId: string): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}`, { method: 'DELETE' }); }
   async listCampusGroupMessages(groupId: string, channelId: string): Promise<any[]> { return this.request(`/groups/${groupId}/channels/${channelId}/messages`); }
   async sendCampusGroupMessage(groupId: string, channelId: string, content: string, replyToId?: string): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}/messages`, { method: 'POST', body: JSON.stringify({ content, reply_to_id: replyToId || null }) }); }
   async clearCampusGroupMessages(groupId: string, channelId: string): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}/messages`, { method: 'DELETE' }); }
   async deleteCampusGroupMessage(groupId: string, messageId: string): Promise<any> { return this.request(`/groups/${groupId}/messages/${messageId}`, { method: 'DELETE' }); }
+  async editCampusGroupMessage(groupId: string, messageId: string, content: string): Promise<any> { return this.request(`/groups/${encodeURIComponent(groupId)}/messages/${encodeURIComponent(messageId)}`, { method: 'PUT', body: JSON.stringify({ content }) }); }
   async toggleCampusGroupReaction(groupId: string, messageId: string, emoji: string): Promise<any> { return this.request(`/groups/${groupId}/messages/${messageId}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }); }
   async setCampusGroupTyping(groupId: string, channelId: string, isTyping: boolean): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}/typing`, { method: 'POST', body: JSON.stringify({ is_typing: isTyping }) }); }
   async getCampusGroupTyping(groupId: string, channelId: string): Promise<any[]> { return this.request(`/groups/${groupId}/channels/${channelId}/typing`); }

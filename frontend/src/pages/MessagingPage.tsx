@@ -38,10 +38,11 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [menuNotice, setMenuNotice] = useState('');
-  const [typingNames, setTypingNames] = useState<string[]>([]);
+  const [typingNames, setTypingNames] = useState<Record<string, string>>({});
   const conversationSearchRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<number | null>(null);
+  const typingActiveRef = useRef<string | null>(null);
 
   const loadConversations = useCallback(async () => {
     try { const rows = await api.listConversations(); setConversations(rows); const requested = new URLSearchParams(location.search).get('conversationId'); setActiveConvId(current => requested && rows.some((row: Conversation) => row.id === requested) ? requested : current && rows.some((row: Conversation) => row.id === current) ? current : null); }
@@ -57,24 +58,44 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   useEffect(() => { if (currentUser) sessionStorage.setItem(`nexus-dm-conversations:${currentUser.id}`, JSON.stringify(conversations)); }, [conversations, currentUser?.id]);
   useEffect(() => { if (currentUser && activeConvId) sessionStorage.setItem(`nexus-dm-messages:${currentUser.id}:${activeConvId}`, JSON.stringify(chatMessages)); }, [chatMessages, activeConvId, currentUser?.id]);
   useEffect(() => {
-    if (!activeConvId) { setTypingNames([]); return; }
-    setTypingNames([]);
-    return () => setTypingNames([]);
+    if (!activeConvId) { setTypingNames({}); return; }
+    setTypingNames({});
+    void api.getTyping(activeConvId).then(rows => setTypingNames(Object.fromEntries(rows.map((row: any) => [row.user_id, row.name])))).catch(() => undefined);
+    return () => {
+      if (typingTimerRef.current !== null) window.clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+      if (typingActiveRef.current) void api.setTyping(typingActiveRef.current, false).catch(() => undefined);
+      typingActiveRef.current = null;
+      setTypingNames({});
+    };
   }, [activeConvId]);
   useEffect(() => () => { if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current); }, []);
   useEffect(() => {
+    const typingTimers = new Map<string, number>();
     const removeListener = wsClient.addListener(event => {
-    if (event.event === 'conversation.created' || event.event === 'friends.changed') { void loadConversations(); }
+    if (event.event === 'system.connected') { void loadConversations(); if (activeConvId) void api.getMessages(activeConvId).then(setChatMessages).catch(() => undefined); }
+    else if (event.event === 'conversation.created' || event.event === 'friends.changed') { void loadConversations(); }
     else if (event.event === 'message.new' && event.message) {
-      if (event.conversation_id === activeConvId) setChatMessages(items => items.some(item => item.id === event.message.id) ? items : [...items, event.message]);
+      if (event.conversation_id === activeConvId) setChatMessages(items => items.some(item => item.id === event.message.id) ? items : [...items, event.message].sort((a, b) => a.created_at.localeCompare(b.created_at)));
       void loadConversations();
     } else if (event.event === 'message.deleted' && event.conversation_id === activeConvId) setChatMessages(items => items.map(item => item.id === event.message_id ? { ...item, is_deleted: true, content: 'This message was deleted.' } : item));
     else if (event.event === 'conversation.cleared' && event.conversation_id === activeConvId) setChatMessages([]);
     else if (event.event === 'message.edited' && event.conversation_id === activeConvId && event.message) setChatMessages(items => items.map(item => item.id === event.message.id ? event.message : item));
     else if (event.event === 'message.reaction' && event.conversation_id === activeConvId) void api.getMessages(activeConvId).then(setChatMessages).catch(() => undefined);
-    else if (event.event === 'typing.changed' && event.conversation_id === activeConvId) setTypingNames(names => event.is_typing ? names.includes(event.name) ? names : [...names, event.name] : names.filter(name => name !== event.name));
+    else if (event.event === 'typing.changed' && event.conversation_id === activeConvId) {
+      const userId = event.user_id || event.name;
+      const timer = typingTimers.get(userId);
+      if (timer !== undefined) window.clearTimeout(timer);
+      if (event.is_typing) {
+        setTypingNames(names => ({ ...names, [userId]: event.name }));
+        typingTimers.set(userId, window.setTimeout(() => { typingTimers.delete(userId); setTypingNames(names => { const next = { ...names }; delete next[userId]; return next; }); }, 6500));
+      } else {
+        typingTimers.delete(userId);
+        setTypingNames(names => { const next = { ...names }; delete next[userId]; return next; });
+      }
+    }
     });
-    return () => { removeListener(); };
+    return () => { removeListener(); typingTimers.forEach(timer => window.clearTimeout(timer)); };
   }, [activeConvId, loadConversations]);
   useEffect(() => { document.getElementById('messenger-bottom-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages]);
   const jumpToMessage = (messageId: string) => {
@@ -95,16 +116,30 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const updateComposerText = (value: string) => {
     setInputText(value);
     if (!activeConvId) return;
-    void api.setTyping(activeConvId, Boolean(value.trim())).catch(() => undefined);
-    if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
-    if (value.trim()) typingTimerRef.current = window.setTimeout(() => { void api.setTyping(activeConvId, false).catch(() => undefined); }, 3000);
+    if (typingTimerRef.current !== null) window.clearTimeout(typingTimerRef.current);
+    if (value.trim()) {
+      if (typingActiveRef.current !== activeConvId) {
+        if (typingActiveRef.current) void api.setTyping(typingActiveRef.current, false).catch(() => undefined);
+        typingActiveRef.current = activeConvId;
+        void api.setTyping(activeConvId, true).catch(() => undefined);
+      }
+      typingTimerRef.current = window.setTimeout(() => {
+        if (typingActiveRef.current === activeConvId) void api.setTyping(activeConvId, false).catch(() => undefined);
+        typingActiveRef.current = null;
+        typingTimerRef.current = null;
+      }, 3000);
+    } else {
+      if (typingActiveRef.current) void api.setTyping(typingActiveRef.current, false).catch(() => undefined);
+      typingActiveRef.current = null;
+      typingTimerRef.current = null;
+    }
   };
   const sendMessage = async (event: React.FormEvent) => {
     event.preventDefault(); if (!activeConvId || !inputText.trim()) return;
     const content = inputText.trim(); setInputText('');
     if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
-    void api.setTyping(activeConvId, false).catch(() => undefined);
-    try { const sent = await api.sendMessage(activeConvId, { content, reply_to_id: replyTo?.id || null }); setChatMessages(items => items.some(item => item.id === sent.id) ? items : [...items, sent]); setReplyTo(null); void loadConversations(); }
+    void api.setTyping(activeConvId, false).catch(() => undefined); typingActiveRef.current = null;
+    try { const sent = await api.sendMessage(activeConvId, { content, reply_to_id: replyTo?.id || null }); setChatMessages(items => items.some(item => item.id === sent.id) ? items : [...items, sent].sort((a, b) => a.created_at.localeCompare(b.created_at))); setReplyTo(null); void loadConversations(); }
     catch { setInputText(content); setError('Message was not sent. Please try again.'); }
   };
   const clearHistory = async () => {
@@ -161,7 +196,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
               })}
               <div id="messenger-bottom-anchor" ref={messagesEndRef} />
             </div>
-            {typingNames.length > 0 && <div className="nexus-typing-indicator" aria-live="polite"><span>{typingNames.length === 1 ? typingNames[0] : `${typingNames.slice(0, 2).join(' and ')}${typingNames.length > 2 ? ` and ${typingNames.length - 2} others` : ''}`} is typing</span><i /><i /><i /></div>}
+            {Object.keys(typingNames).length > 0 && <div className="nexus-typing-indicator" aria-live="polite"><span>{Object.values(typingNames).length === 1 ? Object.values(typingNames)[0] : `${Object.values(typingNames).slice(0, 2).join(' and ')}${Object.values(typingNames).length > 2 ? ` and ${Object.values(typingNames).length - 2} others` : ''}`} is typing</span><i /><i /><i /></div>}
             <form className="messenger-chat-composer nexus-real-composer" onSubmit={sendMessage}>{replyTo && <div className="nexus-replying"><span>Replying to <strong>{replyTo.sender_name || replyTo.sender_username}</strong><small>{replyTo.content.slice(0, 90)}</small></span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><X size={14} /></button></div>}<div className="nexus-composer-input-row"><MessengerEmojiInput key={currentUser.id} value={inputText} onChange={updateComposerText} placeholder={`Message ${displayName(activeConv)}…`} userId={currentUser.id} /><button type="submit" aria-label="Send message" title="Send message"><Rocket size={17} /></button></div><small>Messages are saved to your conversation history.</small></form>
           </> : <div className="nexus-dm-empty"><MessagesSquare size={34} /><strong>{conversations.length ? 'Choose a conversation' : 'No conversations yet'}</strong><p>{conversations.length ? 'Select a chat from the list to see its messages.' : 'No contacts or chats here yet. Add a friend to start a conversation.'}</p><button onClick={() => navigate('/friends')}>Find people</button></div>}
         </section>

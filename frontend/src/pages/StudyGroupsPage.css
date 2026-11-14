@@ -289,6 +289,11 @@
 .nexus-channel-modal-actions button { min-height:34px; padding:0 12px; border:1px solid var(--border); border-radius:6px; background:var(--bg-raised); color:var(--text-primary); cursor:pointer; }
 .nexus-channel-modal-actions button[type=submit] { border-color:var(--primary); background:var(--primary); color:#fff; }
 .study-group-modal .nexus-group-delete-warning { margin:8px 0 0; padding:10px; border:1px solid #8d3838; border-radius:6px; background:#3a2021; color:#ffc2c2; font-size:10px; }
+.nexus-group-invite { display:flex; align-items:end; gap:8px; margin-top:4px; }
+.nexus-group-invite label { display:grid; flex:1; gap:5px; color:var(--text-muted); font-size:10px; font-weight:700; }
+.nexus-group-invite input { width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg-raised); color:var(--text-primary); font:inherit; font-size:11px; }
+.nexus-group-invite button { min-height:34px; padding:0 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg-elevated); color:var(--text-primary); font:inherit; font-size:10px; cursor:pointer; }
+.nexus-group-invite button:disabled { opacity:.55; cursor:not-allowed; }
 .study-group-modal .nexus-group-delete { display:flex; min-height:36px; align-items:center; justify-content:center; gap:7px; border:1px solid #a63c43; border-radius:6px; background:#69252c; color:#fff; font-size:11px; font-weight:700; cursor:pointer; }
 .study-group-modal .nexus-group-delete:hover { background:#84313a; }
 .study-group-modal .nexus-group-delete:disabled { opacity:.6; cursor:wait; }
