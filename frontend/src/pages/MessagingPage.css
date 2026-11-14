@@ -65,14 +65,6 @@
 .nexus-message-main .nexus-message-emoji-only .nexus-twemoji { width:1em; height:1em; vertical-align:-.12em; }
 .nexus-message-text-line > p.deleted { color:var(--text-subtle); font-style:italic; }
 .nexus-message-main > p.deleted { color:var(--text-subtle); font-style:italic; }
-.nexus-message-reply-preview { display:flex; width:fit-content; max-width:min(560px,100%); align-items:center; gap:7px; margin:0 0 2px; padding:0; border:0; background:transparent; color:var(--text-subtle); font-size:10px; line-height:1.45; text-align:left; cursor:pointer; }
-.nexus-chat-reply-preview.nexus-message-reply-preview { max-width:min(560px,100%); margin:0 0 5px; padding:0; }
-.nexus-reply-connector { width:22px; height:15px; flex:none; border-top:1px solid #51525a; border-left:1px solid #51525a; border-radius:7px 0 0 0; }
-.nexus-reply-preview-content { display:flex; min-width:0; max-width:calc(100% - 29px); align-items:center; gap:5px; }
-.nexus-reply-avatar { display:grid; width:16px; height:16px; flex:none; place-items:center; overflow:hidden; border-radius:50%; background:var(--bg-elevated); color:var(--text-muted); font-size:7px; font-weight:700; }
-.nexus-reply-preview-copy { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.nexus-reply-preview-copy strong { margin-right:3px; color:var(--text-primary); font-weight:650; }
-.nexus-message-reply-preview:hover { color:var(--text-primary); }
 .nexus-message-row.is-jump-target { border-radius:5px; background:color-mix(in srgb,var(--primary) 11%,transparent); transition:background .2s ease; }
 .nexus-message-menu { position:absolute; top:-12px; right:0; margin-left:auto; opacity:0; }
 .nexus-message-hover-tools { position:absolute; top:-31px; right:-5px; z-index:5; display:flex; align-items:center; gap:2px; padding:3px 5px; border:1px solid var(--border); border-radius:7px; background:var(--bg-navigation); box-shadow:0 4px 14px rgba(0,0,0,.25); opacity:0; pointer-events:none; transition:opacity .12s ease; }

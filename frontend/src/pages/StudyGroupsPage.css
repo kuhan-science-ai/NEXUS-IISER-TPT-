@@ -233,8 +233,6 @@
 .nexus-chat-message.grouped + .nexus-chat-message.grouped { margin-top:7px; }
 .nexus-chat-message.is-jump-target { border-radius:5px; background:color-mix(in srgb,var(--primary) 17%,transparent); box-shadow:inset 2px 0 var(--primary); transition:background .2s ease; }
 .nexus-chat-message:hover { background:color-mix(in srgb,var(--text-primary) 4%,transparent); }
-.nexus-chat-reply-preview { display:block; max-width:min(560px,100%); margin:3px 0 5px; padding:4px 8px; border:0; border-left:2px solid var(--primary); background:transparent; color:var(--text-subtle); font-size:10px; text-align:left; cursor:pointer; }
-.nexus-chat-reply-preview:hover { color:var(--text-primary); background:color-mix(in srgb,var(--primary) 9%,transparent); }
 .nexus-chat-composer { flex-wrap:wrap; }
 .nexus-chat-replying { display:flex; width:100%; min-height:29px; align-items:center; justify-content:space-between; gap:8px; margin:-2px 0 0; padding:3px 4px; border:0; border-left:2px solid var(--primary); border-radius:0; background:transparent; color:var(--text-primary); font:inherit; font-size:11px; }
 .nexus-chat-replying > span { display:flex; min-width:0; align-items:center; gap:4px; overflow:hidden; white-space:nowrap; }
