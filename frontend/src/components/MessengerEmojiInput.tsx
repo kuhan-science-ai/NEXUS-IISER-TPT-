@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Smile, Search, X } from 'lucide-react';
 import type { EmojiCategory, MessengerEmoji } from './messengerEmojiCatalog';
 import { activeShortcodeAt, convertCompletedShortcodes, type ShortcodeMatch, rankEmoji } from './messengerEmojiShortcodes';
@@ -24,7 +25,7 @@ const recentStorageKey = (userId: string) => `nexus-messenger-recent-emojis-v1:$
 export const MessengerEmojiInput: React.FC<MessengerEmojiInputProps> = ({ value, onChange, placeholder, userId }) => {
   const [catalog, setCatalog] = useState<MessengerEmoji[] | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<'Recent' | EmojiCategory>('Smileys');
+  const [activeCategory, setActiveCategory] = useState<'Recent' | 'All' | EmojiCategory>('Smileys');
   const [pickerSearch, setPickerSearch] = useState('');
   const [suggestionsOpen, setSuggestionsOpen] = useState(true);
   const [highlightedSuggestion, setHighlightedSuggestion] = useState(0);
@@ -39,6 +40,7 @@ export const MessengerEmojiInput: React.FC<MessengerEmojiInputProps> = ({ value,
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const selectionRef = useRef({ start: value.length, end: value.length });
   const rootRef = useRef<HTMLDivElement>(null);
+  const floatingRef = useRef<HTMLElement | null>(null);
 
   const shortcodeLookup = useMemo(() => {
     const lookup = new Map<string, MessengerEmoji>();
@@ -122,6 +124,7 @@ export const MessengerEmojiInput: React.FC<MessengerEmojiInputProps> = ({ value,
       const recentItems = recentUnicode.map(unicode => recentByUnicode.get(unicode)).filter((emoji): emoji is MessengerEmoji => Boolean(emoji));
       return recentItems.length ? recentItems : catalog.filter(emoji => emoji.category === 'Smileys');
     }
+    if (activeCategory === 'All') return catalog;
     return catalog.filter(emoji => emoji.category === activeCategory);
   }, [catalog, pickerSearch, activeCategory, recentUnicode]);
 
@@ -148,7 +151,7 @@ export const MessengerEmojiInput: React.FC<MessengerEmojiInputProps> = ({ value,
 
   useEffect(() => {
     const closeOnOutsideClick = (event: MouseEvent) => {
-      if (rootRef.current?.contains(event.target as Node)) return;
+      if (rootRef.current?.contains(event.target as Node) || floatingRef.current?.contains(event.target as Node)) return;
       setPickerOpen(false);
       setSuggestionsOpen(false);
     };
@@ -220,22 +223,23 @@ export const MessengerEmojiInput: React.FC<MessengerEmojiInputProps> = ({ value,
     />
     {!value && <span className="nexus-emoji-input-placeholder" aria-hidden="true">{placeholder}</span>}
     </div>
-    {pickerOpen && pickerPosition && <section className="nexus-emoji-picker" style={{ left: pickerPosition.left, top: pickerPosition.top, width: pickerPosition.width }} aria-label="Emoji picker">
+    {pickerOpen && pickerPosition && createPortal(<section ref={floatingRef as React.RefObject<HTMLElement>} className="nexus-emoji-picker" style={{ left: pickerPosition.left, top: pickerPosition.top, width: pickerPosition.width }} aria-label="Emoji picker">
       <div className="nexus-emoji-picker-search"><Search size={15} /><input value={pickerSearch} onChange={event => setPickerSearch(event.target.value)} placeholder="Search all emoji" aria-label="Search emoji" autoComplete="off" /><button type="button" aria-label="Close emoji picker" onClick={() => setPickerOpen(false)}><X size={14} /></button></div>
       <div className="nexus-emoji-category-tabs" role="tablist" aria-label="Emoji categories">
         <button type="button" role="tab" aria-selected={activeCategory === 'Recent' && !pickerSearch} onClick={() => { setPickerSearch(''); setActiveCategory('Recent'); }} title="Recently used">◷</button>
+        <button type="button" role="tab" aria-label="Twemoji pack" title="Twemoji pack · all emoji" aria-selected={activeCategory === 'All' && !pickerSearch} onClick={() => { setPickerSearch(''); setActiveCategory('All'); }}>✦</button>
         {EMOJI_CATEGORIES.map((category, index) => <button type="button" role="tab" key={category} aria-label={category} aria-selected={activeCategory === category && !pickerSearch} title={category} onClick={() => { setPickerSearch(''); setActiveCategory(category); }}>{['☻', '♟', '♧', '🍴', '⚽', '✈', '▣', '⚙', '⚑'][index]}</button>)}
       </div>
       <div className="nexus-emoji-picker-scroll" key={`${activeCategory}-${pickerSearch}`}>
         {pickerSearch && <h3>Search results <small>{pickerItems.length}</small></h3>}
-        {!pickerSearch && <h3>{activeCategory === 'Recent' && !pickerItems.length ? 'Smileys' : activeCategory} <small>{pickerItems.length}</small></h3>}
+        {!pickerSearch && <h3>{activeCategory === 'All' ? 'Twemoji pack' : activeCategory === 'Recent' && !pickerItems.length ? 'Smileys' : activeCategory} <small>{pickerItems.length}</small></h3>}
         <div className="nexus-emoji-grid">{pickerItems.map(emoji => <button type="button" key={`${emoji.unicode}-${emoji.shortcode}`} title={`${emoji.name} · :${emoji.shortcode}:`} aria-label={`${emoji.name}, :${emoji.shortcode}:`} onMouseDown={event => event.preventDefault()} onClick={() => selectEmoji(emoji)}><img src={emoji.asset} alt="" loading="lazy" /><span className="nexus-emoji-tooltip">{emoji.name}</span></button>)}</div>
         {!pickerItems.length && <p className="nexus-emoji-empty">{catalog ? 'No matching emoji found.' : 'Loading emoji…'}</p>}
       </div>
       <footer>Twemoji SVG · {catalog?.length.toLocaleString() || '…'} emoji</footer>
-    </section>}
-    {suggestions.length > 0 && suggestionPosition && !pickerOpen && <div className="nexus-emoji-suggestions" style={{ left: suggestionPosition.left, top: suggestionPosition.top, width: suggestionPosition.width }} role="listbox" aria-label="Emoji shortcode suggestions">
+    </section>, document.body)}
+    {suggestions.length > 0 && suggestionPosition && !pickerOpen && createPortal(<div ref={floatingRef as React.RefObject<HTMLDivElement>} className="nexus-emoji-suggestions" style={{ left: suggestionPosition.left, top: suggestionPosition.top, width: suggestionPosition.width }} role="listbox" aria-label="Emoji shortcode suggestions">
       {suggestions.map((emoji, index) => <button type="button" role="option" aria-selected={highlightedSuggestion === index} key={`${emoji.unicode}-${emoji.shortcode}`} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setHighlightedSuggestion(index)} onClick={() => selectEmoji(emoji, shortcode || undefined)}><img src={emoji.asset} alt="" /><span className="nexus-emoji-suggestion-name">:{emoji.shortcode}:</span><span className="nexus-emoji-suggestion-description">{emoji.name}</span></button>)}
-    </div>}
+    </div>, document.body)}
   </div>;
 };
