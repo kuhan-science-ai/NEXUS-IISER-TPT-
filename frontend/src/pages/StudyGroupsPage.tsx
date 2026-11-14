@@ -49,6 +49,8 @@ export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, o
   const [draftIsPublic, setDraftIsPublic] = useState(true);
   const [groupTypingNames, setGroupTypingNames] = useState<{ userId: string; name: string }[]>([]);
   const groupTypingTimerRef = React.useRef<number | null>(null);
+  const groupTypingHeartbeatRef = React.useRef<number | null>(null);
+  const groupTypingActiveRef = React.useRef(false);
   const [channelName, setChannelName] = useState('');
   const [channelToDelete, setChannelToDelete] = useState<GroupChannel | null>(null);
   const [imagePreview, setImagePreview] = useState('');
@@ -137,10 +139,34 @@ export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, o
     return () => { alive = false; window.clearInterval(timer); };
   }, [activeGroup?.id, activeGroup?.joined, activeChannel?.id, activeChannel?.channel_type, messageKey]);
   useEffect(() => { const onRealtime = (event: Event) => { const detail = (event as CustomEvent).detail; if (detail?.event === 'system.connected') { void refreshGroups(); if (activeGroup?.joined && activeChannel?.channel_type === 'text') void api.listCampusGroupMessages(activeGroup.id, activeChannel.id).then(rows => setGroupMessages(value => ({ ...value, [messageKey]: rows.map((m:any) => ({id:m.id,created_at:m.at,text:m.text,sender:m.sender,sender_id:m.sender_id,avatar_url:m.avatar_url,avatar_mime_type:m.avatar_mime_type,at:new Date(m.at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),reactions:(m.reactions || []).map((r:any)=>({emoji:r.emoji,count:r.count || 0,user_ids:r.user_ids || []})),replyToId:m.replyToId,reply_preview:m.reply_preview})) }))).catch(() => undefined); } else if (detail?.event === 'group.changed') { void refreshGroups(); } else if (detail?.event === 'group.channel.cleared' && detail.group_id === activeGroup?.id && detail.channel_id === activeChannel?.id) setGroupMessages(value => ({ ...value, [messageKey]: [] })); else if (detail?.event === 'group.message.new' && detail.group_id === activeGroup?.id && detail.channel_id === activeChannel?.id && detail.message) { setGroupMessages(value => { const key = `${detail.group_id}:${detail.channel_id}`; const items = value[key] || []; if (items.some(item => item.id === detail.message.id)) return value; const next = [...items, { ...detail.message, created_at: detail.message.at, at: new Date(detail.message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]; next.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || '')); return { ...value, [key]: next }; }); } else if (detail?.event === 'group.message.changed' && detail.group_id === activeGroup?.id && activeChannel) void api.listCampusGroupMessages(activeGroup.id, activeChannel.id).then(rows => setGroupMessages(value => ({ ...value, [messageKey]: rows.map((m: any) => ({ id:m.id,text:m.text,sender:m.sender,sender_id:m.sender_id,avatar_url:m.avatar_url,avatar_mime_type:m.avatar_mime_type,at:new Date(m.at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),reactions:(m.reactions || []).map((r:any)=>({emoji:r.emoji,count:r.count || 0,user_ids:r.user_ids || []})),replyToId:m.replyToId,reply_preview:m.reply_preview })) }))).catch(() => undefined); }; window.addEventListener('nexus-realtime-event', onRealtime); return () => window.removeEventListener('nexus-realtime-event', onRealtime); }, [activeGroup?.id, activeGroup?.joined, activeChannel?.id, activeChannel?.channel_type, messageKey]);
-  useEffect(() => () => { if (groupTypingTimerRef.current !== null) { window.clearTimeout(groupTypingTimerRef.current); if (activeGroup && activeChannel) void api.setCampusGroupTyping(activeGroup.id, activeChannel.id, false).catch(() => undefined); groupTypingTimerRef.current = null; } }, [activeGroup?.id, activeChannel?.id]);
-  const sendMessage = async (event: React.FormEvent) => { event.preventDefault(); if (!draftMessage.trim() || !activeGroup || !activeChannel || activeChannel.channel_type === 'voice') return; const text=draftMessage.trim();setDraftMessage('');if(groupTypingTimerRef.current !== null)window.clearTimeout(groupTypingTimerRef.current);groupTypingTimerRef.current=null;void api.setCampusGroupTyping(activeGroup.id,activeChannel.id,false).catch(()=>undefined);try{const sent=await api.sendCampusGroupMessage(activeGroup.id,activeChannel.id,text,replyTo?.id);const key=`${activeGroup.id}:${activeChannel.id}`;setGroupMessages(value=>{const items=value[key]||[];return items.some(item=>item.id===sent.id)?value:{...value,[key]:[...items,{id:sent.id,created_at:sent.at,text:sent.text,sender:sent.sender,sender_id:sent.sender_id,avatar_url:sent.avatar_url,avatar_mime_type:sent.avatar_mime_type,at:new Date(sent.at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),reactions:normalizeGroupReactions(sent.reactions || []),replyToId:sent.replyToId}]};});setReplyTo(null);}catch{setDraftMessage(text);setNotice('Message could not be sent. Join the group and try again.');} };
+  useEffect(() => () => {
+    if (groupTypingTimerRef.current !== null) window.clearTimeout(groupTypingTimerRef.current);
+    groupTypingTimerRef.current = null;
+    if (groupTypingHeartbeatRef.current !== null) window.clearInterval(groupTypingHeartbeatRef.current);
+    groupTypingHeartbeatRef.current = null;
+    if (groupTypingActiveRef.current && activeGroup && activeChannel) void api.setCampusGroupTyping(activeGroup.id, activeChannel.id, false).catch(() => undefined);
+    groupTypingActiveRef.current = false;
+  }, [activeGroup?.id, activeChannel?.id]);
+  const sendMessage = async (event: React.FormEvent) => { event.preventDefault(); if (!draftMessage.trim() || !activeGroup || !activeChannel || activeChannel.channel_type === 'voice') return; const text=draftMessage.trim();setDraftMessage('');if(groupTypingTimerRef.current !== null)window.clearTimeout(groupTypingTimerRef.current);groupTypingTimerRef.current=null;if(groupTypingHeartbeatRef.current !== null)window.clearInterval(groupTypingHeartbeatRef.current);groupTypingHeartbeatRef.current=null;groupTypingActiveRef.current=false;void api.setCampusGroupTyping(activeGroup.id,activeChannel.id,false).catch(()=>undefined);try{const sent=await api.sendCampusGroupMessage(activeGroup.id,activeChannel.id,text,replyTo?.id);const key=`${activeGroup.id}:${activeChannel.id}`;setGroupMessages(value=>{const items=value[key]||[];return items.some(item=>item.id===sent.id)?value:{...value,[key]:[...items,{id:sent.id,created_at:sent.at,text:sent.text,sender:sent.sender,sender_id:sent.sender_id,avatar_url:sent.avatar_url,avatar_mime_type:sent.avatar_mime_type,at:new Date(sent.at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),reactions:normalizeGroupReactions(sent.reactions || []),replyToId:sent.replyToId}]};});setReplyTo(null);}catch{setDraftMessage(text);setNotice('Message could not be sent. Join the group and try again.');} };
 
   useEffect(() => { setGroupTypingNames([]); const timers = new Map<string, number>(); let active = true; if (activeGroup?.joined && activeChannel?.channel_type === 'text') void api.getCampusGroupTyping(activeGroup.id, activeChannel.id).then(rows => { if (active) setGroupTypingNames(rows.map((row: any) => ({ userId: row.user_id, name: row.name }))); }).catch(() => undefined); const onRealtime = (event: Event) => { const detail = (event as CustomEvent).detail; if (detail?.event !== 'group.typing.changed' || detail.group_id !== activeGroup?.id || detail.channel_id !== activeChannel?.id) return; const userId = detail.user_id || detail.name; const existing = timers.get(userId); if (existing !== undefined) window.clearTimeout(existing); if (!detail.is_typing) { timers.delete(userId); setGroupTypingNames(names => names.filter(typer => typer.userId !== userId)); return; } setGroupTypingNames(names => names.some(typer => typer.userId === userId) ? names.map(typer => typer.userId === userId ? { userId, name: detail.name } : typer) : [...names, { userId, name: detail.name }]); timers.set(userId, window.setTimeout(() => { timers.delete(userId); setGroupTypingNames(names => names.filter(typer => typer.userId !== userId)); }, 6500)); }; window.addEventListener('nexus-realtime-event', onRealtime); return () => { active = false; window.removeEventListener('nexus-realtime-event', onRealtime); timers.forEach(timer => window.clearTimeout(timer)); }; }, [activeGroup?.id, activeGroup?.joined, activeChannel?.id, activeChannel?.channel_type]);
+  useEffect(() => {
+    if (!activeGroup?.joined || activeChannel?.channel_type !== 'text') return;
+    let active = true;
+    let polling = false;
+    const refreshTyping = async () => {
+      if (polling) return;
+      polling = true;
+      try {
+        const rows = await api.getCampusGroupTyping(activeGroup.id, activeChannel.id);
+        if (active) setGroupTypingNames(rows.map((row: any) => ({ userId: row.user_id, name: row.name })));
+      } catch { /* keep the last known typing names during brief API failures */ }
+      finally { polling = false; }
+    };
+    void refreshTyping();
+    const poll = window.setInterval(() => void refreshTyping(), 1000);
+    return () => { active = false; window.clearInterval(poll); };
+  }, [activeGroup?.id, activeGroup?.joined, activeChannel?.id, activeChannel?.channel_type]);
   const jumpToGroupMessage = (messageId: string) => { document.getElementById(`group-message-${messageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setHighlightedMessageId(messageId); window.setTimeout(() => setHighlightedMessageId(current => current === messageId ? null : current), 1600); };
   const copyText = async (text: string, label: string) => { await navigator.clipboard?.writeText(text); setNotice(`${label} copied`); window.setTimeout(() => setNotice(''), 1800); };
   const saveGroupBookmark = (message: GroupMessage) => { const key = 'nexus-message-bookmarks-v1'; const saved = readUserPreference<any[]>(key, currentUser.id, []); const exists = saved.some((item: any) => item.id === message.id); const next = exists ? saved.filter((item: any) => item.id !== message.id) : [...saved, { ...message, group: activeGroup?.name, channel: activeChannel?.name }]; writeUserPreference(key, currentUser.id, next); setNotice(exists ? 'Bookmark removed' : 'Message bookmarked in this browser'); window.setTimeout(() => setNotice(''), 1800); };
@@ -152,15 +178,27 @@ export const StudyGroupsPage: React.FC<StudyGroupsPageProps> = ({ currentUser, o
     setDraftMessage(value);
     if (!activeGroup || !activeChannel) return;
     if (groupTypingTimerRef.current !== null) window.clearTimeout(groupTypingTimerRef.current);
+    groupTypingTimerRef.current = null;
     if (value.trim()) {
-      if (groupTypingTimerRef.current === null) void api.setCampusGroupTyping(activeGroup.id, activeChannel.id, true).catch(() => undefined);
+      if (!groupTypingActiveRef.current) {
+        groupTypingActiveRef.current = true;
+        void api.setCampusGroupTyping(activeGroup.id, activeChannel.id, true).catch(() => undefined);
+        groupTypingHeartbeatRef.current = window.setInterval(() => {
+          if (groupTypingActiveRef.current) void api.setCampusGroupTyping(activeGroup.id, activeChannel.id, true).catch(() => undefined);
+        }, 2000);
+      }
       groupTypingTimerRef.current = window.setTimeout(() => {
         void api.setCampusGroupTyping(activeGroup.id, activeChannel.id, false).catch(() => undefined);
         groupTypingTimerRef.current = null;
-      }, 3000);
+        groupTypingActiveRef.current = false;
+        if (groupTypingHeartbeatRef.current !== null) window.clearInterval(groupTypingHeartbeatRef.current);
+        groupTypingHeartbeatRef.current = null;
+      }, 1400);
     } else {
       void api.setCampusGroupTyping(activeGroup.id, activeChannel.id, false).catch(() => undefined);
-      groupTypingTimerRef.current = null;
+      groupTypingActiveRef.current = false;
+      if (groupTypingHeartbeatRef.current !== null) window.clearInterval(groupTypingHeartbeatRef.current);
+      groupTypingHeartbeatRef.current = null;
     }
   };
 

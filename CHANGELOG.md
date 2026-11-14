@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-14
+- Made typing state persist while keystrokes continue by refreshing it every two seconds, clearing shortly after the last keystroke, and polling typing state once per second in the open DM/group chat to recover missed realtime events.
 - Tightened the author-name-to-message spacing in Messenger and Study Groups while preserving the avatar alignment and inter-message spacing.
 - Fixed shortcode completion so recognized `:name:` values are converted even when the emoji catalog is still loading. Reused the full Twemoji picker in group composers and direct/group message reactions; reaction controls now add only the selected emoji and display exact emoji with per-user/count state.
 - Made the complete Twemoji catalog visible through a dedicated pack tab and portaled the picker/shortcode suggestions above chat layout layers so emoji suggestions remain visible. Frontend build passed and the Pages frontend was redeployed.

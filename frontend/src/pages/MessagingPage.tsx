@@ -43,6 +43,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const conversationSearchRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<number | null>(null);
+  const typingHeartbeatRef = useRef<number | null>(null);
   const typingActiveRef = useRef<string | null>(null);
 
   const loadConversations = useCallback(async () => {
@@ -61,10 +62,26 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   useEffect(() => {
     if (!activeConvId) { setTypingNames({}); return; }
     setTypingNames({});
-    void api.getTyping(activeConvId).then(rows => setTypingNames(Object.fromEntries(rows.map((row: any) => [row.user_id, row.name])))).catch(() => undefined);
+    let alive = true;
+    let polling = false;
+    const refreshTyping = async () => {
+      if (polling) return;
+      polling = true;
+      try {
+        const rows = await api.getTyping(activeConvId);
+        if (alive) setTypingNames(Object.fromEntries(rows.map((row: any) => [row.user_id, row.name])));
+      } catch { /* retain the last known typing state during a brief request failure */ }
+      finally { polling = false; }
+    };
+    void refreshTyping();
+    const poll = window.setInterval(() => void refreshTyping(), 1000);
     return () => {
+      alive = false;
+      window.clearInterval(poll);
       if (typingTimerRef.current !== null) window.clearTimeout(typingTimerRef.current);
       typingTimerRef.current = null;
+      if (typingHeartbeatRef.current !== null) window.clearInterval(typingHeartbeatRef.current);
+      typingHeartbeatRef.current = null;
       if (typingActiveRef.current) void api.setTyping(typingActiveRef.current, false).catch(() => undefined);
       typingActiveRef.current = null;
       setTypingNames({});
@@ -136,24 +153,34 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
     if (value.trim()) {
       if (typingActiveRef.current !== activeConvId) {
         if (typingActiveRef.current) void api.setTyping(typingActiveRef.current, false).catch(() => undefined);
+        if (typingHeartbeatRef.current !== null) window.clearInterval(typingHeartbeatRef.current);
         typingActiveRef.current = activeConvId;
         void api.setTyping(activeConvId, true).catch(() => undefined);
+        typingHeartbeatRef.current = window.setInterval(() => {
+          if (typingActiveRef.current === activeConvId) void api.setTyping(activeConvId, true).catch(() => undefined);
+        }, 2000);
       }
       typingTimerRef.current = window.setTimeout(() => {
         if (typingActiveRef.current === activeConvId) void api.setTyping(activeConvId, false).catch(() => undefined);
         typingActiveRef.current = null;
+        if (typingHeartbeatRef.current !== null) window.clearInterval(typingHeartbeatRef.current);
+        typingHeartbeatRef.current = null;
         typingTimerRef.current = null;
-      }, 3000);
+      }, 1400);
     } else {
       if (typingActiveRef.current) void api.setTyping(typingActiveRef.current, false).catch(() => undefined);
       typingActiveRef.current = null;
       typingTimerRef.current = null;
+      if (typingHeartbeatRef.current !== null) window.clearInterval(typingHeartbeatRef.current);
+      typingHeartbeatRef.current = null;
     }
   };
   const sendMessage = async (event: React.FormEvent) => {
     event.preventDefault(); if (!activeConvId || !inputText.trim()) return;
     const content = inputText.trim(); setInputText('');
     if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+    if (typingHeartbeatRef.current !== null) window.clearInterval(typingHeartbeatRef.current);
+    typingHeartbeatRef.current = null;
     void api.setTyping(activeConvId, false).catch(() => undefined); typingActiveRef.current = null;
     try { const sent = await api.sendMessage(activeConvId, { content, reply_to_id: replyTo?.id || null }); setChatMessages(items => items.some(item => item.id === sent.id) ? items : [...items, sent].sort((a, b) => a.created_at.localeCompare(b.created_at))); setReplyTo(null); void loadConversations(); }
     catch { setInputText(content); setError('Message was not sent. Please try again.'); }
