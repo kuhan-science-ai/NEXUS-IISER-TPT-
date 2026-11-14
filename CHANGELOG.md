@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-14
+- Fixed shortcode completion so recognized `:name:` values are converted even when the emoji catalog is still loading. Reused the full Twemoji picker in group composers and direct/group message reactions; reaction controls now add only the selected emoji and display exact emoji with per-user/count state.
 - Made the complete Twemoji catalog visible through a dedicated pack tab and portaled the picker/shortcode suggestions above chat layout layers so emoji suggestions remain visible. Frontend build passed and the Pages frontend was redeployed.
 - Added pong-based WebSocket health detection and a 2.5-second message/typing sync fallback for active direct and group chats when the socket is stale. Changed the backend deploy script to call Wrangler directly, avoiding the Windows-blocked Python launcher. Deployed Worker `37f11c89-5850-45a6-810a-4558204fe08e` and the rebuilt frontend to Pages; production health and bundle checks passed.
 - Deployed Worker version `050ace0d-3070-4e60-971f-fd064553ef9f` with the rebuilt frontend assets; production health check confirms D1 connectivity. Two-account delivery and typing checks remain outstanding.

@@ -21,6 +21,11 @@ let catalogLoad: Promise<MessengerEmoji[]> | undefined;
 const ensureEmojiCatalog = () => catalogLoad ||= import('./messengerEmojiCatalog').then(module => module.loadMessengerEmojiCatalog());
 
 const recentStorageKey = (userId: string) => `nexus-messenger-recent-emojis-v1:${userId}`;
+const createShortcodeLookup = (items: MessengerEmoji[]) => {
+  const lookup = new Map<string, MessengerEmoji>();
+  for (const emoji of items) for (const shortcode of [emoji.shortcode, ...emoji.aliases]) if (!lookup.has(shortcode.toLowerCase())) lookup.set(shortcode.toLowerCase(), emoji);
+  return lookup;
+};
 
 export const MessengerEmojiInput: React.FC<MessengerEmojiInputProps> = ({ value, onChange, placeholder, userId }) => {
   const [catalog, setCatalog] = useState<MessengerEmoji[] | null>(null);
@@ -35,6 +40,8 @@ export const MessengerEmojiInput: React.FC<MessengerEmojiInputProps> = ({ value,
   });
   const [pickerPosition, setPickerPosition] = useState<FloatingPosition | null>(null);
   const [suggestionPosition, setSuggestionPosition] = useState<FloatingPosition | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   const inputRef = useRef<HTMLInputElement>(null);
   const displayRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
@@ -43,11 +50,7 @@ export const MessengerEmojiInput: React.FC<MessengerEmojiInputProps> = ({ value,
   const floatingRef = useRef<HTMLElement | null>(null);
 
   const shortcodeLookup = useMemo(() => {
-    const lookup = new Map<string, MessengerEmoji>();
-    for (const emoji of catalog || []) {
-      for (const shortcode of [emoji.shortcode, ...emoji.aliases]) if (!lookup.has(shortcode.toLowerCase())) lookup.set(shortcode.toLowerCase(), emoji);
-    }
-    return lookup;
+    return createShortcodeLookup(catalog || []);
   }, [catalog]);
 
   const rememberEmoji = (emoji: MessengerEmoji) => {
@@ -132,12 +135,12 @@ export const MessengerEmojiInput: React.FC<MessengerEmojiInputProps> = ({ value,
     if (!catalog) return;
     const converted = convertCompletedShortcodes(value, selectionRef.current.start, shortcodeLookup);
     if (converted.value !== value) {
-      onChange(converted.value);
+      onChangeRef.current(converted.value);
       selectionRef.current = { start: converted.caret, end: converted.caret };
       setCaret(converted.caret);
       requestAnimationFrame(() => inputRef.current?.setSelectionRange(converted.caret, converted.caret));
     }
-  }, [catalog, value, shortcodeLookup, onChange]);
+  }, [catalog, value, shortcodeLookup]);
 
   useEffect(() => {
     if (value.includes(':') && !catalog) requestCatalog();
@@ -184,6 +187,20 @@ export const MessengerEmojiInput: React.FC<MessengerEmojiInputProps> = ({ value,
     if (converted.value !== nextValue) {
       selectionRef.current = { start: converted.caret, end: converted.caret };
       requestAnimationFrame(() => input.setSelectionRange(converted.caret, converted.caret));
+    } else if (/:([a-z0-9_+-]+):$/i.test(nextValue)) {
+      // If the user completes a shortcode before the lazy catalog finishes loading,
+      // resolve it against the latest input value as soon as the catalog is ready.
+      void ensureEmojiCatalog().then(items => {
+        if (!input.isConnected) return;
+        const currentValue = input.value;
+        const currentCaret = input.selectionStart ?? currentValue.length;
+        const pending = convertCompletedShortcodes(currentValue, currentCaret, createShortcodeLookup(items));
+        if (pending.value === currentValue) return;
+        selectionRef.current = { start: pending.caret, end: pending.caret };
+        setCaret(pending.caret);
+        onChangeRef.current(pending.value);
+        requestAnimationFrame(() => input.setSelectionRange(pending.caret, pending.caret));
+      }).catch(() => undefined);
     }
     setHighlightedSuggestion(0);
     if (nextValue.includes(':')) requestCatalog();
