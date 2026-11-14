@@ -91,6 +91,17 @@ If sign-in stalls or fails:
 
 If Google/Firebase sign-in succeeds but profile completion fails, retry the same sign-in. The Worker repairs a missing profile row for an account created during an interrupted attempt. If an error remains, note its full text, including any HTTP status or profile setup stage, for the site maintainer.
 
+### Check Worker errors in real time
+
+From `nexus-backend`, stream live production requests and exceptions with Wrangler:
+
+```powershell
+cd C:\NEXUS-iisert_final\nexus-backend
+npx wrangler tail nexus-backend --format pretty
+```
+
+Keep the terminal open while reproducing the issue; exceptions include a timestamp and traceback. Press `Ctrl+C` to stop. Wrangler must be authenticated with the Cloudflare account (`npx wrangler login`). Avoid sharing logs containing tokens or personal data.
+
 ### Account reset status
 
 On 2026-11-07, all NEXUS website accounts and user-owned D1 data were cleared. Firebase Authentication identities and sign-in configuration were retained so users can sign in with their existing Firebase credentials and create a fresh NEXUS username/profile. The reset preserved application configuration and shared system data. A private pre-reset D1 export was saved in the machine's local temporary directory; it is not part of the repository.
