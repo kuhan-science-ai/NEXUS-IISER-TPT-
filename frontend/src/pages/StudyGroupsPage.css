@@ -192,7 +192,7 @@
 .nexus-chat-message:not(.grouped) .nexus-chat-avatar-slot { height:32px; }
 .nexus-chat-message-avatar { display:grid; width:32px; height:32px; flex:none; place-items:center; overflow:hidden; border-radius:50%; background:var(--bg-elevated); color:#ddd; font-size:12px; font-weight:700; }
 .nexus-chat-message.has-reply-preview:not(.grouped) .nexus-chat-avatar-slot { box-sizing:border-box; height:71px; padding:29px 0 0; }
-.nexus-chat-message.has-reply-preview .nexus-chat-message-avatar { width:42px; height:42px; }
+.nexus-chat-message.has-reply-preview .nexus-chat-message-avatar { width:32px; height:32px; }
 .nexus-chat-message-content { min-width:0; flex:1; }
 .nexus-chat-message-meta { display:flex; align-items:flex-start; gap:8px; min-height:17px; padding-top:1px; color:#8b5cf6; font-size:11px; }
 .nexus-chat-message-meta strong { font-weight:600; }
