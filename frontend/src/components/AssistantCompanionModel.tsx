@@ -78,6 +78,11 @@ export default function AssistantCompanionModel({ onError, idleMotionClass }: { 
         companion.scene.position.y = Math.sin(elapsed * 1.1) * 0.025;
         companion.scene.rotation.y = Math.PI + Math.sin(elapsed * 0.55) * 0.055;
         companion.update(delta);
+        // Keep the resting arms lowered after VRM updates so the model returns to its A-pose.
+        const leftUpperArm = companion.humanoid.getNormalizedBoneNode(VRMHumanBoneName.LeftUpperArm);
+        const rightUpperArm = companion.humanoid.getNormalizedBoneNode(VRMHumanBoneName.RightUpperArm);
+        if (leftUpperArm) leftUpperArm.rotation.z = -0.72;
+        if (rightUpperArm) rightUpperArm.rotation.z = 0.72;
       }
       renderer.render(scene, camera);
     };
