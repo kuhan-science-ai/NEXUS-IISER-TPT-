@@ -47,6 +47,10 @@ const relativeTime = (value: string) => {
 
 const authorLabel = (item: { author_name?: string; author_username?: string; author_id?: string | null }, currentUser: UserSummary) =>
   item.author_id === currentUser.id ? 'You' : item.author_name || item.author_username || 'NEXUS member';
+const readForumDetailCache = (userId: string, postId: string): ForumDetail | null => {
+  try { return JSON.parse(sessionStorage.getItem(`nexus-forum-detail:${userId}:${postId}`) || 'null') as ForumDetail | null; }
+  catch { return null; }
+};
 
 export const ForumsPage: React.FC<ForumsPageProps> = ({ currentUser, onLogout }) => {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -90,12 +94,12 @@ export const ForumsPage: React.FC<ForumsPageProps> = ({ currentUser, onLogout })
     try {
       const result = await api.getForumPostDetails(postId) as ForumDetail;
       setDetail(result);
+      try { sessionStorage.setItem(`nexus-forum-detail:${currentUser?.id}:${postId}`, JSON.stringify(result)); } catch { /* Keep the in-memory thread when session storage is unavailable. */ }
       setDetailError('');
     } catch {
-      setDetail(null);
-      setDetailError('This discussion could not be loaded. It may have been removed.');
+      setDetailError(current => current || 'This discussion could not be loaded. It may have been removed.');
     } finally { setDetailLoading(false); }
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     setFeedLoading(true);
@@ -104,13 +108,14 @@ export const ForumsPage: React.FC<ForumsPageProps> = ({ currentUser, onLogout })
   }, [loadPosts]);
 
   useEffect(() => {
-    if (!selectedPostId) { setDetail(null); return; }
-    setDetailLoading(true);
-    setDetail(null);
+    if (!selectedPostId) return;
+    const cached = readForumDetailCache(currentUser?.id || 'guest', selectedPostId);
+    if (cached) { setDetail(cached); setDetailLoading(false); }
+    else { setDetail(null); setDetailLoading(true); }
     setDetailError('');
     setReplyTarget(null);
     void loadDetail(selectedPostId);
-  }, [selectedPostId, loadDetail]);
+  }, [selectedPostId, loadDetail, currentUser?.id]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -186,7 +191,7 @@ export const ForumsPage: React.FC<ForumsPageProps> = ({ currentUser, onLogout })
     <SideNav currentUser={currentUser} onLogout={onLogout} onOpenSearch={() => setSearchOpen(true)} />
     <div className="forums-page-shell">
       <TopHeader breadcrumb="Workspace / Discussion Forums" currentUser={currentUser} onOpenSearch={() => setSearchOpen(true)} actionButton={{ label: 'Start a discussion', onClick: openComposer, icon: '+' }} />
-      <main className="forums-workspace">
+      <main className={`forums-workspace${selectedPostId ? ' has-open-thread' : ' is-thread-closed'}`}>
         <aside className="forums-channels">
           <div className="forums-section-heading"><span>Global forums</span><button type="button" onClick={openComposer} title="Start a discussion" aria-label="Start a discussion"><Plus size={16} /></button></div>
           <div className="forums-channel-list">
@@ -215,8 +220,8 @@ export const ForumsPage: React.FC<ForumsPageProps> = ({ currentUser, onLogout })
           </div>
         </section>
 
-        <section className="messenger-chat-panel forum-thread-panel">
-          {detail ? <>
+        {selectedPostId && <section className="messenger-chat-panel forum-thread-panel">
+          {detail?.id === selectedPostId ? <>
             <header className="messenger-chat-header forum-thread-header"><div className="nexus-dm-heading"><MessagesSquare size={18} /><div><strong>{detail.title}</strong><small>#{detail.category} · {detail.comments?.length || 0} replies</small></div></div><div className="messenger-chat-actions"><button type="button" aria-label="Upvote discussion" title="Upvote discussion" className={Number(detail.user_vote) === 1 ? 'is-selected' : ''} onClick={() => void vote(detail, 1)}><ArrowUp size={17} /></button><button type="button" aria-label="Close discussion" title="Close discussion" onClick={() => setSelectedPostId(null)}><X size={17} /></button></div></header>
             {detailError && <p className="nexus-message-error" role="alert">{detailError}</p>}
             <div className="messenger-chat-messages nexus-chat-messages forum-thread-messages">
@@ -239,7 +244,7 @@ export const ForumsPage: React.FC<ForumsPageProps> = ({ currentUser, onLogout })
               <div className="nexus-composer-input-row"><MessengerEmojiInput key={currentUser.id} value={replyText} onChange={setReplyText} placeholder="Message this discussion…" userId={currentUser.id} /><button type="submit" aria-label="Send reply" title="Send reply" disabled={!replyText.trim() || sendingReply}><Send size={16} /></button></div><small>Replies are shared with the NEXUS community.</small>
             </form>}
           </> : <div className="forum-thread-placeholder"><MessagesSquare size={30} /><strong>Choose a discussion</strong><p>Open a post to read its thread and join the conversation.</p></div>}
-        </section>
+        </section>}
       </main>
     </div>
 
