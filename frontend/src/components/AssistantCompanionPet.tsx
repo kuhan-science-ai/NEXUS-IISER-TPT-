@@ -5,24 +5,31 @@ import './assistant-companion.css';
 const CompanionModel = lazy(() => import('./AssistantCompanionModel'));
 const POSITION_KEY = 'nexus-ai-companion-position';
 const IDLE_MOTIONS = ['float', 'lean', 'bounce', 'peek', 'sway'];
+const COMPANION_WIDTH = 228;
+const COMPANION_HEIGHT = 336;
+const MOBILE_COMPANION_WIDTH = 190;
+const MOBILE_COMPANION_HEIGHT = 280;
 
 type Position = { left: number; top: number };
 type PetDrag = { x: number; y: number; left: number; top: number };
-type PetAnimation = { source: 1 | 2 | 3; key: number };
+const REACTION_ANIMATION_IDS = [1, 2, 3, 4] as const;
+type PetAnimation = { source: (typeof REACTION_ANIMATION_IDS)[number]; key: number };
 
 function randomReactionAnimation(): PetAnimation['source'] {
-  return (Math.floor(Math.random() * 3) + 1) as PetAnimation['source'];
+  return REACTION_ANIMATION_IDS[Math.floor(Math.random() * REACTION_ANIMATION_IDS.length)];
 }
 
 function readPosition(userId: string): Position | null {
   const value = readUserPreference<Position | null>(POSITION_KEY, userId, null);
   if (!value || !Number.isFinite(value.left) || !Number.isFinite(value.top)) return null;
-  return { left: Math.max(0, Math.min(window.innerWidth - 80, value.left)), top: Math.max(0, Math.min(window.innerHeight - 100, value.top)) };
+  const width = window.innerWidth <= 560 ? MOBILE_COMPANION_WIDTH : COMPANION_WIDTH;
+  const height = window.innerWidth <= 560 ? MOBILE_COMPANION_HEIGHT : COMPANION_HEIGHT;
+  return { left: Math.max(0, Math.min(window.innerWidth - width, value.left)), top: Math.max(0, Math.min(window.innerHeight - height, value.top)) };
 }
 
 export function AssistantCompanionPet({ userId, companionId }: { userId: string; companionId: string }) {
   const [position, setPosition] = useState<Position | null>(() => readPosition(userId));
-  const [animation, setAnimation] = useState<PetAnimation | null>(() => ({ source: randomReactionAnimation(), key: 0 }));
+  const [animation, setAnimation] = useState<PetAnimation | null>(() => ({ source: 3, key: 0 }));
   const [idleAnimationReady, setIdleAnimationReady] = useState(false);
   const [modelFailed, setModelFailed] = useState(false);
   const [idleMotion, setIdleMotion] = useState(0);
@@ -39,7 +46,7 @@ export function AssistantCompanionPet({ userId, companionId }: { userId: string;
     if (previousCompanion.current.userId !== userId || previousCompanion.current.companionId !== companionId) {
       previousCompanion.current = { userId, companionId };
       animationKey.current += 1;
-      setAnimation({ source: randomReactionAnimation(), key: animationKey.current });
+      setAnimation({ source: 3, key: animationKey.current });
     }
   }, [userId, companionId]);
 
@@ -77,8 +84,8 @@ export function AssistantCompanionPet({ userId, companionId }: { userId: string;
       const activeDrag = drag.current;
       if (!activeDrag) return;
       if (Math.abs(event.clientX - activeDrag.x) + Math.abs(event.clientY - activeDrag.y) > 5) dragged.current = true;
-      const width = Math.min(210, window.innerWidth - 24);
-      const height = Math.min(310, window.innerHeight - 24);
+      const width = Math.min(window.innerWidth <= 560 ? MOBILE_COMPANION_WIDTH : COMPANION_WIDTH, window.innerWidth - 24);
+      const height = Math.min(window.innerWidth <= 560 ? MOBILE_COMPANION_HEIGHT : COMPANION_HEIGHT, window.innerHeight - 24);
       setPosition({
         left: Math.max(0, Math.min(window.innerWidth - width, activeDrag.left + event.clientX - activeDrag.x)),
         top: Math.max(0, Math.min(window.innerHeight - height, activeDrag.top + event.clientY - activeDrag.y)),
@@ -95,8 +102,8 @@ export function AssistantCompanionPet({ userId, companionId }: { userId: string;
     };
     const resize = () => setPosition(current => {
       if (!current) return current;
-      const width = Math.min(210, window.innerWidth - 24);
-      const height = Math.min(310, window.innerHeight - 24);
+      const width = Math.min(window.innerWidth <= 560 ? MOBILE_COMPANION_WIDTH : COMPANION_WIDTH, window.innerWidth - 24);
+      const height = Math.min(window.innerWidth <= 560 ? MOBILE_COMPANION_HEIGHT : COMPANION_HEIGHT, window.innerHeight - 24);
       const next = {
         left: Math.max(0, Math.min(window.innerWidth - width, current.left)),
         top: Math.max(0, Math.min(window.innerHeight - height, current.top)),
@@ -130,7 +137,7 @@ export function AssistantCompanionPet({ userId, companionId }: { userId: string;
     setAnimation({ source, key: animationKey.current });
   };
 
-  const width = Math.min(210, Math.max(140, window.innerWidth - 24));
+  const width = Math.min(window.innerWidth <= 560 ? MOBILE_COMPANION_WIDTH : COMPANION_WIDTH, Math.max(140, window.innerWidth - 24));
   const positionStyle: React.CSSProperties = position
     ? { left: position.left, top: position.top }
     : { right: 20, bottom: 18 };

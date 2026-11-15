@@ -3,13 +3,12 @@ NEXUS assistant companion animation workflow
 
 Runtime behavior
 ----------------
-`frontend/src/components/AssistantCompanionPet.tsx` starts one random action
-clip when the companion appears. Actions are `ani-1.webm`, `ani-2.webm`, and
-`ani-3.webm`; the third is the former one-shot default action. When an action
-ends, the pet resumes `default-ani.webm`, the new idle animation, from its first
-frame. Clicking during idle chooses and plays a random action, then returns to
-idle. The idle WebM contains a trimmed forward-and-back cycle and uses the
-video loop flag, so its endpoints meet without showing the source fade to black.
+`frontend/src/components/AssistantCompanionPet.tsx` plays `ani-3.webm` once
+when the companion appears, then resumes `default-ani.webm` from its first
+frame. Clicking during idle chooses a random clip from `ani-1.webm` through
+`ani-4.webm`, then returns to idle. The idle WebM contains a trimmed
+forward-and-back cycle and uses the video loop flag, so its endpoints meet
+without showing the source fade to black.
 
 Asset preparation
 -----------------
@@ -18,9 +17,9 @@ repository root. The conversion environment needs ffmpeg/ffprobe, Pillow,
 numpy, SciPy, rembg, and its cached `u2netp` model. These packages are not
 frontend runtime dependencies.
 
-The three action sources (`ani-1.mov`, `ani-2.mov`, and `ani-3.mov`) are
-3840x2160 at 30 fps. Each is cropped to 1800x1850 at x=1020,y=200 and scaled
-to 900x925 before matting. `u2netp` creates the initial matte; the script
+The four action sources (`ani-1.mov` through `ani-4.mov`) are
+3840x2160 at 30 fps. Each uses the full source height and a centered 1800px
+wide crop, scaled to 900x1080 before matting. `u2netp` creates the initial matte; the script
 removes low-contrast background lettering beyond the confident silhouette,
 fills small enclosed holes, and takes a three-frame median to reduce flicker.
 It also removes backdrop color from soft edges before encoding.
@@ -30,16 +29,17 @@ the same semantic matte cleanup and edge color removal as the action sources.
 The script trims before the source fade to black at 8.6 seconds and appends
 reversed frames to create a seamless forward-and-back cycle.
 
-All four clips use one 900x1328 transparent canvas that matches the companion's
-210x310 display ratio. The script measures the complete character bounds over
-the full clip, fits that full pose to the same 1036px height, aligns the feet
+All five clips (four actions and the idle loop) use one 1000x1472 transparent
+canvas that matches the companion's 228x336 desktop display ratio. The
+script measures the complete character bounds over the full clip, fits that
+full pose to the same 1080px height, aligns the feet
 to a shared baseline, and crops only transparent source margins. This keeps
 the character the same visible size while retaining the widest hands, ears,
 and feet in every frame. The idle output replaces `default-ani.webm`.
 
 Verification
 ------------
-Check all four outputs with ffprobe for 900x1328 dimensions and the
+Check all five outputs with ffprobe for 1000x1472 dimensions and the
 `alpha_mode=1` tag. Decode with libvpx (`-c:v libvpx-vp9`) and composite frames
 on both dark and light backgrounds; FFmpeg's default VP9 decoder may display an
 opaque frame even when WebM alpha is valid. Compare full-body heights and inspect

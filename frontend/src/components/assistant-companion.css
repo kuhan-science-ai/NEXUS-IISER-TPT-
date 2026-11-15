@@ -1,7 +1,7 @@
 .nexus-assistant-companion {
   position: fixed;
   z-index: 1201;
-  height: min(310px, calc(100dvh - 24px));
+  height: min(336px, calc(100dvh - 24px));
   touch-action: none;
   user-select: none;
   cursor: grab;
@@ -96,7 +96,7 @@
 @keyframes nexus-assistant-clip-enter { from { opacity: 0; } to { opacity: 1; } }
 
 @media (max-width: 560px) {
-  .nexus-assistant-companion { height: min(250px, calc(100dvh - 24px)); }
+  .nexus-assistant-companion { height: min(280px, calc(100dvh - 24px)); }
   .nexus-assistant-companion-hint { opacity: 1; transform: none; }
 }
 

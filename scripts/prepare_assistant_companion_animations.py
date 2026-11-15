@@ -23,11 +23,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "assistants waifus and hunsbandos"
 OUTPUT = ROOT / "frontend" / "public" / "assistants" / "waifu-2"
 FPS = 30
-ACTION_CROP = (1800, 1850, 1020, 200)  # width, height, x, y in the 3840x2160 sources
-ACTION_SCALE = (900, 925)
-OUTPUT_SIZE = (900, 1328)  # Matches the companion's 210x310 display ratio.
-TARGET_SUBJECT_HEIGHT = 1036
-BOTTOM_MARGIN = 48
+ACTION_CROP = (1800, 2160, 1020, 0)  # Keep the complete source height to protect ears and feet.
+ACTION_SCALE = (900, 1080)
+OUTPUT_SIZE = (1000, 1472)  # Matches the companion's 228x336 display ratio.
+TARGET_SUBJECT_HEIGHT = 1080
+BOTTOM_MARGIN = 54
 SIDE_MARGIN = 36
 ALPHA_THRESHOLD = 32
 MATTE_CORE_THRESHOLD = 192
@@ -36,6 +36,7 @@ ACTION_CLIPS = {
     "ani-1": SOURCE / "ani-1.mov",
     "ani-2": SOURCE / "ani-2.mov",
     "ani-3": SOURCE / "ani-3.mov",
+    "ani-4": SOURCE / "ani-4.mov",
 }
 IDLE_SOURCE = SOURCE / "default ani.mp4"
 

@@ -3,86 +3,114 @@
     "ani-1": {
       "source": "assistants waifus and hunsbandos\\ani-1.mov",
       "asset": "assistants\\waifu-2\\ani-1.webm",
-      "sourceFrames": 354,
+      "sourceFrames": 352,
       "fps": 30,
       "backgroundRgb": [
-        243,
-        243,
-        243
+        26,
+        24,
+        46
       ],
-      "bytes": 7815807,
+      "bytes": 4739258,
       "sourceBounds": [
-        171,
-        96,
-        678,
-        762
+        123,
+        77,
+        696,
+        890
       ],
       "sourceSubjectSize": [
-        507,
-        666
+        573,
+        813
       ],
-      "normalizedSubjectHeight": 1036,
+      "normalizedSubjectHeight": 1080,
       "canvas": [
-        900,
-        1328
+        1000,
+        1472
       ],
-      "scale": 1.5556
+      "scale": 1.3284
     },
     "ani-2": {
       "source": "assistants waifus and hunsbandos\\ani-2.mov",
       "asset": "assistants\\waifu-2\\ani-2.webm",
-      "sourceFrames": 155,
+      "sourceFrames": 158,
       "fps": 30,
       "backgroundRgb": [
-        243,
-        243,
-        243
+        26,
+        24,
+        47
       ],
-      "bytes": 2492922,
+      "bytes": 1868464,
       "sourceBounds": [
-        259,
-        66,
-        677,
-        791
+        197,
+        33,
+        667,
+        868
       ],
       "sourceSubjectSize": [
-        418,
-        725
+        470,
+        835
       ],
-      "normalizedSubjectHeight": 1036,
+      "normalizedSubjectHeight": 1080,
       "canvas": [
-        900,
-        1328
+        1000,
+        1472
       ],
-      "scale": 1.429
+      "scale": 1.2934
     },
     "ani-3": {
       "source": "assistants waifus and hunsbandos\\ani-3.mov",
       "asset": "assistants\\waifu-2\\ani-3.webm",
-      "sourceFrames": 223,
+      "sourceFrames": 352,
       "fps": 30,
       "backgroundRgb": [
-        243,
-        243,
-        243
+        26,
+        25,
+        42
       ],
-      "bytes": 3414806,
+      "bytes": 3347867,
       "sourceBounds": [
-        324,
-        115,
-        571,
-        733
+        137,
+        95,
+        619,
+        861
       ],
       "sourceSubjectSize": [
-        247,
-        618
+        482,
+        766
       ],
-      "normalizedSubjectHeight": 1036,
+      "normalizedSubjectHeight": 1080,
       "canvas": [
-        900,
-        1328
+        1000,
+        1472
       ],
-      "scale": 1.6764
+      "scale": 1.4099
+    },
+    "ani-4": {
+      "source": "assistants waifus and hunsbandos\\ani-4.mov",
+      "asset": "assistants\\waifu-2\\ani-4.webm",
+      "sourceFrames": 287,
+      "fps": 30,
+      "backgroundRgb": [
+        26,
+        25,
+        42
+      ],
+      "bytes": 2364015,
+      "sourceBounds": [
+        127,
+        68,
+        493,
+        906
+      ],
+      "sourceSubjectSize": [
+        366,
+        838
+      ],
+      "normalizedSubjectHeight": 1080,
+      "canvas": [
+        1000,
+        1472
+      ],
+      "scale": 1.2888
     }
   },
   "idle": {
@@ -95,7 +123,7 @@
       23,
       37
     ],
-    "bytes": 3102851,
+    "bytes": 3299006,
     "sourceBounds": [
       156,
       73,
@@ -106,12 +134,12 @@
       218,
       812
     ],
-    "normalizedSubjectHeight": 1036,
+    "normalizedSubjectHeight": 1080,
     "canvas": [
-      900,
-      1328
+      1000,
+      1472
     ],
-    "scale": 1.2759,
+    "scale": 1.33,
     "loopEndSeconds": 8.6,
     "playbackFrames": 516
   }
