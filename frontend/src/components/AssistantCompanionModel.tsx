@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { VRM, VRMLoaderPlugin } from '@pixiv/three-vrm';
+import { VRM, VRMHumanBoneName, VRMLoaderPlugin } from '@pixiv/three-vrm';
 
 /** Renders the selected VRM only while its companion is enabled. */
 export default function AssistantCompanionModel({ onError, idleMotionClass }: { onError: () => void; idleMotionClass: string }) {
@@ -49,6 +49,11 @@ export default function AssistantCompanionModel({ onError, idleMotionClass }: { 
       if (stopped) return;
       companion = gltf.userData.vrm as VRM | undefined || null;
       if (!companion) { onError(); return; }
+      // The VRM's neutral arm pose is a T-pose; lower both upper arms into an A-pose.
+      const leftUpperArm = companion.humanoid.getNormalizedBoneNode(VRMHumanBoneName.LeftUpperArm);
+      const rightUpperArm = companion.humanoid.getNormalizedBoneNode(VRMHumanBoneName.RightUpperArm);
+      if (leftUpperArm) leftUpperArm.rotation.z = -0.48;
+      if (rightUpperArm) rightUpperArm.rotation.z = 0.48;
       const avatar = companion.scene;
       avatar.rotation.y = Math.PI;
       scene.add(avatar);

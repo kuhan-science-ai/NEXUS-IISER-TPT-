@@ -4,6 +4,7 @@ All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-15
 - Added the AI Assistance companion setting with a content prompt, per-account enablement, a draggable 3D VRM pet, randomized idle movement, and two transparent 30 fps animation clips that fade in while hiding the idle model.
+- Adjusted the companion's VRM rest pose from T-pose to A-pose so the correct pose returns after either animation finishes.
 - Recreated the Discord-style reply preview in Messenger and Study Groups using each original message's text, author, and avatar. The reply quote now sits above the author, with responsive truncation and the existing connector direction and jump-to-message behavior preserved.
 - Fixed Cloudflare Durable Object WebSocket failures by using the runtime's camelCase `acceptWebSocket` and `getWebSockets` methods. Deployed Worker `cc23ac7c-9633-4a7d-939f-cb88dc2ae3ee`; Wrangler confirms it receives 100% of production traffic. Live tail had shown repeated `AttributeError: accept_web_socket` failures before the fix.
 - Made typing state persist while keystrokes continue by refreshing it every two seconds, clearing shortly after the last keystroke, and polling typing state once per second in the open DM/group chat to recover missed realtime events.
