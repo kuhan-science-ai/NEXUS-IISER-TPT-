@@ -19,7 +19,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "frontend" / "public" / "media" / "brand"
 FPS = 30
-CANVAS = 720
+CANVAS = 1440
 
 CLIPS = {
     "pink-nexus": (ROOT / "nexus symbol animation" / "NEXUS (neon pink).mp4", 3.0),
@@ -145,7 +145,7 @@ def encode(name: str, source: Path, intro_seconds: float) -> dict:
                 "ffmpeg", "-y", "-v", "error", "-framerate", str(FPS),
                 "-i", str(frames_dir / "frame-%05d.png"), "-an",
                 "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-b:v", "0",
-                "-crf", "31", "-auto-alt-ref", "0", "-deadline", "good",
+                "-crf", "23", "-auto-alt-ref", "0", "-deadline", "good",
                 "-cpu-used", "3", str(output),
             ],
             check=True,
