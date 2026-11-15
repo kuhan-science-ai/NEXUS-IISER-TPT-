@@ -55,10 +55,10 @@
 .nexus-reply-preview-copy {
   display: flex;
   min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
   justify-content: center;
-  gap: 1px;
+  gap: 4px;
   margin-left: 6px;
   overflow: hidden;
   line-height: 14px;
@@ -74,7 +74,8 @@
   white-space: nowrap;
 }
 
-.nexus-reply-author { flex: 0 0 auto; font-weight: 600; }
+.nexus-reply-author { max-width:55%; flex:0 1 auto; font-weight:600; }
+.nexus-reply-quoted-message { min-width:0; flex:1; }
 .nexus-message-reply-preview:hover .nexus-reply-quoted-message,
 .nexus-message-reply-preview:hover .nexus-reply-author { color: var(--text-primary); }
 
