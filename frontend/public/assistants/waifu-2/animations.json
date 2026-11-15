@@ -1,0 +1,69 @@
+{
+  "actions": {
+    "ani-1": {
+      "source": "assistants waifus and hunsbandos\\ani-1.mov",
+      "asset": "assistants\\waifu-2\\ani-1.webm",
+      "sourceFrames": 354,
+      "fps": 30,
+      "crop": [
+        72,
+        0,
+        776,
+        858
+      ],
+      "dimensions": [
+        704,
+        858
+      ],
+      "bytes": 1880402
+    },
+    "ani-2": {
+      "source": "assistants waifus and hunsbandos\\ani-2.mov",
+      "asset": "assistants\\waifu-2\\ani-2.webm",
+      "sourceFrames": 155,
+      "fps": 30,
+      "crop": [
+        148,
+        0,
+        798,
+        900
+      ],
+      "dimensions": [
+        650,
+        900
+      ],
+      "bytes": 717222
+    },
+    "ani-3": {
+      "source": "assistants waifus and hunsbandos\\ani-3.mov",
+      "asset": "assistants\\waifu-2\\ani-3.webm",
+      "sourceFrames": 223,
+      "fps": 30,
+      "crop": [
+        238,
+        29,
+        656,
+        817
+      ],
+      "dimensions": [
+        418,
+        788
+      ],
+      "bytes": 807261
+    }
+  },
+  "idle": {
+    "source": "assistants waifus and hunsbandos\\default ani.mp4",
+    "asset": "assistants\\waifu-2\\default-ani.webm",
+    "fps": 30,
+    "sourceFrames": 268,
+    "loopEndSeconds": 8.6,
+    "playbackFrames": 516,
+    "backgroundRgb": [
+      16,
+      23,
+      37
+    ],
+    "bytes": 2464654
+  }
+}

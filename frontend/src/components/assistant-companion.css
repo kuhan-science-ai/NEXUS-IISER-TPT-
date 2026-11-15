@@ -29,6 +29,7 @@
 .nexus-assistant-companion-model,
 .nexus-assistant-companion-fallback,
 .nexus-assistant-companion-rest-pose,
+.nexus-assistant-companion-default-animation,
 .nexus-assistant-companion-animation {
   position: absolute;
   inset: 0;
@@ -39,6 +40,12 @@
   pointer-events: none;
 }
 
+.nexus-assistant-companion-default-animation {
+  z-index: 1;
+  opacity: 0;
+  transition: opacity .18s ease-out;
+}
+
 .nexus-assistant-companion-model,
 .nexus-assistant-companion-fallback {
   transition: opacity .25s ease-out;
@@ -47,6 +54,10 @@
 .nexus-assistant-companion[data-playing="true"] .nexus-assistant-companion-model,
 .nexus-assistant-companion[data-playing="true"] .nexus-assistant-companion-fallback { opacity: 0; }
 .nexus-assistant-companion[data-rest-pose="true"] .nexus-assistant-companion-model { opacity: 0; visibility: hidden; }
+.nexus-assistant-companion[data-playing="true"] .nexus-assistant-companion-default-animation { opacity: 0; }
+.nexus-assistant-companion[data-idle-playing="true"][data-idle-ready="true"] .nexus-assistant-companion-default-animation { opacity: 1; }
+.nexus-assistant-companion[data-idle-ready="true"]:not([data-playing="true"]) .nexus-assistant-companion-model,
+.nexus-assistant-companion[data-idle-ready="true"]:not([data-playing="true"]) .nexus-assistant-companion-fallback { opacity: 0; visibility: hidden; }
 .nexus-assistant-companion-rest-pose { z-index: 1; }
 
 .nexus-assistant-idle-float { animation: nexus-assistant-float 3.8s ease-in-out infinite; }
