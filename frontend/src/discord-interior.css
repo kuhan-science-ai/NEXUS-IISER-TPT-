@@ -232,6 +232,8 @@
 }
 
 .discord-server-rail .discord-rail-home {
+  position: relative;
+  z-index: 2;
   width: 72px;
   height: 72px;
   min-height: 72px;
@@ -239,7 +241,7 @@
   background: transparent !important;
   border-radius: 0 !important;
   text-decoration: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .discord-server-rail .discord-rail-home:hover,
@@ -254,6 +256,7 @@
   width: 72px;
   height: 72px;
   object-fit: contain;
+  transform: scale(1.65);
   pointer-events: none;
 }
 
@@ -271,6 +274,8 @@
   height: 76px;
   flex: 0 0 auto;
   object-fit: contain;
+  transform: scale(1.6);
+  transform-origin: left center;
   pointer-events: none;
 }
 
@@ -356,6 +361,8 @@
 .discord-interior-scope .discord-channel-panel > div:first-child .discord-brand-animation {
   width: 240px;
   height: 76px;
+  transform: scale(1.6);
+  transform-origin: left center;
 }
 
 .discord-interior-scope .discord-channel-panel > div:first-child .discord-brand-tagline {
