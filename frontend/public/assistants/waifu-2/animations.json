@@ -10,23 +10,23 @@
         24,
         46
       ],
-      "bytes": 4739258,
+      "bytes": 5174865,
       "sourceBounds": [
-        123,
-        77,
+        106,
+        78,
         696,
-        890
+        915
       ],
       "sourceSubjectSize": [
-        573,
-        813
+        590,
+        837
       ],
       "normalizedSubjectHeight": 1080,
       "canvas": [
         1000,
         1472
       ],
-      "scale": 1.3284
+      "scale": 1.2903
     },
     "ani-2": {
       "source": "assistants waifus and hunsbandos\\ani-2.mov",
@@ -38,23 +38,23 @@
         24,
         47
       ],
-      "bytes": 1868464,
+      "bytes": 2094730,
       "sourceBounds": [
-        197,
-        33,
+        221,
+        35,
         667,
         868
       ],
       "sourceSubjectSize": [
-        470,
-        835
+        446,
+        833
       ],
       "normalizedSubjectHeight": 1080,
       "canvas": [
         1000,
         1472
       ],
-      "scale": 1.2934
+      "scale": 1.2965
     },
     "ani-3": {
       "source": "assistants waifus and hunsbandos\\ani-3.mov",
@@ -66,15 +66,15 @@
         25,
         42
       ],
-      "bytes": 3347867,
+      "bytes": 3527254,
       "sourceBounds": [
-        137,
+        170,
         95,
-        619,
+        618,
         861
       ],
       "sourceSubjectSize": [
-        482,
+        448,
         766
       ],
       "normalizedSubjectHeight": 1080,

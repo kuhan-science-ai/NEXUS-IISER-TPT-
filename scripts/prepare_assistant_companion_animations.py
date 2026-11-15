@@ -7,6 +7,7 @@ the browser only uses the generated VP9 alpha WebM files.
 
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 import subprocess
@@ -65,7 +66,7 @@ def extract_frames(source: Path, folder: Path, filters: str | None = None) -> li
 
 
 def clean_matte(alpha: Image.Image, rgb: Image.Image, background: tuple[float, float, float]) -> np.ndarray:
-    """Drop watermark edges, close shirt pinholes, and preserve soft character edges."""
+    """Drop watermark edges while retaining dark hands and soft character details."""
     values = np.asarray(alpha, dtype=np.uint8)
     foreground = values >= MATTE_CORE_THRESHOLD
     labels, count = ndimage.label(foreground, structure=np.ones((3, 3), dtype=np.uint8))
@@ -76,15 +77,28 @@ def clean_matte(alpha: Image.Image, rgb: Image.Image, background: tuple[float, f
     areas[0] = 0
     main = labels == int(np.argmax(areas))
     filled = ndimage.binary_fill_holes(ndimage.binary_closing(main, structure=np.ones((3, 3), dtype=bool)))
-    # Allow soft edges and thin pink features near the confident silhouette,
-    # but reject low-contrast gray watermark strokes beyond the clothing edge.
-    allowed = ndimage.binary_dilation(filled, iterations=16)
+    # Keep soft edges and details slightly separated from the confident body
+    # matte. The wider neighborhood protects hands when segmentation briefly
+    # disconnects them from an arm.
+    allowed = ndimage.binary_dilation(filled, iterations=40)
     colors = np.asarray(rgb, dtype=np.int16)
     chroma = colors.max(axis=2) - colors.min(axis=2)
-    bg_distance = np.sqrt(np.sum((colors.astype(np.float32) - np.asarray(background, dtype=np.float32)) ** 2, axis=2))
-    near_silhouette = ndimage.distance_transform_edt(~filled) <= 3
+    background_array = np.asarray(background, dtype=np.float32)
+    bg_distance = np.sqrt(np.sum((colors.astype(np.float32) - background_array) ** 2, axis=2))
+    near_silhouette = ndimage.distance_transform_edt(~filled) <= 6
     real_edge_color = (chroma > 14) | (bg_distance > 130)
-    result = np.where(allowed & (near_silhouette | real_edge_color) & (values >= 24), values, 0).astype(np.uint8)
+    # The rendered gloves are nearly black against a navy backdrop. The model
+    # can assign them weak alpha, so recover dark pixels only near the subject;
+    # the darker-than-background check rejects pale watermark lettering.
+    luma = colors.astype(np.float32).mean(axis=2)
+    background_luma = float(background_array.mean())
+    dark_hand_detail = (luma < background_luma - 7) & (bg_distance > 24) & (chroma < 30)
+    keep_colored = allowed & (near_silhouette | real_edge_color) & (values >= 24)
+    keep_dark_detail = allowed & dark_hand_detail & (values >= 8)
+    result = np.where(keep_colored | keep_dark_detail, values, 0).astype(np.uint8)
+    # Give a stable, visible alpha to dark details that the semantic model
+    # recognized only weakly, avoiding disappearing gloves between frames.
+    result[keep_dark_detail] = np.maximum(result[keep_dark_detail], 176)
     # The high-confidence interior stays solid to prevent the pale shirt from
     # showing pinholes when model confidence wavers from frame to frame.
     core = ndimage.binary_erosion(filled, structure=np.ones((3, 3), dtype=bool))
@@ -110,9 +124,8 @@ def stable_mattes(
     right = bottom = -1
     zero = np.zeros_like(masks[0])
     for index, current in enumerate(masks):
-        previous = masks[index - 1] if index else current
-        following = masks[index + 1] if index + 1 < len(masks) else current
-        temporal = np.median(np.stack((previous, current, following)), axis=0).astype(np.uint8)
+        window = masks[max(0, index - 2):min(len(masks), index + 3)]
+        temporal = np.median(np.stack(window), axis=0).astype(np.uint8)
         ys, xs = np.nonzero(temporal >= ALPHA_THRESHOLD)
         if xs.size:
             left, right = min(left, int(xs.min())), max(right, int(xs.max()))
@@ -225,16 +238,28 @@ def prepare_clip(source: Path, name: str, session, work: Path, *, idle: bool = F
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Prepare transparent NEXUS companion animations")
+    parser.add_argument(
+        "--actions", nargs="+", choices=tuple(ACTION_CLIPS),
+        help="Rebuild selected action clips only, preserving the existing idle asset and other actions",
+    )
+    args = parser.parse_args()
+    selected_actions = args.actions or list(ACTION_CLIPS)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="nexus-assistant-assets-") as temp_name:
         work = Path(temp_name)
         session = new_session("u2netp")
         actions = {
-            name: prepare_clip(source, name, session, work)
-            for name, source in ACTION_CLIPS.items()
+            name: prepare_clip(ACTION_CLIPS[name], name, session, work)
+            for name in selected_actions
         }
-        idle = prepare_clip(IDLE_SOURCE, "idle", session, work, idle=True)
-    manifest = {"actions": actions, "idle": idle}
+        if args.actions:
+            existing = json.loads((OUTPUT / "animations.json").read_text(encoding="utf-8"))
+            existing["actions"].update(actions)
+            manifest = existing
+        else:
+            idle = prepare_clip(IDLE_SOURCE, "idle", session, work, idle=True)
+            manifest = {"actions": actions, "idle": idle}
     with (OUTPUT / "animations.json").open("w", encoding="utf-8", newline="\n") as output_file:
         output_file.write(json.dumps(manifest, indent=2) + "\n")
     print(json.dumps(manifest, indent=2))

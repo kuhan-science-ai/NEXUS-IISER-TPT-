@@ -29,7 +29,7 @@ function readPosition(userId: string): Position | null {
 
 export function AssistantCompanionPet({ userId, companionId }: { userId: string; companionId: string }) {
   const [position, setPosition] = useState<Position | null>(() => readPosition(userId));
-  const [animation, setAnimation] = useState<PetAnimation | null>(() => ({ source: 3, key: 0 }));
+  const [animation, setAnimation] = useState<PetAnimation | null>(() => ({ source: 2, key: 0 }));
   const [idleAnimationReady, setIdleAnimationReady] = useState(false);
   const [modelFailed, setModelFailed] = useState(false);
   const [idleMotion, setIdleMotion] = useState(0);
@@ -46,7 +46,7 @@ export function AssistantCompanionPet({ userId, companionId }: { userId: string;
     if (previousCompanion.current.userId !== userId || previousCompanion.current.companionId !== companionId) {
       previousCompanion.current = { userId, companionId };
       animationKey.current += 1;
-      setAnimation({ source: 3, key: animationKey.current });
+      setAnimation({ source: 2, key: animationKey.current });
     }
   }, [userId, companionId]);
 
