@@ -1,0 +1,149 @@
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { readUserPreference, writeUserPreference } from '../services/userPreferences';
+import './assistant-companion.css';
+
+const CompanionModel = lazy(() => import('./AssistantCompanionModel'));
+const POSITION_KEY = 'nexus-ai-companion-position';
+const REACTIONS = [
+  'nexus-assistant-reaction-bounce',
+  'nexus-assistant-reaction-sway',
+  'nexus-assistant-reaction-twirl',
+  'nexus-assistant-reaction-pop',
+  'nexus-assistant-reaction-tilt',
+  'nexus-assistant-reaction-dance',
+  'nexus-assistant-reaction-hop',
+];
+const IDLE_MOTIONS = ['float', 'lean', 'bounce', 'peek', 'sway'];
+
+type Position = { left: number; top: number };
+type PetDrag = { x: number; y: number; left: number; top: number };
+type PetAnimation = { source: 1 | 2; reaction: string; key: number };
+
+function readPosition(userId: string): Position | null {
+  const value = readUserPreference<Position | null>(POSITION_KEY, userId, null);
+  if (!value || !Number.isFinite(value.left) || !Number.isFinite(value.top)) return null;
+  return { left: Math.max(0, Math.min(window.innerWidth - 80, value.left)), top: Math.max(0, Math.min(window.innerHeight - 100, value.top)) };
+}
+
+export function AssistantCompanionPet({ userId, companionId }: { userId: string; companionId: string }) {
+  const [position, setPosition] = useState<Position | null>(() => readPosition(userId));
+  const [animation, setAnimation] = useState<PetAnimation | null>(null);
+  const [modelFailed, setModelFailed] = useState(false);
+  const [idleMotion, setIdleMotion] = useState(0);
+  const drag = useRef<PetDrag | null>(null);
+  const dragged = useRef(false);
+  const animationKey = useRef(0);
+  const markModelFailed = useCallback(() => setModelFailed(true), []);
+
+  useEffect(() => {
+    setPosition(readPosition(userId));
+    setAnimation(null);
+    setModelFailed(false);
+  }, [userId, companionId]);
+
+  useEffect(() => {
+    let timeout = 0;
+    let previous = -1;
+    let active = true;
+    const next = () => {
+      timeout = window.setTimeout(() => {
+        if (!active) return;
+        let motion = Math.floor(Math.random() * IDLE_MOTIONS.length);
+        if (IDLE_MOTIONS.length > 1 && motion === previous) motion = (motion + 1) % IDLE_MOTIONS.length;
+        previous = motion;
+        setIdleMotion(motion);
+        next();
+      }, 2800 + Math.random() * 3200);
+    };
+    next();
+    return () => { active = false; window.clearTimeout(timeout); };
+  }, [userId, companionId]);
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const activeDrag = drag.current;
+      if (!activeDrag) return;
+      if (Math.abs(event.clientX - activeDrag.x) + Math.abs(event.clientY - activeDrag.y) > 5) dragged.current = true;
+      const width = Math.min(210, window.innerWidth - 24);
+      const height = Math.min(310, window.innerHeight - 24);
+      setPosition({
+        left: Math.max(0, Math.min(window.innerWidth - width, activeDrag.left + event.clientX - activeDrag.x)),
+        top: Math.max(0, Math.min(window.innerHeight - height, activeDrag.top + event.clientY - activeDrag.y)),
+      });
+    };
+    const end = () => {
+      if (drag.current && dragged.current) {
+        setPosition(current => {
+          if (current) writeUserPreference(POSITION_KEY, userId, current);
+          return current;
+        });
+      }
+      drag.current = null;
+    };
+    const resize = () => setPosition(current => {
+      if (!current) return current;
+      const width = Math.min(210, window.innerWidth - 24);
+      const height = Math.min(310, window.innerHeight - 24);
+      const next = {
+        left: Math.max(0, Math.min(window.innerWidth - width, current.left)),
+        top: Math.max(0, Math.min(window.innerHeight - height, current.top)),
+      };
+      writeUserPreference(POSITION_KEY, userId, next);
+      return next;
+    });
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    window.addEventListener('resize', resize);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      window.removeEventListener('resize', resize);
+    };
+  }, [userId]);
+
+  const beginDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    dragged.current = false;
+    drag.current = { x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+  };
+
+  const playReaction = () => {
+    if (dragged.current) { dragged.current = false; return; }
+    const source: 1 | 2 = Math.random() < 0.5 ? 1 : 2;
+    const reaction = REACTIONS[Math.floor(Math.random() * REACTIONS.length)];
+    animationKey.current += 1;
+    setAnimation({ source, reaction, key: animationKey.current });
+  };
+
+  const width = Math.min(210, Math.max(140, window.innerWidth - 24));
+  const positionStyle: React.CSSProperties = position
+    ? { left: position.left, top: position.top }
+    : { right: 20, bottom: 18 };
+
+  return <div
+    className="nexus-assistant-companion"
+    onPointerDown={beginDrag}
+    style={{ ...positionStyle, width }}
+    title="Hold and drag to move · Click for a random animation"
+  >
+    <button className="nexus-assistant-companion-action" onClick={playReaction} aria-label="Play a random assistant animation" type="button">
+      {!modelFailed ? <Suspense fallback={<img className={`nexus-assistant-companion-fallback nexus-assistant-idle-${IDLE_MOTIONS[idleMotion]}`} src="/assistants/waifu-2/idle.webp" alt="" />}>
+        <CompanionModel onError={markModelFailed} idleMotionClass={`nexus-assistant-idle-${IDLE_MOTIONS[idleMotion]}`} />
+      </Suspense> : <img className={`nexus-assistant-companion-fallback nexus-assistant-idle-${IDLE_MOTIONS[idleMotion]}`} src="/assistants/waifu-2/idle.webp" alt="" />}
+      {animation && <video
+        key={animation.key}
+        className={`nexus-assistant-companion-animation ${animation.reaction}`}
+        src={`/assistants/waifu-2/ani-${animation.source}.webm`}
+        autoPlay
+        muted
+        playsInline
+        onEnded={() => setAnimation(null)}
+        onError={() => setAnimation(null)}
+      />}
+    </button>
+    <span className="nexus-assistant-companion-hint" aria-hidden="true">Click me</span>
+  </div>;
+}

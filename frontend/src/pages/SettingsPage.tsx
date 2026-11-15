@@ -86,6 +86,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
     return readUserPreference('nexus-ai-name', currentUser?.id || 'guest', 'NEXUS').slice(0, 10);
   });
   const [assistantNameSaved, setAssistantNameSaved] = useState(false);
+  const [companionEnabled, setCompanionEnabled] = useState(() => readUserPreference('nexus-ai-companion-enabled', currentUser?.id || 'guest', false));
+  const [companionId, setCompanionId] = useState(() => readUserPreference('nexus-ai-companion-id', currentUser?.id || 'guest', 'waifu-2'));
   const [dashboardPreferences, setDashboardPreferences] = useState<DashboardPreferences>(() => readDashboardPreferences(currentUser?.id || 'guest'));
   const [dashboardTimetable, setDashboardTimetable] = useState<PersonalTimetable | null>(() => readPersonalTimetable(currentUser?.id || 'guest'));
   const [timetableMessage, setTimetableMessage] = useState('');
@@ -112,6 +114,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
     setCampusNotifications(readPreference('campusNotifications', userId, true));
     setDeadlineNotifications(readPreference('deadlineNotifications', userId, true));
     setAssistantName(readUserPreference('nexus-ai-name', userId, 'NEXUS').slice(0, 10));
+    setCompanionEnabled(readUserPreference('nexus-ai-companion-enabled', userId, false));
+    setCompanionId(readUserPreference('nexus-ai-companion-id', userId, 'waifu-2'));
     setProfileLaunchEffect(readUserPreference<ProfileLaunchEffect>(PROFILE_LAUNCH_EFFECT_KEY, userId, 'classic') === 'fireball' ? 'fireball' : 'classic');
     setCustomPalettes(readCustomUiPalettes(userId));
   }, [currentUser?.id]);
@@ -221,6 +225,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
     window.dispatchEvent(new CustomEvent('nexus-ai-name-updated', { detail: { name } }));
     setAssistantNameSaved(true);
     setTimeout(() => setAssistantNameSaved(false), 3000);
+  };
+
+  const updateCompanion = (enabled: boolean, id = companionId) => {
+    setCompanionEnabled(enabled);
+    setCompanionId(id);
+    if (currentUser) {
+      writeUserPreference('nexus-ai-companion-enabled', currentUser.id, enabled);
+      writeUserPreference('nexus-ai-companion-id', currentUser.id, id);
+    }
+    window.dispatchEvent(new CustomEvent('nexus-ai-companion-updated', { detail: { enabled, id } }));
+  };
+
+  const addCompanion = () => {
+    const accepted = window.confirm('Content warning: this anime-style waifu assistant includes mildly suggestive imagery, including underwear visible in a supplied animation. Add the draggable character to your pages?');
+    if (accepted) updateCompanion(true);
   };
 
   const saveCustomPalette = () => {
@@ -817,6 +836,26 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onLogou
                 <p role="status" style={{ color: assistantNameSaved ? 'var(--accent-green)' : 'var(--text-subtle)', fontSize: 12, margin: 0 }}>
                   {assistantNameSaved ? `Saved. The launcher now says “Ask ${assistantName}${assistantName.toUpperCase().endsWith(' AI') ? '' : ' AI'}”.` : 'The name is saved in this browser and updates the launcher immediately.'}
                 </p>
+                <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 18, display: 'grid', gap: 13 }}>
+                  <div>
+                    <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>Assistance</h3>
+                    <p style={{ margin: 0 }}>Choose an on-screen companion. More assistants can be added here later.</p>
+                  </div>
+                  <label style={{ display: 'block', width: 'min(420px, 100%)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+                    Assistance
+                    <select value={companionId} onChange={event => updateCompanion(companionEnabled, event.target.value)} aria-label="Choose an assistance companion" style={{ display: 'block', width: '100%', marginTop: 7 }}>
+                      <option value="waifu-2">Waifu assistant</option>
+                    </select>
+                  </label>
+                  <label className="discord-settings-toggle-row">
+                    <span><strong>Enable AI companion</strong><small>Show the draggable character on your pages.</small></span>
+                    <input type="checkbox" checked={companionEnabled} onChange={event => event.target.checked ? addCompanion() : updateCompanion(false)} />
+                  </label>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button type="button" onClick={addCompanion} style={{ padding: '9px 16px', borderRadius: 'var(--radius-sm)', background: 'var(--primary)', color: '#fff', fontWeight: 600, fontSize: 13 }}>Add assistance</button>
+                    <span style={{ color: 'var(--text-subtle)', fontSize: 12 }}>Character by KUHAN B K · Your choice is saved in this browser.</span>
+                  </div>
+                </div>
               </section>}
 
               {activeSection === 'notifications' && <section className="discord-settings-card">

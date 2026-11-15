@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@emoji-mart/data": "^1.2.1",
+    "@pixiv/three-vrm": "^3.5.5",
     "@tanstack/react-query": "^5.62.7",
     "emoji-regex": "^10.6.0",
     "firebase": "^13.2.0",
@@ -21,6 +22,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.0.2",
+    "three": "^0.187.0",
     "unicode-emoji-json": "^0.9.0"
   },
   "devDependencies": {

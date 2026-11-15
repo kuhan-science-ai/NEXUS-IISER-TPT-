@@ -2003,14 +2003,16 @@ class RealtimeHub(DurableObject):
         if request.headers.get("Upgrade", "").lower() != "websocket":
             return WorkerResponse("WebSocket upgrade required", status=426)
         client, server = WebSocketPair.new().object_values()
-        self.ctx.accept_web_socket(server, [user_id])
+        # The Workers Python runtime exposes Durable Object context methods
+        # with their JavaScript camelCase names.
+        self.ctx.acceptWebSocket(server, [user_id])
         server.send(json.dumps({"event": "system.ready", "user_id": user_id}))
         return WorkerResponse(None, status=101, web_socket=client)
 
     async def publish(self, user_ids, event, payload):
         message = json.dumps({"event": event, **payload})
         for user_id in user_ids:
-            for socket in self.ctx.get_websockets(user_id):
+            for socket in self.ctx.getWebSockets(user_id):
                 try:
                     socket.send(message)
                 except Exception:

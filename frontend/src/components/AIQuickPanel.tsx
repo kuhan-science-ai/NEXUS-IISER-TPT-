@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Crosshair, X, Send, Check, Ban, Copy, Move, Plus, Reply, ScanLine, Sparkles, ArrowRight } from 'lucide-react';
 import { api, UserSummary } from '../services/api';
 import { MathRenderer } from './MathRenderer';
+import { AssistantCompanionPet } from './AssistantCompanionPet';
 import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 
 type ChatLine = { role: 'user' | 'assistant'; content: string; status?: string };
@@ -40,6 +41,8 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
   const [pending, setPending] = useState<any>(null);
   const [error, setError] = useState('');
   const [assistantName, setAssistantName] = useState(() => readUserPreference('nexus-ai-name', userId, 'NEXUS').slice(0, 10));
+  const [companionEnabled, setCompanionEnabled] = useState(() => readUserPreference('nexus-ai-companion-enabled', userId, false));
+  const [companionId, setCompanionId] = useState(() => readUserPreference('nexus-ai-companion-id', userId, 'waifu-2'));
   const launcherDisplayName = assistantName.toUpperCase().endsWith(' AI') ? assistantName : `${assistantName} AI`;
   const convId = useRef<string | null>(null);
   const requestController = useRef<AbortController | null>(null);
@@ -53,6 +56,8 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
     setLauncherPosition(readLauncherPosition(userId));
     setLauncherDock(readLauncherDock(userId));
     setAssistantName(readUserPreference('nexus-ai-name', userId, 'NEXUS').slice(0, 10));
+    setCompanionEnabled(readUserPreference('nexus-ai-companion-enabled', userId, false));
+    setCompanionId(readUserPreference('nexus-ai-companion-id', userId, 'waifu-2'));
   }, [userId]);
 
   const toggle = useCallback(() => { setOpen(value => !value); setPointMode(false); }, []);
@@ -65,6 +70,16 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
     window.addEventListener('nexus-ai-name-updated', updateName);
     window.addEventListener('storage', updateName);
     return () => { window.removeEventListener('nexus-ai-name-updated', updateName); window.removeEventListener('storage', updateName); };
+  }, [userId]);
+  useEffect(() => {
+    const updateCompanion = (event?: Event) => {
+      const detail = (event as CustomEvent<{ enabled?: boolean; id?: string }> | undefined)?.detail;
+      setCompanionEnabled(typeof detail?.enabled === 'boolean' ? detail.enabled : readUserPreference('nexus-ai-companion-enabled', userId, false));
+      setCompanionId(typeof detail?.id === 'string' ? detail.id : readUserPreference('nexus-ai-companion-id', userId, 'waifu-2'));
+    };
+    window.addEventListener('nexus-ai-companion-updated', updateCompanion);
+    window.addEventListener('storage', updateCompanion);
+    return () => { window.removeEventListener('nexus-ai-companion-updated', updateCompanion); window.removeEventListener('storage', updateCompanion); };
   }, [userId]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -330,6 +345,7 @@ export const AIQuickPanel: React.FC<{ currentUser: UserSummary | null }> = ({ cu
   };
 
   return <div data-nexus-ai-panel style={{ position: 'fixed', zIndex: 1200, ...(open ? (panelPosition || { right: 20, bottom: 20 }) : launcherPosition ? (launcherDock === 'right' ? { right: window.innerWidth - launcherPosition.left - 42, top: launcherPosition.top } : { left: launcherPosition.left, top: launcherPosition.top }) : { left: 15, bottom: 62 }), fontFamily: 'inherit' }}>
+    {companionEnabled && <AssistantCompanionPet userId={userId} companionId={companionId} />}
     {annotationMode && <div
       onPointerDown={event => { annotationStart.current = { x: event.clientX, y: event.clientY }; setAnnotationRect({ left: event.clientX, top: event.clientY, width: 0, height: 0 }); event.currentTarget.setPointerCapture(event.pointerId); }}
       onPointerMove={event => { if (!annotationStart.current) return; const start = annotationStart.current; setAnnotationRect({ left: Math.min(start.x, event.clientX), top: Math.min(start.y, event.clientY), width: Math.abs(event.clientX - start.x), height: Math.abs(event.clientY - start.y) }); }}
