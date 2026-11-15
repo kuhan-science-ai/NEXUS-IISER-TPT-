@@ -1,0 +1,77 @@
+NEXUS assistant companion animation workflow
+============================================
+
+Current default animation
+-------------------------
+Source: assistants waifus and hunsbandos/default ani.mov
+Output: frontend/public/assistants/waifu-2/default-ani.webm
+The app plays this once when the companion is enabled, then removes the video
+and reveals the existing VRM A-pose. Click animations remain ani-1.webm/ani-2.webm.
+
+How this clip was prepared
+--------------------------
+1. Check the source with ffprobe. Confirm the selected video stream, frame rate,
+   dimensions, and duration. This source is 3840x2160 at 30 fps, about 7.4 sec.
+2. Review a contact sheet from the full clip to locate the character throughout
+   its movement. Crop tightly enough to discard the fixed VRoid Hub lettering,
+   but leave margin around ears, hands, feet, and motion. This clip used source
+   crop 900x1400 at x=1470,y=400, scaled to 450x700.
+3. Do not chroma-key this white-background source: the character has white
+   clothes, so a white key eats the outfit. Extract the cropped frames at 30 fps
+   as numbered PNGs and run an anime foreground matting model on every frame.
+   The conversion here used Python rembg with isnet-anime and
+   post_process_mask=True. Load the model once and reuse its session for all
+   frames. Keep the transparent PNG sequence outside the repository during work.
+   Example PowerShell extraction (adjust the crop after reviewing the source):
+
+     $frames = Join-Path $env:TEMP 'nexus-waifu-default-frames'
+     New-Item -ItemType Directory -Force -Path $frames | Out-Null
+     ffmpeg -y -i 'assistants waifus and hunsbandos/default ani.mov' -an `
+       -vf "fps=30,crop=900:1400:1470:400,scale=450:700:flags=lanczos" `
+       (Join-Path $frames 'frame-%05d.png')
+
+   Example frame matting (install rembg[cpu] in the temporary conversion
+   environment; do not add it to frontend dependencies):
+
+     from pathlib import Path
+     from PIL import Image
+     from rembg import new_session, remove
+     import os, re
+     folder = Path(os.environ['TEMP']) / 'nexus-waifu-default-frames'
+     files = sorted(p for p in folder.glob('frame-*.png')
+                    if re.fullmatch(r'frame-\d{5}\.png', p.name))
+     session = new_session('isnet-anime')
+     for path in files:
+         rgba = Image.open(path).convert('RGBA')
+         remove(rgba, session=session, post_process_mask=True).save(
+             path.with_name(path.stem + '-alpha.png'))
+
+4. Inspect representative transparent frames on a dark background, including
+   the beginning, middle, end, and frames with the widest pose. Check hands,
+   hair tips, white outfit edges, shoes, and any leftover background. Adjust the
+   crop/mask before encoding if there are cutoffs, halos, or holes. A correct
+   alpha preview must show the full white outfit over dark pixels.
+5. Encode the alpha PNG sequence as VP9 WebM at the source 30 fps, preserving
+   alpha. The encoding used `libvpx-vp9`, `yuva420p`, `-auto-alt-ref 0`, and
+   `-crf 30`; output was about 0.7 MB. Example:
+
+     ffmpeg -y -framerate 30 -i "$frames\frame-%05d-alpha.png" `
+       -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 0 -crf 30 `
+       -auto-alt-ref 0 -deadline good -cpu-used 2 `
+       frontend/public/assistants/waifu-2/default-ani.webm
+
+   Do not rely only on ffprobe's displayed
+   pixel format: check the WebM `alpha_mode=1` tag and decode a frame using the
+   libvpx-vp9 decoder before compositing it on a dark test background. FFmpeg's
+   native VP9 decoder may show an opaque frame even when the WebM alpha is valid.
+6. Put the finished asset in `frontend/public/assistants/waifu-2/`. Reference it
+   in AssistantCompanionPet.tsx with `autoPlay`, `muted`, and `playsInline`;
+   clear animation state on `onEnded` so the VRM rest pose returns. Keep the
+   existing model and interaction animations unchanged unless requested.
+7. Update PROJECT_STATE.md and CHANGELOG.md, run `npm run build` in frontend,
+   and inspect the deployed/local browser behavior: first activation plays the
+   default clip once, its background is transparent, and the character returns
+   to the A-pose. Do not commit source video frames, downloaded model files, or
+   the temporary matting environment.
+
+App runtime dependencies were not changed to prepare the current asset.

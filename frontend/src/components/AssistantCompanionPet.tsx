@@ -8,7 +8,7 @@ const IDLE_MOTIONS = ['float', 'lean', 'bounce', 'peek', 'sway'];
 
 type Position = { left: number; top: number };
 type PetDrag = { x: number; y: number; left: number; top: number };
-type PetAnimation = { source: 1 | 2; key: number };
+type PetAnimation = { source: 'default' | 1 | 2; key: number };
 
 function readPosition(userId: string): Position | null {
   const value = readUserPreference<Position | null>(POSITION_KEY, userId, null);
@@ -18,18 +18,23 @@ function readPosition(userId: string): Position | null {
 
 export function AssistantCompanionPet({ userId, companionId }: { userId: string; companionId: string }) {
   const [position, setPosition] = useState<Position | null>(() => readPosition(userId));
-  const [animation, setAnimation] = useState<PetAnimation | null>(null);
+  const [animation, setAnimation] = useState<PetAnimation | null>(() => ({ source: 'default', key: 0 }));
   const [modelFailed, setModelFailed] = useState(false);
   const [idleMotion, setIdleMotion] = useState(0);
   const drag = useRef<PetDrag | null>(null);
   const dragged = useRef(false);
   const animationKey = useRef(0);
+  const previousCompanion = useRef({ userId, companionId });
   const markModelFailed = useCallback(() => setModelFailed(true), []);
 
   useEffect(() => {
     setPosition(readPosition(userId));
-    setAnimation(null);
     setModelFailed(false);
+    if (previousCompanion.current.userId !== userId || previousCompanion.current.companionId !== companionId) {
+      previousCompanion.current = { userId, companionId };
+      animationKey.current += 1;
+      setAnimation({ source: 'default', key: animationKey.current });
+    }
   }, [userId, companionId]);
 
   useEffect(() => {
@@ -127,10 +132,11 @@ export function AssistantCompanionPet({ userId, companionId }: { userId: string;
       {animation && <video
         key={animation.key}
         className="nexus-assistant-companion-animation"
-        src={`/assistants/waifu-2/ani-${animation.source}.webm`}
+        src={animation.source === 'default' ? '/assistants/waifu-2/default-ani.webm' : `/assistants/waifu-2/ani-${animation.source}.webm`}
         autoPlay
         muted
         playsInline
+        preload="auto"
         onEnded={() => setAnimation(null)}
         onError={() => setAnimation(null)}
       />}
