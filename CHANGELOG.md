@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-15
+- Friends and Messenger now retain cached friends, requests, and conversations on screen while refreshing in the background; the Friends route shares Messenger's conversation cache for immediate sidebar rendering.
 - Unified the Friends and Messenger conversation sidebar, replacing the Friends-only empty Direct Messages placeholder with the same live conversation list and persisted collapse behavior. Selecting a conversation from Friends opens it in Messenger's center panel.
 - Rebuilt Discussion Forums as a global, persistent D1 forum with channel filters, Trending/Latest/Unanswered sorting, post voting, nested replies, and a Messenger-style thread panel. Added global Durable Object forum update events and migration `0017_global_forums.sql`; applied the migration to production and deployed Worker version `ed84cf6d-6334-4219-ae5b-f93db92ba243` with the rebuilt frontend.
 - Lowered the companion's VRM upper arms further in its resting A-pose so they no longer appear close to a T-pose after an animation ends.

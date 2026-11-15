@@ -48,7 +48,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
 
   const loadConversations = useCallback(async () => {
     try { const rows = await api.listConversations(); setConversations(rows); const requested = new URLSearchParams(location.search).get('conversationId'); setActiveConvId(current => requested && rows.some((row: Conversation) => row.id === requested) ? requested : current && rows.some((row: Conversation) => row.id === current) ? current : null); }
-    catch { setConversations([]); }
+    catch { /* Keep cached conversations visible if the background refresh fails. */ }
   }, [location.search]);
   useEffect(() => { void loadConversations(); const refreshOnProfile = () => void loadConversations(); window.addEventListener('nexus-profile-updated', refreshOnProfile); return () => window.removeEventListener('nexus-profile-updated', refreshOnProfile); }, [loadConversations]);
   useEffect(() => {

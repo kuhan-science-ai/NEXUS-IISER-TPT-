@@ -11,6 +11,7 @@ import './FriendsPage.css';
 
 interface FriendsPageProps { currentUser: UserSummary | null; onLogout?: () => void; }
 const readFriendsCache = (userId: string, slot: string) => { try { return JSON.parse(sessionStorage.getItem(`nexus-friends:${userId}:${slot}`) || '[]'); } catch { return []; } };
+const readFriendsConversationCache = (userId: string) => { try { return JSON.parse(sessionStorage.getItem(`nexus-friends:${userId}:conversations`) || sessionStorage.getItem(`nexus-dm-conversations:${userId}`) || '[]'); } catch { return []; } };
 
 export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout }) => {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -20,7 +21,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout 
   const [friends, setFriends] = useState<any[]>(() => readFriendsCache(currentUser?.id || 'guest', 'friends'));
   const [requests, setRequests] = useState<any[]>(() => readFriendsCache(currentUser?.id || 'guest', 'requests'));
   const [sentRequests, setSentRequests] = useState<any[]>(() => readFriendsCache(currentUser?.id || 'guest', 'sent'));
-  const [conversations, setConversations] = useState<any[]>([]);
+  const [conversations, setConversations] = useState<any[]>(() => readFriendsConversationCache(currentUser?.id || 'guest'));
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<any | null>(null);
   const [profileTab, setProfileTab] = useState<'activity' | 'friends' | 'groups'>('activity');
@@ -37,7 +38,9 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout 
       sessionStorage.setItem(`nexus-friends:${currentUser?.id}:friends`, JSON.stringify(friendRows));
       sessionStorage.setItem(`nexus-friends:${currentUser?.id}:requests`, JSON.stringify(requestRows));
       sessionStorage.setItem(`nexus-friends:${currentUser?.id}:sent`, JSON.stringify(sentRows));
-    } catch { setFriends([]); setRequests([]); setSentRequests([]); setConversations([]); }
+      sessionStorage.setItem(`nexus-friends:${currentUser?.id}:conversations`, JSON.stringify(conversationRows));
+      sessionStorage.setItem(`nexus-dm-conversations:${currentUser?.id}`, JSON.stringify(conversationRows));
+    } catch { /* Keep the session's cached lists visible if a background refresh fails. */ }
   };
   useEffect(() => { void load(); const onRealtime = (event: Event) => { const name = (event as CustomEvent).detail?.event; if (name === 'friends.changed' || name === 'conversation.created' || name?.startsWith('message.')) { void load(); if (name === 'friends.changed' && query.trim()) void api.searchUsers(query.trim()).then(setSearchResults).catch(() => undefined); if (name === 'friends.changed' && selectedProfile) void api.getPublicProfile(selectedProfile.username).then(setSelectedProfile).catch(() => undefined); } }; window.addEventListener('nexus-realtime-event', onRealtime); const refresh = window.setInterval(() => void load(), 15_000); return () => { window.removeEventListener('nexus-realtime-event', onRealtime); window.clearInterval(refresh); }; }, [currentUser?.id, currentUser?.avatar_url, currentUser?.avatar_file_id, query, selectedProfile?.username]);
 

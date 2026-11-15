@@ -4,7 +4,7 @@ The AI Assistant settings include a browser-saved companion selector and enable 
 
 Messenger emoji picker exposes the full Twemoji catalog in a dedicated pack tab alongside its recent and category views. Picker and shortcode suggestion popups render through a document-level portal to avoid clipping and stacking-context issues.
 
-Friends and Messenger share one conversation sidebar with the same search, conversation list, profile footer, and saved collapse state. The center panel changes with the active route; opening a conversation from Friends navigates to that chat in Messenger while preserving the shared sidebar.
+Friends and Messenger share one conversation sidebar with the same search, conversation list, profile footer, and saved collapse state. The center panel changes with the active route; opening a conversation from Friends navigates to that chat in Messenger while preserving the shared sidebar. Friends, requests, and conversations render from session cache immediately and stay visible while their background refresh runs or fails.
 
 Group chat composers use the same emoji picker and shortcode conversion as Messenger. Direct and group reaction pickers add only the selected emoji; saved reaction chips render the matching Twemoji asset with count and current-user state, supporting multiple distinct reactions per message.
 
