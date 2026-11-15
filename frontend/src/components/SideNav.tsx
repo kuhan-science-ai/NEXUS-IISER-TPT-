@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Activity, Bell, BookOpen, BriefcaseBusiness, CalendarDays, Check, CircleHelp, Home,
@@ -22,74 +22,9 @@ interface NavItem {
   badge?: string | number;
 }
 
-type BrandAnimationTheme = 'pink' | 'soapy';
-
-function chooseBrandAnimationTheme(): BrandAnimationTheme {
-  if (typeof window === 'undefined') return 'pink';
-  try {
-    const previous = window.sessionStorage.getItem('nexus-brand-animation-theme');
-    const navigation = window.performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-    const refreshed = navigation?.type === 'reload';
-    const next: BrandAnimationTheme = previous === 'pink' || previous === 'soapy'
-      ? refreshed ? (previous === 'pink' ? 'soapy' : 'pink') : previous
-      : 'pink';
-    window.sessionStorage.setItem('nexus-brand-animation-theme', next);
-    return next;
-  } catch {
-    return 'pink';
-  }
-}
-
-// These are module scoped so route changes keep the chosen pair and playback
-// position. A real document reload resets the position and alternates the pair.
-const brandAnimationTheme = chooseBrandAnimationTheme();
-let brandAnimationPositionSeconds = 0;
-
-const brandAnimationAssets = {
-  pink: {
-    nexus: '/media/brand/pink-nexus.webm',
-    nx: '/media/brand/pink-nx.webm',
-    loopStart: 3,
-  },
-  soapy: {
-    nexus: '/media/brand/soapy-nexus.webm',
-    nx: '/media/brand/soapy-nx.webm',
-    loopStart: 1,
-  },
-} satisfies Record<BrandAnimationTheme, { nexus: string; nx: string; loopStart: number }>;
-
 export const SideNav: React.FC<SideNavProps> = ({ currentUser, onLogout, onOpenSearch }) => {
   const loc = useLocation();
   const [collapsed, setCollapsed] = useState(() => readUserPreference('nexus-sidebar-collapsed', currentUser.id, false));
-  const nexusAnimationRef = useRef<HTMLVideoElement | null>(null);
-  const nxAnimationRef = useRef<HTMLVideoElement | null>(null);
-  const animationsStartedRef = useRef(false);
-  const animationPair = brandAnimationAssets[brandAnimationTheme];
-
-  const startBrandAnimationsTogether = () => {
-    const nexusAnimation = nexusAnimationRef.current;
-    const nxAnimation = nxAnimationRef.current;
-    if (animationsStartedRef.current || !nexusAnimation || !nxAnimation) return;
-    if (nexusAnimation.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || nxAnimation.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return;
-
-    animationsStartedRef.current = true;
-    nexusAnimation.currentTime = brandAnimationPositionSeconds;
-    nxAnimation.currentTime = brandAnimationPositionSeconds;
-    void Promise.all([nexusAnimation.play(), nxAnimation.play()]).catch(() => {
-      animationsStartedRef.current = false;
-    });
-  };
-
-  const resumeBrandLoop = (event: React.SyntheticEvent<HTMLVideoElement>) => {
-    event.currentTarget.currentTime = animationPair.loopStart;
-    brandAnimationPositionSeconds = animationPair.loopStart;
-    void event.currentTarget.play().catch(() => undefined);
-  };
-
-  const rememberBrandAnimationPosition = (event: React.SyntheticEvent<HTMLVideoElement>) => {
-    brandAnimationPositionSeconds = event.currentTarget.currentTime;
-  };
-
   React.useEffect(() => {
     setCollapsed(readUserPreference('nexus-sidebar-collapsed', currentUser.id, false));
   }, [currentUser.id]);
@@ -260,21 +195,7 @@ export const SideNav: React.FC<SideNavProps> = ({ currentUser, onLogout, onOpenS
       zIndex: 40,
     }}>
       <nav className="discord-server-rail" aria-label="Quick navigation">
-        <Link to="/dashboard" className="discord-rail-home" aria-label="NEXUS home" title="NEXUS">
-          <video
-            ref={nxAnimationRef}
-            className="discord-home-animation"
-            src={animationPair.nx}
-            muted
-            autoPlay
-            playsInline
-            preload="auto"
-            aria-hidden="true"
-            onCanPlay={startBrandAnimationsTogether}
-            onEnded={resumeBrandLoop}
-            onTimeUpdate={rememberBrandAnimationPosition}
-          />
-        </Link>
+        <Link to="/dashboard" className="discord-rail-home" aria-label="NEXUS home" title="NEXUS">N</Link>
         <span className="discord-rail-divider" />
         {[workspaceItems, communityItems, campusItems, toolsItems].map((group, groupIndex) => (
           <React.Fragment key={groupIndex}>
@@ -319,19 +240,7 @@ export const SideNav: React.FC<SideNavProps> = ({ currentUser, onLogout, onOpenS
         marginBottom: '16px',
       }}>
         <Link to="/dashboard" className="discord-brand-link">
-          <video
-            ref={nexusAnimationRef}
-            className="discord-brand-animation"
-            src={animationPair.nexus}
-            muted
-            autoPlay
-            playsInline
-            preload="auto"
-            aria-hidden="true"
-            onCanPlay={startBrandAnimationsTogether}
-            onEnded={resumeBrandLoop}
-            onTimeUpdate={rememberBrandAnimationPosition}
-          />
+          <span className="discord-brand-wordmark">NEXUS</span>
         </Link>
         <button
           onClick={toggleCollapsed}
