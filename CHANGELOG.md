@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-15
+- Adjusted the forum reply connector to meet the reply avatar at its vertical midpoint with a visible gap.
 - Matched forum reply rows to Messenger's shared reply preview and avatar sizing, and aligned nested replies with the main comment column.
 - Closing a forum thread now hides its panel and expands the discussion feed. Reopening a discussion restores its session-cached thread immediately while syncing fresh details in the background.
 - Friends and Messenger now retain cached friends, requests, and conversations on screen while refreshing in the background; the Friends route shares Messenger's conversation cache for immediate sidebar rendering.

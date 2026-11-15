@@ -74,6 +74,7 @@
 .forum-comment .nexus-chat-avatar-slot { width:32px; min-width:32px; }
 .forum-comment .nexus-chat-message-avatar { width:32px; height:32px; }
 .forum-comment .nexus-message-main { min-width:0; flex:1; }
+.forum-comment.has-reply-preview .nexus-reply-connector { top:38px; left:-92px; width:45px; }
 .forum-comment .forum-reply-button { margin-top:5px; padding:2px 0; border:0; background:transparent; color:var(--text-subtle); font-size:9px; cursor:pointer; }
 .forum-comment .forum-reply-button:hover { color:var(--primary); }
 .forum-thread-empty { display:flex; align-items:center; gap:8px; padding:10px 8px; color:var(--text-subtle); font-size:10px; }
