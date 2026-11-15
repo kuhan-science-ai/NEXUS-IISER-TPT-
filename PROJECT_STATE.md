@@ -8,6 +8,8 @@ Friends and Messenger share one conversation sidebar with the same search, conve
 
 Discussion forum threads can be closed to expand the post feed and reopened by selecting a post. Thread details are cached in session storage and shown immediately on reopen while refreshing in the background.
 
+Forum comments use Messenger's shared reply preview and avatar sizing. Reply rows keep the same message alignment as other comments; the quoted preview and connector indicate the replied-to message.
+
 Group chat composers use the same emoji picker and shortcode conversion as Messenger. Direct and group reaction pickers add only the selected emoji; saved reaction chips render the matching Twemoji asset with count and current-user state, supporting multiple distinct reactions per message.
 
 Message author names align with avatars in Messenger and Study Groups, with a compact gap before the message text and consistent space between messages.

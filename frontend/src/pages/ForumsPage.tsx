@@ -232,7 +232,7 @@ export const ForumsPage: React.FC<ForumsPageProps> = ({ currentUser, onLogout })
               </article>
               {detail.comments?.map(comment => {
                 const parent = comment.parent_comment_id ? detail.comments.find(item => item.id === comment.parent_comment_id) : undefined;
-                return <article id={`forum-comment-${comment.id}`} key={comment.id} className={`nexus-message-row nexus-chat-message forum-comment${comment.parent_comment_id ? ' is-reply' : ''}`}>
+                return <article id={`forum-comment-${comment.id}`} key={comment.id} className={`nexus-message-row nexus-chat-message forum-comment${parent ? ' has-reply-preview' : ''}`}>
                   <span className="nexus-chat-avatar-slot"><ProfileAvatar className="nexus-message-avatar nexus-chat-message-avatar" user={comment} label={comment.author_name} /></span>
                   <div className="nexus-message-main">{parent && <MessageReplyPreview author={parent.author_name || parent.author_username || 'NEXUS member'} content={parent.content_latex} user={parent} onClick={() => document.getElementById(`forum-comment-${parent.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} ariaLabel={`Jump to reply from ${parent.author_name || parent.author_username || 'member'}`} />}<div className="nexus-message-meta"><strong>{authorLabel(comment, currentUser)}</strong><time>{new Date(comment.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</time></div><div className="nexus-message-text-line"><p><TwemojiText>{comment.content_latex}</TwemojiText></p></div><button className="forum-reply-button" type="button" onClick={() => setReplyTarget(comment)}>Reply</button></div>
                 </article>;
