@@ -17,8 +17,8 @@ export const MessageReplyPreview: React.FC<MessageReplyPreviewProps> = ({ author
     <span className="nexus-reply-preview-content">
       <ProfileAvatar className="nexus-reply-avatar" user={user} label={author} size={16} />
       <span className="nexus-reply-preview-copy">
-        <TwemojiText className="nexus-reply-quoted-message">{content}</TwemojiText>
         <span className="nexus-reply-author" title={author}>{author}</span>
+        <TwemojiText className="nexus-reply-quoted-message">{content}</TwemojiText>
       </span>
     </span>
   </button>

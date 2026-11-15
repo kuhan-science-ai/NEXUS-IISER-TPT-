@@ -14,7 +14,7 @@ Group chat composers use the same emoji picker and shortcode conversion as Messe
 
 Message author names align with avatars in Messenger and Study Groups, with a compact gap before the message text and consistent space between messages.
 
-Messenger and Study Group reply previews show the original message quote beside its small avatar, with the original author's name directly underneath. Long quotes truncate responsively; the L-shaped connector and click-to-jump behavior remain intact.
+Messenger, Study Group, and forum reply previews show the original author's name above the quoted message beside its small avatar. Long quotes truncate responsively; the L-shaped connector and click-to-jump behavior remain intact.
 
 Direct and group typing indicators refresh their server timestamp every two seconds while typing, stop 1.4 seconds after the final keystroke, and sync from the API once per second while their chat is open so missed socket events recover promptly.
 
