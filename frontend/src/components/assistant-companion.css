@@ -28,6 +28,7 @@
 
 .nexus-assistant-companion-model,
 .nexus-assistant-companion-fallback,
+.nexus-assistant-companion-rest-pose,
 .nexus-assistant-companion-animation {
   position: absolute;
   inset: 0;
@@ -45,6 +46,8 @@
 
 .nexus-assistant-companion[data-playing="true"] .nexus-assistant-companion-model,
 .nexus-assistant-companion[data-playing="true"] .nexus-assistant-companion-fallback { opacity: 0; }
+.nexus-assistant-companion[data-rest-pose="true"] .nexus-assistant-companion-model { opacity: 0; visibility: hidden; }
+.nexus-assistant-companion-rest-pose { z-index: 1; }
 
 .nexus-assistant-idle-float { animation: nexus-assistant-float 3.8s ease-in-out infinite; }
 .nexus-assistant-idle-lean { animation: nexus-assistant-lean 4.4s ease-in-out infinite; }

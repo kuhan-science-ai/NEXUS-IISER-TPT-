@@ -19,6 +19,7 @@ function readPosition(userId: string): Position | null {
 export function AssistantCompanionPet({ userId, companionId }: { userId: string; companionId: string }) {
   const [position, setPosition] = useState<Position | null>(() => readPosition(userId));
   const [animation, setAnimation] = useState<PetAnimation | null>(() => ({ source: 'default', key: 0 }));
+  const [restPoseVisible, setRestPoseVisible] = useState(false);
   const [modelFailed, setModelFailed] = useState(false);
   const [idleMotion, setIdleMotion] = useState(0);
   const drag = useRef<PetDrag | null>(null);
@@ -33,6 +34,7 @@ export function AssistantCompanionPet({ userId, companionId }: { userId: string;
     if (previousCompanion.current.userId !== userId || previousCompanion.current.companionId !== companionId) {
       previousCompanion.current = { userId, companionId };
       animationKey.current += 1;
+      setRestPoseVisible(false);
       setAnimation({ source: 'default', key: animationKey.current });
     }
   }, [userId, companionId]);
@@ -110,6 +112,7 @@ export function AssistantCompanionPet({ userId, companionId }: { userId: string;
     if (dragged.current) { dragged.current = false; return; }
     const source: 1 | 2 = Math.random() < 0.5 ? 1 : 2;
     animationKey.current += 1;
+    setRestPoseVisible(false);
     setAnimation({ source, key: animationKey.current });
   };
 
@@ -121,6 +124,7 @@ export function AssistantCompanionPet({ userId, companionId }: { userId: string;
   return <div
     className="nexus-assistant-companion"
     data-playing={animation ? 'true' : undefined}
+    data-rest-pose={restPoseVisible ? 'true' : undefined}
     onPointerDown={beginDrag}
     style={{ ...positionStyle, width }}
     title="Hold and drag to move · Click to play one of the animations"
@@ -129,6 +133,7 @@ export function AssistantCompanionPet({ userId, companionId }: { userId: string;
       {!modelFailed ? <Suspense fallback={<img className={`nexus-assistant-companion-fallback nexus-assistant-idle-${IDLE_MOTIONS[idleMotion]}`} src="/assistants/waifu-2/idle.webp" alt="" />}>
         <CompanionModel onError={markModelFailed} idleMotionClass={`nexus-assistant-idle-${IDLE_MOTIONS[idleMotion]}`} />
       </Suspense> : <img className={`nexus-assistant-companion-fallback nexus-assistant-idle-${IDLE_MOTIONS[idleMotion]}`} src="/assistants/waifu-2/idle.webp" alt="" />}
+      {restPoseVisible && <img className={`nexus-assistant-companion-rest-pose nexus-assistant-idle-${IDLE_MOTIONS[idleMotion]}`} src="/assistants/waifu-2/idle.webp" alt="" />}
       {animation && <video
         key={animation.key}
         className="nexus-assistant-companion-animation"
@@ -137,8 +142,8 @@ export function AssistantCompanionPet({ userId, companionId }: { userId: string;
         muted
         playsInline
         preload="auto"
-        onEnded={() => setAnimation(null)}
-        onError={() => setAnimation(null)}
+        onEnded={() => { setAnimation(null); setRestPoseVisible(true); }}
+        onError={() => { setAnimation(null); setRestPoseVisible(true); }}
       />}
     </button>
     <span className="nexus-assistant-companion-hint" aria-hidden="true">Click for animation</span>
