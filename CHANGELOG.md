@@ -2,7 +2,8 @@
 
 All notable changes to the NEXUS core architecture will be documented here.
 
-## [Unreleased] - 2026-11-15
+## [Unreleased] - 2026-11-16
+- Reframed all companion clips on the same transparent 900x1328 canvas and normalized character height/baseline without trimming pose bounds. Added temporal matte smoothing, low-contrast watermark cleanup, shirt-hole filling, and backdrop edge unmixing to reduce clothing and silhouette glitches.
 - Enlarged the animated NEXUS and Nx brand marks, removed the campus tagline, and made the home-rail mark background transparent across themes.
 - Replaced the companion's one-shot default clip with the supplied transparent idle loop, which cycles forward and backward after startup. Startup and clicks now randomly play one of three reaction clips; the original default clip is the third reaction. Reframed all reactions with larger transparent margins so limbs stay inside the existing on-page interaction area.
 - Added paired transparent NEXUS and Nx animations to the sidebar brand row and home rail button. The neon-pink and soapy pairs alternate on full-page reload; both marks start together, play their opening once, then run a later segment forward and backward. Added the source preparation script and cropped VP9 alpha assets.

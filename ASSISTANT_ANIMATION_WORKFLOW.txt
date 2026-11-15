@@ -15,29 +15,35 @@ Asset preparation
 -----------------
 Run `python scripts/prepare_assistant_companion_animations.py` from the
 repository root. The conversion environment needs ffmpeg/ffprobe, Pillow,
-numpy, rembg, and its cached `u2netp` model. These packages are not
+numpy, SciPy, rembg, and its cached `u2netp` model. These packages are not
 frontend runtime dependencies.
 
 The three action sources (`ani-1.mov`, `ani-2.mov`, and `ani-3.mov`) are
-3840x2160 at 30 fps. Each is cropped to 1800x1850 at x=1020,y=200, scaled to
-900x925, and matted with `u2netp`. The script measures the character's
-alpha bounds across every frame, adds transparent padding, and writes the
-cropped VP9 alpha assets to `frontend/public/assistants/waifu-2/`. The broader
-source crop captures arm and leg movement outside the previous frame edges;
-the floating companion's 210x310 interaction box stays the same size.
+3840x2160 at 30 fps. Each is cropped to 1800x1850 at x=1020,y=200 and scaled
+to 900x925 before matting. `u2netp` creates the initial matte; the script
+removes low-contrast background lettering beyond the confident silhouette,
+fills small enclosed holes, and takes a three-frame median to reduce flicker.
+It also removes backdrop color from soft edges before encoding.
 
-The idle source `default ani.mp4` is a 614x994 video with a solid navy backdrop.
-The script samples that backdrop, keys and unmixes its edges, trims before the
-source fade to black at 8.6 seconds, and appends the reversed frames to create
-a seamless forward-and-back cycle. The output replaces `default-ani.webm`.
+The idle source `default ani.mp4` is 614x994 with a solid navy backdrop and uses
+the same semantic matte cleanup and edge color removal as the action sources.
+The script trims before the source fade to black at 8.6 seconds and appends
+reversed frames to create a seamless forward-and-back cycle.
+
+All four clips use one 900x1328 transparent canvas that matches the companion's
+210x310 display ratio. The script measures the complete character bounds over
+the full clip, fits that full pose to the same 1036px height, aligns the feet
+to a shared baseline, and crops only transparent source margins. This keeps
+the character the same visible size while retaining the widest hands, ears,
+and feet in every frame. The idle output replaces `default-ani.webm`.
 
 Verification
 ------------
-Check each output with ffprobe for the `alpha_mode=1` tag. For visual alpha
-inspection, decode with libvpx (`-c:v libvpx-vp9`) and composite a frame on a
-dark background; FFmpeg's native VP9 decoder may display an opaque frame even
-when the WebM alpha is valid. Inspect reaction clips at their widest poses and
-check hands, ears, and shoes against the transparent crop boundaries.
+Check all four outputs with ffprobe for 900x1328 dimensions and the
+`alpha_mode=1` tag. Decode with libvpx (`-c:v libvpx-vp9`) and composite frames
+on both dark and light backgrounds; FFmpeg's default VP9 decoder may display an
+opaque frame even when WebM alpha is valid. Compare full-body heights and inspect
+the shirt, hair edges, widest hand poses, ears, and shoes throughout each clip.
 
 Run `npm run build` in `frontend/` before deployment. The page hides the idle
 video while a reaction plays and cross-fades back to it when that action ends.

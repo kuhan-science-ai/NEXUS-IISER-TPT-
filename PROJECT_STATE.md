@@ -2,7 +2,7 @@
 
 The expanded sidebar brand row displays a larger animated NEXUS mark without the campus tagline, and the larger home-rail mark displays the matching Nx animation on a transparent background. The neon-pink and soapy pairs alternate on document reloads; the two videos wait for each other before starting, play the opening once, then loop the later section back and forth. Browser route changes preserve the selected pair and last playback position. The four cropped transparent VP9 assets are in `frontend/public/media/brand/`; `scripts/prepare_brand_animations.py` documents how they were produced from the supplied MP4s.
 
-The AI Assistant settings include a browser-saved companion selector and enable toggle. The draggable pet starts with a random one of three transparent reaction clips (`ani-1.webm` through `ani-3.webm`), then plays the supplied `default ani.mp4` as a transparent forward-and-back idle loop. Clicking during the idle loop randomly plays a reaction; when it ends, the idle loop restarts. Reaction frames include larger transparent margins so full hands and feet remain inside the existing overlay without expanding its page hitbox. See `ASSISTANT_ANIMATION_WORKFLOW.txt` for the asset preparation and verification steps.
+The AI Assistant settings include a browser-saved companion selector and enable toggle. The draggable pet starts with a random one of three transparent reaction clips (`ani-1.webm` through `ani-3.webm`), then plays the supplied `default ani.mp4` as a transparent forward-and-back idle loop. Clicking during the idle loop randomly plays a reaction; when it ends, the idle loop restarts. All four clips now share a transparent 900x1328 canvas, with the full pose fit to a consistent character height and common foot baseline without clipping hands, ears, or feet. Preparation uses temporally smoothed semantic mattes, low-contrast watermark cleanup, enclosed shirt-hole filling, and background color removal from soft edges. The overlay dimensions and drag hitbox are unchanged. See `ASSISTANT_ANIMATION_WORKFLOW.txt` for asset preparation and verification steps.
 
 Messenger emoji picker exposes the full Twemoji catalog in a dedicated pack tab alongside its recent and category views. Picker and shortcode suggestion popups render through a document-level portal to avoid clipping and stacking-context issues.
 
@@ -26,7 +26,7 @@ Study Groups voice channels now join shared LiveKit SFU rooms, and Messenger voi
 
 Realtime group create/join/channel events include the shared channel snapshot, and joined group views fetch the authorized channel list when opened, so open views update immediately and sync against D1. New groups start with one `general` text channel and one `general vc` voice channel. Empty category headings stay hidden; owner add controls restore a category heading when its first channel is created. Channel labels render with spaces and are easier to read. Deleting a channel requires permanent-deletion confirmation, cascades its messages, and ends any live voice session before removal. Migration `0016_group_default_channels.sql` backfills missing starter categories for existing groups and is applied to production D1.
 
-Last reviewed: 2026-11-15
+Last reviewed: 2026-11-16
 
 Profile avatar URLs and media types flow through friend/search, conversation member, direct-message, and group-message responses. Shared avatar rendering covers Friends, global search, DMs, and group chat. Profile saves refresh local views immediately; active people and conversation lists refresh every 15 seconds.
 
