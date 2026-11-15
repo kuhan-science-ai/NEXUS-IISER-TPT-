@@ -18,7 +18,7 @@ Study Groups voice channels now join shared LiveKit SFU rooms, and Messenger voi
 
 Realtime group create/join/channel events include the shared channel snapshot, and joined group views fetch the authorized channel list when opened, so open views update immediately and sync against D1. New groups start with one `general` text channel and one `general vc` voice channel. Empty category headings stay hidden; owner add controls restore a category heading when its first channel is created. Channel labels render with spaces and are easier to read. Deleting a channel requires permanent-deletion confirmation, cascades its messages, and ends any live voice session before removal. Migration `0016_group_default_channels.sql` backfills missing starter categories for existing groups and is applied to production D1.
 
-Last reviewed: 2026-11-14
+Last reviewed: 2026-11-15
 
 Profile avatar URLs and media types flow through friend/search, conversation member, direct-message, and group-message responses. Shared avatar rendering covers Friends, global search, DMs, and group chat. Profile saves refresh local views immediately; active people and conversation lists refresh every 15 seconds.
 
@@ -48,7 +48,9 @@ Last reviewed: 2026-11-14
 
 Messenger replies now render a compact author-and-message preview with a connector to the replied message. Message lists no longer reserve hidden avatar height for grouped messages; separate author groups have a 10px breathing gap, and empty reaction rows take no space until a reaction is added. The same spacing applies to Study Groups.
 
-Messaging, Friends, Study Groups, and private AI chat use a shared Cloudflare Durable Object WebSocket feed for cross-session updates; recent list/message data is session-cached and validated when opened. Discussion Forums is still sample-only UI state without a shared post/reply API, so it has no cross-user realtime updates yet.
+Discussion Forums is a global D1-backed feed with Physics, Chemistry, Biology, Mathematics, Campus, and Research channels; Trending, Latest, and Unanswered filters; persistent posts, nested replies, and post votes. Selecting a post opens its thread in the right-hand panel, which reuses Messenger's message rows and emoji composer. Forum writes publish a global Durable Object event to connected users; clients refresh the feed and selected thread from D1, with periodic sync while WebSocket is unhealthy. The Worker implementation is in `nexus-backend/src/entry.py`; migration `0017_global_forums.sql` must be applied before deployment. FastAPI retains a matching local forum endpoint.
+
+Messaging, Friends, Study Groups, private AI chat, and Discussion Forums use a shared Cloudflare Durable Object WebSocket feed for cross-session updates; recent list/message data is session-cached and validated when opened.
 
 Study Groups has a collapsible group list rail. Owners can create named text or voice channel tabs; voice rooms and independent persistent voice chat are now connected to the shared LiveKit call surface. Migrations `0015_voice_calls.sql` and `0016_group_default_channels.sql` add voice-call persistence and starter channels and are applied to both local and production D1. LiveKit Cloud URL/key/secret configuration is the remaining setup prerequisite for real media calls.
 

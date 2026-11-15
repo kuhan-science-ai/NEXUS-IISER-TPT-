@@ -17,7 +17,7 @@ router = APIRouter(prefix="/forums", tags=["Forums & Discussions"])
 
 class PostCreateRequest(BaseModel):
     title: str = Field(..., min_length=5, max_length=255)
-    content_latex: str = Field(..., min_length=10)
+    content_latex: str = Field(..., min_length=1, max_length=20_000)
     category: str = Field(..., max_length=100)
 
 class CommentCreateRequest(BaseModel):

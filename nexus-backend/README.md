@@ -1,6 +1,6 @@
 # NEXUS on Cloudflare Workers + D1
 
-This is the Cloudflare deployment for the existing `/api/v1` client contract. It implements account registration/login/profile reads, four beta accounts, user search/friends/requests, globally shared Study Groups, persistent direct/group messaging and typing state, persistent AI session management, and the QOTD/AOTD read, answer, archive, and discussion APIs. Other NEXUS features still use the existing FastAPI app and are not migrated by this Worker.
+This is the Cloudflare deployment for the existing `/api/v1` client contract. It implements account registration/login/profile reads, user search/friends/requests, globally shared Study Groups, persistent direct/group messaging and typing state, persistent AI session management, QOTD/AOTD, academic resources, and a global Discussion Forums feed with persistent posts, nested replies, voting, filters, and cross-user updates. Other NEXUS features still use the existing FastAPI app and are not migrated by this Worker.
 
 ## Local development
 
@@ -90,7 +90,7 @@ cd ..\nexus-backend
 npm run deploy
 ```
 
-The current config points to the existing `nexus-database`. Migrations through `0005_global_groups_typing.sql` are applied in production. Do not use `--remote` for local experiments.
+The current config points to the existing `nexus-database`. Apply all pending migrations before deploying, including `0017_global_forums.sql` for the persistent global forum tables. Do not use `--remote` for local experiments.
 
 ## Supported API slice and current gaps
 
@@ -99,6 +99,7 @@ The current config points to the existing `nexus-database`. Migrations through `
 - Friends, friend requests, profiles, conversations, messages, reactions, pin/edit/delete, and history clearing are persisted in D1.
 - AI conversations, threads, and messages are persisted in D1. All conversations use Qwen3 14B through the bearer-token-protected local proxy and one Cloudflare Tunnel; prompts are capped at 4,000 characters, recent history at ten turns, and page context at 2,500 characters. The laptop and tunnel must be online for responses.
 - QOTD/AOTD questions, archive entries, answer submissions, points, and comments use D1. The migration seeds one initial question. PDF attachments are not supported by this Worker yet.
+- Discussion Forums stores globally visible posts, nested replies, and user-specific post votes in D1. Trending, Latest, Unanswered, category, and text-search filters use the same `/api/v1/forums/posts` contract as FastAPI. Forum writes broadcast an update to connected accounts through the Durable Object global tag.
 - Direct messages and Study Group channels use an authenticated Durable Object WebSocket for push delivery. Open chats also sync messages and typing state every 2.5 seconds while the socket has not received a recent pong, so a stale connection recovers without a page refresh.
 - Uploads, settings, password reset, notifications, academic features, and other application APIs are not migrated.
 - The four beta credentials are intentionally public testing credentials. They are unsuitable for real accounts.

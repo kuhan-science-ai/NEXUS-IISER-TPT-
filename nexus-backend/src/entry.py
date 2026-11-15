@@ -85,6 +85,21 @@ class CampusGroupMessageCreate(BaseModel):
     reply_to_id: str | None = Field(default=None, max_length=36)
 
 
+class ForumPostCreate(BaseModel):
+    title: str = Field(min_length=5, max_length=255)
+    content_latex: str = Field(min_length=1, max_length=20_000)
+    category: str = Field(min_length=1, max_length=100)
+
+
+class ForumCommentCreate(BaseModel):
+    content_latex: str = Field(min_length=1, max_length=4000)
+    parent_comment_id: str | None = Field(default=None, max_length=36)
+
+
+class ForumVoteCreate(BaseModel):
+    vote_type: int = Field(ge=-1, le=1)
+
+
 class CallStartInput(BaseModel):
     video: bool = False
 
@@ -188,6 +203,19 @@ async def emit_realtime(request: Request, user_ids: list[str], event: str, **pay
         await hub.publish(list(dict.fromkeys(user_ids)), event, payload)
     except Exception:
         # A live transport outage must not turn a committed write into a failed API response.
+        return
+
+
+async def emit_global_forum_update(request: Request, post_id: str, action: str) -> None:
+    env = request.scope.get("env")
+    binding = getattr(env, "REALTIME_HUB", None) if env is not None else None
+    if binding is None:
+        return
+    hub = binding.get(binding.idFromName("nexus-live-events"))
+    try:
+        await hub.publish(["global"], "forum.changed", {"post_id": post_id, "action": action})
+    except Exception:
+        # Forum writes remain durable even while the live update transport is unavailable.
         return
 
 
@@ -1738,6 +1766,109 @@ async def update_profile(payload: dict[str, Any], user: dict[str, Any] = Depends
     return user_summary(row)
 
 
+async def forum_post_summary(db: Any, post_id: str, user_id: str) -> dict[str, Any] | None:
+    return await first(db, """SELECT p.id,p.author_id,p.title,p.content_latex,p.category,p.upvotes,p.downvotes,
+        p.is_pinned,p.is_solved,p.is_locked,p.created_at,p.updated_at,
+        COALESCE(NULLIF(up.display_name,''),NULLIF(up.full_name,''),u.username,'Anonymous') AS author_name,
+        u.username AS author_username,up.avatar_url,up.avatar_mime_type,
+        (SELECT COUNT(*) FROM forum_comments c WHERE c.post_id=p.id) AS comments_count,
+        (SELECT vote_type FROM forum_post_votes v WHERE v.post_id=p.id AND v.user_id=?) AS user_vote
+        FROM forum_posts p LEFT JOIN users u ON u.id=p.author_id
+        LEFT JOIN user_profiles up ON up.user_id=p.author_id WHERE p.id=?""", user_id, post_id)
+
+
+@app.get("/api/v1/forums/posts")
+async def list_forum_posts(
+    category: str | None = None,
+    query_text: str | None = Query(default=None, alias="query", max_length=200),
+    sort: str = Query(default="trending", pattern="^(trending|latest|unanswered)$"),
+    limit: int = Query(default=60, ge=1, le=100),
+    user: dict[str, Any] = Depends(get_current_user),
+    db: Any = Depends(get_db),
+):
+    filters: list[str] = []
+    params: list[Any] = [user["sub"]]
+    if category and category.lower() not in {"all", "all discussions"}:
+        filters.append("p.category=?")
+        params.append(category.lstrip("# "))
+    if query_text and query_text.strip():
+        filters.append("(p.title LIKE ? OR p.content_latex LIKE ?)")
+        needle = f"%{query_text.strip()}%"
+        params.extend([needle, needle])
+    where = f"WHERE {' AND '.join(filters)}" if filters else ""
+    having = "HAVING COUNT(c.id)=0" if sort == "unanswered" else ""
+    order = "score DESC,p.is_pinned DESC,p.created_at DESC" if sort == "trending" else "p.is_pinned DESC,p.created_at DESC"
+    params.append(limit)
+    return await query(db, f"""SELECT p.id,p.author_id,p.title,p.content_latex,p.category,p.upvotes,p.downvotes,
+        p.is_pinned,p.is_solved,p.is_locked,p.created_at,p.updated_at,
+        COALESCE(NULLIF(up.display_name,''),NULLIF(up.full_name,''),u.username,'Anonymous') AS author_name,
+        u.username AS author_username,up.avatar_url,up.avatar_mime_type,
+        COUNT(c.id) AS comments_count,(SELECT vote_type FROM forum_post_votes v WHERE v.post_id=p.id AND v.user_id=?) AS user_vote,
+        (p.upvotes-p.downvotes+COUNT(c.id)*2) AS score
+        FROM forum_posts p LEFT JOIN users u ON u.id=p.author_id
+        LEFT JOIN user_profiles up ON up.user_id=p.author_id
+        LEFT JOIN forum_comments c ON c.post_id=p.id {where}
+        GROUP BY p.id {having} ORDER BY {order} LIMIT ?""", *params)
+
+
+@app.post("/api/v1/forums/posts", status_code=status.HTTP_201_CREATED)
+async def create_forum_post(payload: ForumPostCreate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    post_id = new_id()
+    stamp = now()
+    await execute(db, "INSERT INTO forum_posts(id,author_id,title,content_latex,category,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", post_id, user["sub"], payload.title.strip(), payload.content_latex.strip(), payload.category.strip().lstrip("# "), stamp, stamp)
+    await emit_global_forum_update(request, post_id, "post.created")
+    return {"id": post_id, "post_id": post_id, "message": "Post created successfully"}
+
+
+@app.get("/api/v1/forums/posts/{post_id}")
+async def get_forum_post(post_id: str, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    post = await forum_post_summary(db, post_id, user["sub"])
+    if not post:
+        raise HTTPException(status_code=404, detail="Forum post not found")
+    comments = await query(db, """SELECT c.id,c.post_id,c.parent_comment_id,c.author_id,c.content_latex,c.is_accepted,c.created_at,c.updated_at,
+        COALESCE(NULLIF(up.display_name,''),NULLIF(up.full_name,''),u.username,'Anonymous') AS author_name,
+        u.username AS author_username,up.avatar_url,up.avatar_mime_type
+        FROM forum_comments c LEFT JOIN users u ON u.id=c.author_id
+        LEFT JOIN user_profiles up ON up.user_id=c.author_id WHERE c.post_id=? ORDER BY c.created_at,c.id""", post_id)
+    return {**post, "comments": comments}
+
+
+@app.post("/api/v1/forums/posts/{post_id}/comments", status_code=status.HTTP_201_CREATED)
+async def create_forum_comment(post_id: str, payload: ForumCommentCreate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    post = await first(db, "SELECT id,is_locked FROM forum_posts WHERE id=?", post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Forum post not found")
+    if post["is_locked"]:
+        raise HTTPException(status_code=409, detail="This discussion is locked")
+    if payload.parent_comment_id:
+        parent = await first(db, "SELECT id FROM forum_comments WHERE id=? AND post_id=?", payload.parent_comment_id, post_id)
+        if not parent:
+            raise HTTPException(status_code=422, detail="Reply target does not belong to this discussion")
+    comment_id = new_id()
+    stamp = now()
+    await execute(db, "INSERT INTO forum_comments(id,post_id,parent_comment_id,author_id,content_latex,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", comment_id, post_id, payload.parent_comment_id, user["sub"], payload.content_latex.strip(), stamp, stamp)
+    await execute(db, "UPDATE forum_posts SET updated_at=? WHERE id=?", stamp, post_id)
+    await emit_global_forum_update(request, post_id, "comment.created")
+    return {"id": comment_id, "post_id": post_id, "parent_comment_id": payload.parent_comment_id, "author_id": user["sub"], "content_latex": payload.content_latex.strip(), "created_at": stamp}
+
+
+@app.post("/api/v1/forums/posts/{post_id}/vote")
+async def vote_forum_post(post_id: str, payload: ForumVoteCreate, request: Request, user: dict[str, Any] = Depends(get_current_user), db: Any = Depends(get_db)):
+    if payload.vote_type not in (-1, 1):
+        raise HTTPException(status_code=422, detail="Vote type must be -1 or 1")
+    if not await first(db, "SELECT id FROM forum_posts WHERE id=?", post_id):
+        raise HTTPException(status_code=404, detail="Forum post not found")
+    existing = await first(db, "SELECT vote_type FROM forum_post_votes WHERE post_id=? AND user_id=?", post_id, user["sub"])
+    if existing and int(existing["vote_type"]) == payload.vote_type:
+        await execute(db, "DELETE FROM forum_post_votes WHERE post_id=? AND user_id=?", post_id, user["sub"])
+    else:
+        await execute(db, "INSERT INTO forum_post_votes(post_id,user_id,vote_type,created_at) VALUES(?,?,?,?) ON CONFLICT(post_id,user_id) DO UPDATE SET vote_type=excluded.vote_type,created_at=excluded.created_at", post_id, user["sub"], payload.vote_type, now())
+    await execute(db, "UPDATE forum_posts SET upvotes=(SELECT COUNT(*) FROM forum_post_votes WHERE post_id=? AND vote_type=1),downvotes=(SELECT COUNT(*) FROM forum_post_votes WHERE post_id=? AND vote_type=-1) WHERE id=?", post_id, post_id, post_id)
+    await emit_global_forum_update(request, post_id, "post.voted")
+    post = await forum_post_summary(db, post_id, user["sub"])
+    return {"upvotes": post["upvotes"], "downvotes": post["downvotes"], "user_vote": post["user_vote"]}
+
+
 @app.get("/api/v1/ai/tools")
 async def list_ai_tools():
     return []
@@ -2005,7 +2136,7 @@ class RealtimeHub(DurableObject):
         client, server = WebSocketPair.new().object_values()
         # The Workers Python runtime exposes Durable Object context methods
         # with their JavaScript camelCase names.
-        self.ctx.acceptWebSocket(server, Array.of(user_id))
+        self.ctx.acceptWebSocket(server, Array.of(user_id, "global"))
         server.send(json.dumps({"event": "system.ready", "user_id": user_id}))
         return WorkerResponse(None, status=101, web_socket=client)
 

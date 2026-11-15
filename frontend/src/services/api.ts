@@ -325,10 +325,11 @@ class ApiService {
   }
 
   // Forums
-  async listForumPosts(category?: string, query?: string): Promise<any[]> {
+  async listForumPosts(category?: string, query?: string, sort: 'trending' | 'latest' | 'unanswered' = 'trending', limit = 100): Promise<any[]> {
     let url = '/forums/posts?';
     if (category) url += `category=${encodeURIComponent(category)}&`;
     if (query) url += `query=${encodeURIComponent(query)}&`;
+    url += `sort=${encodeURIComponent(sort)}&limit=${Math.max(1, Math.min(100, limit))}`;
     return this.request(url);
   }
 
