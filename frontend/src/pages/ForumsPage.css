@@ -79,6 +79,7 @@
 .forum-thread-placeholder strong { color:var(--text-primary); font-size:13px; }
 .forum-thread-placeholder p { max-width:220px; margin:0; font-size:10px; line-height:1.5; }
 .forum-thread-composer { flex:none; padding:10px 13px!important; border-top:1px solid var(--border); background:var(--bg-surface); }
+.forum-thread-composer .nexus-replying { min-height:34px; margin:0 0 8px; padding:5px 8px; border:1px solid var(--border); border-left:3px solid var(--primary); border-radius:6px; background:var(--bg-raised); }
 .forum-thread-composer .nexus-composer-input-row { display:flex; align-items:center; gap:7px; }
 .forum-thread-composer .nexus-emoji-input-wrap { min-width:0; flex:1; }
 .forum-thread-composer .nexus-composer-input-row > button { width:40px; height:40px; }
