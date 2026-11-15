@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-15
+- Added paired transparent NEXUS and Nx animations to the sidebar brand row and home rail button. The neon-pink and soapy pairs alternate on full-page reload; both marks start together, play their opening once, then run a later segment forward and backward. Added the source preparation script and cropped VP9 alpha assets.
 - Moved the tagged author's name above the quoted message in the shared reply preview used by Messenger, Study Groups, and Forums.
 - Matched forum reply rows to Messenger's shared reply preview and avatar sizing, and aligned nested replies with the main comment column.
 - Closing a forum thread now hides its panel and expands the discussion feed. Reopening a discussion restores its session-cached thread immediately while syncing fresh details in the background.

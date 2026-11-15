@@ -1,0 +1,54 @@
+{
+  "pink-nexus": {
+    "source": "nexus symbol animation\\NEXUS (neon pink).mp4",
+    "asset": "media\\brand\\pink-nexus.webm",
+    "width": 550,
+    "height": 338,
+    "fps": 30,
+    "sourceFrames": 535,
+    "matchedSourceFrames": 535,
+    "loopStartSeconds": 3.0,
+    "durationSeconds": 32.63333333333333,
+    "sourceDurationSeconds": 17.833333,
+    "bytes": 3980594
+  },
+  "pink-nx": {
+    "source": "nexus symbol animation\\Nx (neon pink).mp4",
+    "asset": "media\\brand\\pink-nx.webm",
+    "width": 252,
+    "height": 322,
+    "fps": 30,
+    "sourceFrames": 535,
+    "matchedSourceFrames": 535,
+    "loopStartSeconds": 3.0,
+    "durationSeconds": 32.63333333333333,
+    "sourceDurationSeconds": 17.833334,
+    "bytes": 1467344
+  },
+  "soapy-nexus": {
+    "source": "nexus symbol animation\\NEXUS (soapy).mp4",
+    "asset": "media\\brand\\soapy-nexus.webm",
+    "width": 230,
+    "height": 158,
+    "fps": 30,
+    "sourceFrames": 299,
+    "matchedSourceFrames": 300,
+    "loopStartSeconds": 1.0,
+    "durationSeconds": 18.966666666666665,
+    "sourceDurationSeconds": 9.966667,
+    "bytes": 1964974
+  },
+  "soapy-nx": {
+    "source": "nexus symbol animation\\Nx (soapy).mp4",
+    "asset": "media\\brand\\soapy-nx.webm",
+    "width": 134,
+    "height": 114,
+    "fps": 30,
+    "sourceFrames": 300,
+    "matchedSourceFrames": 300,
+    "loopStartSeconds": 1.0,
+    "durationSeconds": 18.966666666666665,
+    "sourceDurationSeconds": 10.0,
+    "bytes": 249405
+  }
+}

@@ -237,6 +237,40 @@
   font-weight: 800;
   font-size: 19px;
   text-decoration: none;
+  overflow: hidden;
+}
+
+.discord-home-animation {
+  display: block;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.discord-brand-link {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  text-decoration: none;
+}
+
+.discord-brand-animation {
+  display: block;
+  width: 104px;
+  height: 38px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.discord-brand-tagline {
+  min-width: 0;
+  max-width: 70px;
+  color: var(--text-subtle);
+  font-size: 8px;
+  line-height: 1.2;
 }
 
 .discord-interior-scope[data-profile-editor-open="true"] .discord-server-rail button[aria-label="Open my profile"] {
@@ -307,6 +341,16 @@
   padding: 0 8px 12px !important;
   margin-bottom: 12px !important;
   border-bottom-color: #202225 !important;
+  overflow: visible;
+}
+
+.discord-interior-scope .discord-channel-panel > div:first-child .discord-brand-animation {
+  width: 98px;
+  height: 36px;
+}
+
+.discord-interior-scope .discord-channel-panel > div:first-child .discord-brand-tagline {
+  max-width: 66px;
 }
 
 .discord-interior-scope .discord-channel-panel > div:first-child a > div:first-child {
