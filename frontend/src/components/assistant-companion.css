@@ -38,6 +38,14 @@
   pointer-events: none;
 }
 
+.nexus-assistant-companion-model,
+.nexus-assistant-companion-fallback {
+  transition: opacity .25s ease-out;
+}
+
+.nexus-assistant-companion[data-playing="true"] .nexus-assistant-companion-model,
+.nexus-assistant-companion[data-playing="true"] .nexus-assistant-companion-fallback { opacity: 0; }
+
 .nexus-assistant-idle-float { animation: nexus-assistant-float 3.8s ease-in-out infinite; }
 .nexus-assistant-idle-lean { animation: nexus-assistant-lean 4.4s ease-in-out infinite; }
 .nexus-assistant-idle-bounce { animation: nexus-assistant-bounce 3.6s ease-in-out infinite; }
@@ -64,25 +72,14 @@
 .nexus-assistant-companion:hover .nexus-assistant-companion-hint,
 .nexus-assistant-companion:focus-within .nexus-assistant-companion-hint { opacity: 1; transform: none; }
 
-.nexus-assistant-reaction-bounce { animation: nexus-assistant-bounce .7s ease-in-out; }
-.nexus-assistant-reaction-sway { animation: nexus-assistant-sway 1.1s ease-in-out; }
-.nexus-assistant-reaction-twirl { animation: nexus-assistant-twirl 1s ease-in-out; }
-.nexus-assistant-reaction-pop { animation: nexus-assistant-pop .8s ease-in-out; }
-.nexus-assistant-reaction-tilt { animation: nexus-assistant-tilt .9s ease-in-out; }
-.nexus-assistant-reaction-dance { animation: nexus-assistant-dance 1.3s ease-in-out; }
-.nexus-assistant-reaction-hop { animation: nexus-assistant-hop .9s ease-in-out; }
+.nexus-assistant-companion-animation { animation: nexus-assistant-clip-enter .38s ease-out both; }
 
 @keyframes nexus-assistant-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 @keyframes nexus-assistant-lean { 0%, 100% { transform: rotate(0); } 35% { transform: rotate(-2deg) translateY(-2px); } 70% { transform: rotate(2deg); } }
 @keyframes nexus-assistant-peek { 0%, 100% { transform: translateX(0) rotate(0); } 35% { transform: translateX(-3px) rotate(-1deg); } 70% { transform: translateX(2px) rotate(1deg); } }
 @keyframes nexus-assistant-idle-sway { 0%, 100% { transform: rotate(-1deg); } 50% { transform: rotate(1deg) translateY(-3px); } }
-@keyframes nexus-assistant-bounce { 0%, 100% { transform: translateY(0) scale(1); } 35% { transform: translateY(-16px) scale(1.03); } 65% { transform: translateY(2px) scale(.98, 1.02); } }
-@keyframes nexus-assistant-sway { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
-@keyframes nexus-assistant-twirl { 0%, 100% { transform: rotate(0) scale(1); } 50% { transform: rotate(12deg) scale(.94); } }
-@keyframes nexus-assistant-pop { 0%, 100% { transform: scale(1); } 35% { transform: scale(1.1); } 68% { transform: scale(.96); } }
-@keyframes nexus-assistant-tilt { 0%, 100% { transform: rotate(0); } 35% { transform: rotate(-11deg) translateY(-5px); } 70% { transform: rotate(7deg); } }
-@keyframes nexus-assistant-dance { 0%, 100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-8px) rotate(-6deg); } 50% { transform: translateY(-6px) rotate(6deg); } 75% { transform: translateX(8px) rotate(-4deg); } }
-@keyframes nexus-assistant-hop { 0%, 100% { transform: translateY(0); } 25%, 65% { transform: translateY(-18px); } 45%, 85% { transform: translateY(0); } }
+@keyframes nexus-assistant-bounce { 0%, 100% { transform: translateY(0) scale(1); } 35% { transform: translateY(-10px) scale(1.02); } 65% { transform: translateY(2px) scale(.99, 1.01); } }
+@keyframes nexus-assistant-clip-enter { from { opacity: 0; } to { opacity: 1; } }
 
 @media (max-width: 560px) {
   .nexus-assistant-companion { height: min(250px, calc(100dvh - 24px)); }

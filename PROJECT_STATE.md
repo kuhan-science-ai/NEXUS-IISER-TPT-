@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-The AI Assistant settings include a browser-saved companion selector and enable toggle. The selected VRM appears as a draggable, gently animated pet; clicking it plays one of seven motion variants using the two supplied transparent clips. The character and animation credits appear in settings.
+The AI Assistant settings include a browser-saved companion selector and enable toggle. The selected VRM appears as a draggable pet with randomized idle movement. Clicking it randomly plays one of the two supplied transparent 30 fps clips; the idle model hides during playback and the clip fades in. The character credit appears in settings.
 
 Messenger emoji picker exposes the full Twemoji catalog in a dedicated pack tab alongside its recent and category views. Picker and shortcode suggestion popups render through a document-level portal to avoid clipping and stacking-context issues.
 
