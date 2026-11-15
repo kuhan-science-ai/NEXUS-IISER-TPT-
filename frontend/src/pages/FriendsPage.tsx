@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, MessageCircle, MoreHorizontal, Plus, Search, UserPlus, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { MessageCircle, Search, UserPlus, Users } from 'lucide-react';
 import { api, UserSummary } from '../services/api';
 import { SideNav } from '../components/SideNav';
 import { TopHeader } from '../components/TopHeader';
 import { GlobalSearchModal } from '../components/GlobalSearchModal';
 import { ProfileAvatar } from '../components/ProfileAvatar';
+import { readSharedConversationSidebarCollapsed, SharedConversationSidebar } from '../components/SharedConversationSidebar';
 import './FriendsPage.css';
 
 interface FriendsPageProps { currentUser: UserSummary | null; onLogout?: () => void; }
@@ -13,12 +14,13 @@ const readFriendsCache = (userId: string, slot: string) => { try { return JSON.p
 
 export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout }) => {
   const [searchOpen, setSearchOpen] = useState(false);
-  const [friendsSidebarCollapsed, setFriendsSidebarCollapsed] = useState(true);
+  const [friendsSidebarCollapsed, setFriendsSidebarCollapsed] = useState(() => readSharedConversationSidebarCollapsed(currentUser?.id));
   const [activeTab, setActiveTab] = useState<'online' | 'all' | 'pending'>('all');
   const [query, setQuery] = useState('');
   const [friends, setFriends] = useState<any[]>(() => readFriendsCache(currentUser?.id || 'guest', 'friends'));
   const [requests, setRequests] = useState<any[]>(() => readFriendsCache(currentUser?.id || 'guest', 'requests'));
   const [sentRequests, setSentRequests] = useState<any[]>(() => readFriendsCache(currentUser?.id || 'guest', 'sent'));
+  const [conversations, setConversations] = useState<any[]>([]);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<any | null>(null);
   const [profileTab, setProfileTab] = useState<'activity' | 'friends' | 'groups'>('activity');
@@ -27,16 +29,17 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout 
 
   const load = async () => {
     try {
-      const [friendRows, requestRows, sentRows] = await Promise.all([api.listFriends(), api.listFriendRequests(), api.listSentFriendRequests()]);
+      const [friendRows, requestRows, sentRows, conversationRows] = await Promise.all([api.listFriends(), api.listFriendRequests(), api.listSentFriendRequests(), api.listConversations().catch(() => [])]);
       setFriends(friendRows);
       setRequests(requestRows);
       setSentRequests(sentRows);
+      setConversations(conversationRows);
       sessionStorage.setItem(`nexus-friends:${currentUser?.id}:friends`, JSON.stringify(friendRows));
       sessionStorage.setItem(`nexus-friends:${currentUser?.id}:requests`, JSON.stringify(requestRows));
       sessionStorage.setItem(`nexus-friends:${currentUser?.id}:sent`, JSON.stringify(sentRows));
-    } catch { setFriends([]); setRequests([]); setSentRequests([]); }
+    } catch { setFriends([]); setRequests([]); setSentRequests([]); setConversations([]); }
   };
-  useEffect(() => { void load(); const onRealtime = (event: Event) => { if ((event as CustomEvent).detail?.event === 'friends.changed') { void load(); if (query.trim()) void api.searchUsers(query.trim()).then(setSearchResults).catch(() => undefined); if (selectedProfile) void api.getPublicProfile(selectedProfile.username).then(setSelectedProfile).catch(() => undefined); } }; window.addEventListener('nexus-realtime-event', onRealtime); return () => window.removeEventListener('nexus-realtime-event', onRealtime); }, [currentUser?.id, currentUser?.avatar_url, currentUser?.avatar_file_id, query, selectedProfile?.username]);
+  useEffect(() => { void load(); const onRealtime = (event: Event) => { const name = (event as CustomEvent).detail?.event; if (name === 'friends.changed' || name === 'conversation.created' || name?.startsWith('message.')) { void load(); if (name === 'friends.changed' && query.trim()) void api.searchUsers(query.trim()).then(setSearchResults).catch(() => undefined); if (name === 'friends.changed' && selectedProfile) void api.getPublicProfile(selectedProfile.username).then(setSelectedProfile).catch(() => undefined); } }; window.addEventListener('nexus-realtime-event', onRealtime); const refresh = window.setInterval(() => void load(), 15_000); return () => { window.removeEventListener('nexus-realtime-event', onRealtime); window.clearInterval(refresh); }; }, [currentUser?.id, currentUser?.avatar_url, currentUser?.avatar_file_id, query, selectedProfile?.username]);
 
   useEffect(() => {
     let active = true;
@@ -66,17 +69,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ currentUser, onLogout 
     <div className="friends-app-column">
       <TopHeader breadcrumb="Workspace / Friends" currentUser={currentUser} onOpenSearch={() => setSearchOpen(true)} />
       <main className={`friends-discord-layout${friendsSidebarCollapsed ? ' is-dm-sidebar-collapsed' : ''}`}>
-        <aside className="friends-dm-sidebar">
-          <div className="dm-sidebar-toggle-row"><button type="button" className="dm-sidebar-toggle" onClick={() => setFriendsSidebarCollapsed(value => !value)} aria-label={friendsSidebarCollapsed ? 'Expand Friends sidebar' : 'Collapse Friends sidebar'} aria-expanded={!friendsSidebarCollapsed} title={friendsSidebarCollapsed ? 'Expand Friends sidebar' : 'Collapse Friends sidebar'}>{friendsSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button></div>
-          <Link to="/friends" className="friends-side-active"><Users size={17} /> Friends <span>{friends.length}</span></Link>
-          <div className="friends-dm-heading">Direct Messages <button aria-label="Start a direct message" onClick={() => navigate('/messaging')}><Plus size={17} /></button></div>
-          <p className="friends-empty">No contacts yet. Add a friend to start chatting.</p>
-          <div className="friends-own-profile">
-            <ProfileAvatar className="friends-avatar" user={currentUser} />
-            <span><strong>{currentUser.display_name || currentUser.full_name || currentUser.username}</strong><small>Verified student</small></span>
-            <button aria-label="Open profile settings" onClick={() => navigate('/settings')}><MoreHorizontal size={18} /></button>
-          </div>
-        </aside>
+        <SharedConversationSidebar currentUser={currentUser} section="friends" conversations={conversations} friendsCount={friends.length} collapsed={friendsSidebarCollapsed} onCollapsedChange={setFriendsSidebarCollapsed} onAddConversation={() => setSearchOpen(true)} />
         <section className="friends-main-panel">
           <header className="friends-page-toolbar">
             <div className="friends-title"><Users size={18} /><strong>Friends</strong></div>

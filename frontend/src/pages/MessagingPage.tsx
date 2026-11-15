@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, CornerUpLeft, Forward, MessagesSquare, MoreHorizontal, Phone, Plus, Rocket, Search, SmilePlus, Trash2, UserRound, Video, X } from 'lucide-react';
+import { CornerUpLeft, Forward, MessagesSquare, MoreHorizontal, Phone, Rocket, SmilePlus, Trash2, UserRound, Video, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api, UserSummary } from '../services/api';
 import { readUserPreference, writeUserPreference } from '../services/userPreferences';
@@ -12,6 +12,7 @@ import { MessageReplyPreview } from '../components/MessageReplyPreview';
 import { MessengerEmojiInput } from '../components/MessengerEmojiInput';
 import { EmojiPickerButton } from '../components/EmojiPickerButton';
 import { isEmojiOnly, TwemojiText } from '../components/TwemojiText';
+import { readSharedConversationSidebarCollapsed, SharedConversationSidebar } from '../components/SharedConversationSidebar';
 import { useVoiceCalls } from '../components/VoiceCalls';
 import './FriendsPage.css';
 import './MessagingPage.css';
@@ -26,8 +27,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const navigate = useNavigate();
   const location = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [conversationQuery, setConversationQuery] = useState('');
-  const [messengerSidebarCollapsed, setMessengerSidebarCollapsed] = useState(false);
+  const [messengerSidebarCollapsed, setMessengerSidebarCollapsed] = useState(() => readSharedConversationSidebarCollapsed(currentUser?.id));
   const [inputText, setInputText] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
   const { startDirectCall } = useVoiceCalls();
@@ -41,7 +41,6 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [menuNotice, setMenuNotice] = useState('');
   const [typingNames, setTypingNames] = useState<Record<string, string>>({});
-  const conversationSearchRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<number | null>(null);
   const typingHeartbeatRef = useRef<number | null>(null);
@@ -191,20 +190,11 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
     try { await api.clearConversationHistory(activeConvId); setChatMessages(items => items.map(item => ({ ...item, is_deleted: true, content: 'This message was deleted.' }))); setError(''); }
     catch { setError('Some messages could not be deleted. Reloading conversation history.'); setChatMessages(await api.getMessages(activeConvId).catch(() => [])); }
   };
-  const filteredConversations = conversations.filter(conversation => displayName(conversation).toLowerCase().includes(conversationQuery.toLowerCase()));
-
   return <div className="messenger-route" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-canvas)' }}>
     <SideNav currentUser={currentUser} onLogout={onLogout} onOpenSearch={() => setSearchOpen(true)} />
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh' }}><TopHeader breadcrumb="Workspace / Messenger" currentUser={currentUser} onOpenSearch={() => setSearchOpen(true)} />
       <div className={`messenger-discord-layout${messengerSidebarCollapsed ? ' is-dm-sidebar-collapsed' : ''}`} style={{ flex: 1, display: 'grid', gridTemplateColumns: messengerSidebarCollapsed ? (profileOpen ? '48px minmax(0, 1fr) 280px' : '48px minmax(0, 1fr)') : (profileOpen ? '272px minmax(0, 1fr) 280px' : '272px minmax(0, 1fr)'), overflow: 'hidden' }}>
-        <aside className="friends-dm-sidebar messenger-dm-sidebar">
-          <div className="messenger-sidebar-top"><label className="friends-start-conversation messenger-conversation-search"><Search size={15} /><input ref={conversationSearchRef} value={conversationQuery} onChange={event => setConversationQuery(event.target.value)} placeholder="Find or start a conversation" aria-label="Find or start a conversation" /></label><button type="button" className="dm-sidebar-toggle" onClick={() => setMessengerSidebarCollapsed(value => !value)} aria-label={messengerSidebarCollapsed ? 'Expand Messenger sidebar' : 'Collapse Messenger sidebar'} aria-expanded={!messengerSidebarCollapsed} title={messengerSidebarCollapsed ? 'Expand Messenger sidebar' : 'Collapse Messenger sidebar'}>{messengerSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button></div>
-          <div className="friends-side-active messenger-side-active"><MessagesSquare size={17} /> Messenger <span>{conversations.length}</span></div>
-          <div className="friends-dm-heading">Conversations <button aria-label="Start a conversation" onClick={() => navigate('/friends')}><Plus size={17} /></button></div>
-          <div className="friends-dm-list">{filteredConversations.map(conversation => <button key={conversation.id} className={`friends-dm-item ${conversation.id === activeConvId ? 'is-selected' : ''}`} onClick={() => { setActiveConvId(conversation.id); setProfileOpen(false); }}><ProfileAvatar className="friends-avatar" user={avatarForConversation(conversation)} label={initials(conversation)} /><span className="friends-dm-copy"><strong>{displayName(conversation)}</strong><small>{conversation.last_message?.content || 'No messages yet'}</small></span></button>)}
-            {!filteredConversations.length && <p className="friends-empty">{conversationQuery ? 'No conversations match your search.' : 'No conversations yet. Add a friend to start a chat.'}</p>}</div>
-          <div className="friends-own-profile"><ProfileAvatar className="friends-avatar" user={currentUser} /><span><strong>{currentUser.display_name || currentUser.full_name || currentUser.username}</strong><small>Verified student</small></span><button aria-label="Open profile settings" onClick={() => navigate('/settings')}><MoreHorizontal size={18} /></button></div>
-        </aside>
+        <SharedConversationSidebar currentUser={currentUser} section="messenger" conversations={conversations} activeConversationId={activeConvId} collapsed={messengerSidebarCollapsed} onCollapsedChange={setMessengerSidebarCollapsed} onAddConversation={() => navigate('/friends')} />
         <section className="messenger-chat-panel" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-canvas)', height: '100%', minWidth: 0, position: 'relative' }}>
           {activeConv ? <>
             <header className="messenger-chat-header" style={{ height: 56, borderBottom: '1px solid var(--border)', padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: 'var(--bg-surface)' }}><div className="nexus-dm-heading"><ProfileAvatar className="friends-avatar" user={avatarForConversation(activeConv)} label={initials(activeConv)} /><div><strong>{displayName(activeConv)}</strong><small>{activeConv.type === 'GROUP' ? 'Group conversation' : 'Direct conversation'}</small></div></div><div className="messenger-chat-actions"><button type="button" aria-label="Start voice call" title="Voice call" onClick={() => { setCallStartError(''); void startDirectCall(activeConv.id, displayName(activeConv)).catch(cause => setCallStartError(cause instanceof Error ? cause.message : 'Could not start the call.')); }}><Phone size={17} /></button><button type="button" aria-label="Start video call" title="Video call" onClick={() => { setCallStartError(''); void startDirectCall(activeConv.id, displayName(activeConv), true).catch(cause => setCallStartError(cause instanceof Error ? cause.message : 'Could not start the call.')); }}><Video size={17} /></button><button type="button" aria-label="Clear conversation history" title="Clear conversation history" onClick={() => void clearHistory()}><Trash2 size={17} /></button><button type="button" className={`messenger-profile-toggle ${profileOpen ? 'is-open' : ''}`} aria-label="Open conversation details" onClick={() => setProfileOpen(value => !value)}><UserRound size={17} /></button></div></header>
