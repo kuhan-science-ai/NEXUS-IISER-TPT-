@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-15
+- Fixed the recurring production WebSocket exception by passing `acceptWebSocket` a native JavaScript `Array.of(user_id)` tag list. Worker version `a9034466-fcc8-4916-8792-29bac2fd3afa` is active on 100% of traffic; its error-only tail remained clear for 55 seconds after rollout.
 - Added the AI Assistance companion setting with a content prompt, per-account enablement, a draggable 3D VRM pet, randomized idle movement, and two transparent 30 fps animation clips that fade in while hiding the idle model.
 - Adjusted the companion's VRM rest pose from T-pose to A-pose so the correct pose returns after either animation finishes.
 - Recreated the Discord-style reply preview in Messenger and Study Groups using each original message's text, author, and avatar. The reply quote now sits above the author, with responsive truncation and the existing connector direction and jump-to-message behavior preserved.

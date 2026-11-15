@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, EmailStr, Field
-from js import Object, crypto, fetch
+from js import Array, Object, crypto, fetch
 from pyodide.ffi import to_js
 from workers import WorkerEntrypoint, DurableObject, Response as WorkerResponse, asgi
 from js import WebSocketPair
@@ -2005,7 +2005,7 @@ class RealtimeHub(DurableObject):
         client, server = WebSocketPair.new().object_values()
         # The Workers Python runtime exposes Durable Object context methods
         # with their JavaScript camelCase names.
-        self.ctx.acceptWebSocket(server, [user_id])
+        self.ctx.acceptWebSocket(server, Array.of(user_id))
         server.send(json.dumps({"event": "system.ready", "user_id": user_id}))
         return WorkerResponse(None, status=101, web_socket=client)
 
