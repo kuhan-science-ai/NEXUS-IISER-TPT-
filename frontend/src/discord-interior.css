@@ -232,18 +232,27 @@
 }
 
 .discord-server-rail .discord-rail-home {
-  color: #fff;
-  background: #5865f2;
-  font-weight: 800;
-  font-size: 19px;
+  width: 56px;
+  height: 56px;
+  min-height: 56px;
+  color: inherit;
+  background: transparent !important;
+  border-radius: 0 !important;
   text-decoration: none;
   overflow: hidden;
 }
 
+.discord-server-rail .discord-rail-home:hover,
+.discord-server-rail .discord-rail-home.active {
+  color: inherit;
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+
 .discord-home-animation {
   display: block;
-  width: 32px;
-  height: 32px;
+  width: 50px;
+  height: 50px;
   object-fit: contain;
   pointer-events: none;
 }
@@ -258,8 +267,8 @@
 
 .discord-brand-animation {
   display: block;
-  width: 104px;
-  height: 38px;
+  width: 150px;
+  height: 48px;
   flex: 0 0 auto;
   object-fit: contain;
   pointer-events: none;
@@ -345,8 +354,8 @@
 }
 
 .discord-interior-scope .discord-channel-panel > div:first-child .discord-brand-animation {
-  width: 98px;
-  height: 36px;
+  width: 150px;
+  height: 48px;
 }
 
 .discord-interior-scope .discord-channel-panel > div:first-child .discord-brand-tagline {
@@ -354,8 +363,8 @@
 }
 
 .discord-interior-scope .discord-channel-panel > div:first-child a > div:first-child {
-  border-radius: 12px !important;
-  background: #5865f2 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
 }
 
 .discord-interior-scope .discord-channel-sidebar a[style*="background"] {

@@ -332,18 +332,6 @@ export const SideNav: React.FC<SideNavProps> = ({ currentUser, onLogout, onOpenS
             onEnded={resumeBrandLoop}
             onTimeUpdate={rememberBrandAnimationPosition}
           />
-          {!collapsed && (
-            <div className="discord-brand-tagline">
-              <div style={{
-                fontSize: '8px',
-                color: 'var(--text-subtle)',
-                fontWeight: 500,
-                marginTop: '2px',
-              }}>
-                IISER Tirupati · Students only
-              </div>
-            </div>
-          )}
         </Link>
         <button
           onClick={toggleCollapsed}
