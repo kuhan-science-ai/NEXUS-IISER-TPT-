@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-15
+- Lowered the companion's VRM upper arms further in its resting A-pose so they no longer appear close to a T-pose after an animation ends.
 - The assistant companion now plays the supplied default animation once when enabled, then returns to its existing A-pose. Added a cropped 30 fps VP9 alpha WebM made with anime foreground matting and documented the repeatable animation preparation workflow in `ASSISTANT_ANIMATION_WORKFLOW.txt`.
 - Fixed the recurring production WebSocket exception by passing `acceptWebSocket` a native JavaScript `Array.of(user_id)` tag list. Worker version `a9034466-fcc8-4916-8792-29bac2fd3afa` is active on 100% of traffic; its error-only tail remained clear for 55 seconds after rollout.
 - Added the AI Assistance companion setting with a content prompt, per-account enablement, a draggable 3D VRM pet, randomized idle movement, and two transparent 30 fps animation clips that fade in while hiding the idle model.

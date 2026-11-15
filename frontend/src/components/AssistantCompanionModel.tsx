@@ -52,8 +52,8 @@ export default function AssistantCompanionModel({ onError, idleMotionClass }: { 
       // The VRM's neutral arm pose is a T-pose; lower both upper arms into an A-pose.
       const leftUpperArm = companion.humanoid.getNormalizedBoneNode(VRMHumanBoneName.LeftUpperArm);
       const rightUpperArm = companion.humanoid.getNormalizedBoneNode(VRMHumanBoneName.RightUpperArm);
-      if (leftUpperArm) leftUpperArm.rotation.z = -0.48;
-      if (rightUpperArm) rightUpperArm.rotation.z = 0.48;
+      if (leftUpperArm) leftUpperArm.rotation.z = -0.72;
+      if (rightUpperArm) rightUpperArm.rotation.z = 0.72;
       const avatar = companion.scene;
       avatar.rotation.y = Math.PI;
       scene.add(avatar);

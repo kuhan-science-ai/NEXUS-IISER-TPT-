@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-The AI Assistant settings include a browser-saved companion selector and enable toggle. When deployed, the draggable pet first plays `default-ani.webm`, a 30 fps alpha WebM derived from the supplied default animation with anime foreground matting; it then returns to the VRM's A-pose idle state. Clicking it randomly plays one of the two supplied transparent 30 fps clips. The character credit appears in settings. See `ASSISTANT_ANIMATION_WORKFLOW.txt` for the asset preparation and verification steps.
+The AI Assistant settings include a browser-saved companion selector and enable toggle. When deployed, the draggable pet first plays `default-ani.webm`, a 30 fps alpha WebM derived from the supplied default animation with anime foreground matting; it then returns to the VRM's A-pose idle state with the upper arms lowered 0.72 radians. Clicking it randomly plays one of the two supplied transparent 30 fps clips. The character credit appears in settings. See `ASSISTANT_ANIMATION_WORKFLOW.txt` for the asset preparation and verification steps.
 
 Messenger emoji picker exposes the full Twemoji catalog in a dedicated pack tab alongside its recent and category views. Picker and shortcode suggestion popups render through a document-level portal to avoid clipping and stacking-context issues.
 
