@@ -152,9 +152,9 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
     sequence.presses = sequence.messageId === messageId ? sequence.presses + 1 : 1;
     sequence.messageId = messageId;
     sequence.key += 1;
-    const speedTier = Math.min(sequence.presses, 4);
+    const speedTier = Math.min(sequence.presses, 3);
     const cycles = sequence.presses === 1 ? 3 : 4;
-    const duration = [0, 460, 250, 160, 110][speedTier];
+    const duration = [0, 460, 250, 160][speedTier];
     setJumpFlash({ messageId, key: sequence.key, cycles, duration });
     if (jumpTimeoutRef.current !== null) window.clearTimeout(jumpTimeoutRef.current);
     jumpTimeoutRef.current = window.setTimeout(() => {
