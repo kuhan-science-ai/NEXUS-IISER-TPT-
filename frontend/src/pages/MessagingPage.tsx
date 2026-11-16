@@ -22,6 +22,15 @@ type Conversation = { id: string; type: string; title?: string; description?: st
 type Message = { id: string; conversation_id: string; sender_id: string; sender_name?: string; sender_username?: string; avatar_url?: string | null; avatar_mime_type?: string | null; content: string; created_at: string; reactions?: { emoji: string; count: number; user_ids: string[] }[]; reply_to_id?: string | null; reply_preview?: string | null; is_deleted?: boolean; is_pinned?: boolean };
 
 const readMessengerCache = <T,>(key: string, fallback: T): T => { try { return JSON.parse(sessionStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } };
+const localMessageDay = (value: string) => { const date = new Date(value); return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`; };
+const messageDateLabel = (value: string) => {
+  const date = new Date(value);
+  const today = new Date();
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  if (localMessageDay(value) === localMessageDay(today.toISOString())) return 'Today';
+  if (localMessageDay(value) === localMessageDay(tomorrow.toISOString())) return 'Tomorrow';
+  return date.toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' });
+};
 
 export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLogout }) => {
   const navigate = useNavigate();
@@ -204,14 +213,15 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
             <div className="messenger-chat-messages nexus-chat-messages" style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column' }}>
               {loading && <p className="friends-empty">Loading messages…</p>}
               {!loading && !chatMessages.length && <div className="nexus-dm-empty"><MessagesSquare size={30} /><strong>This is the start of your conversation.</strong><p>Send a message to get things going.</p></div>}
-              {chatMessages.map(message => {
+              {chatMessages.map((message, index) => {
                 const mine = message.sender_id === currentUser.id;
                 const author = mine ? 'You' : message.sender_name || message.sender_username || 'Student';
-                const previous = chatMessages[chatMessages.indexOf(message) - 1];
-                const sameAuthor = previous && (previous.sender_id === currentUser.id ? 'You' : previous.sender_name || previous.sender_username || 'Student') === author;
+                const previous = chatMessages[index - 1];
+                const sameAuthor = previous && localMessageDay(previous.created_at) === localMessageDay(message.created_at) && (previous.sender_id === currentUser.id ? 'You' : previous.sender_name || previous.sender_username || 'Student') === author;
+                const isNewDay = !previous || localMessageDay(previous.created_at) !== localMessageDay(message.created_at);
                 const repliedMessage = message.reply_to_id ? chatMessages.find(item => item.id === message.reply_to_id) : undefined;
                 const repliedAuthor = repliedMessage ? (repliedMessage.sender_name || repliedMessage.sender_username || (repliedMessage.sender_id === currentUser.id ? 'You' : 'Student')) : 'Original message';
-                return <article id={`message-${message.id}`} className={`nexus-message-row nexus-chat-message${sameAuthor ? ' grouped' : ''}${message.reply_to_id ? ' has-reply-preview' : ''} ${mine ? 'mine' : ''}${highlightedMessageId === message.id ? ' is-jump-target' : ''}`} key={message.id}>
+                return <React.Fragment key={message.id}>{isNewDay && (['Today', 'Tomorrow'].includes(messageDateLabel(message.created_at)) || (previous && localMessageDay(previous.created_at) !== localMessageDay(message.created_at) && ['Today', 'Tomorrow'].includes(messageDateLabel(previous.created_at)))) && <div className="nexus-message-date-divider" role="separator"><span>{messageDateLabel(message.created_at)}</span></div>}<article id={`message-${message.id}`} className={`nexus-message-row nexus-chat-message${sameAuthor ? ' grouped' : ''}${message.reply_to_id ? ' has-reply-preview' : ''} ${mine ? 'mine' : ''}${highlightedMessageId === message.id ? ' is-jump-target' : ''}`}>
                   <span className="nexus-chat-avatar-slot">{!sameAuthor && <ProfileAvatar className="nexus-message-avatar nexus-chat-message-avatar" user={message} label={author} />}</span>
                   <div className="nexus-message-main">
                     {message.reply_to_id && <MessageReplyPreview author={repliedAuthor} content={repliedMessage?.content || message.reply_preview || 'Original message unavailable'} user={repliedMessage} onClick={() => jumpToMessage(message.reply_to_id!)} ariaLabel={`Jump to reply from ${repliedAuthor}`} />}
@@ -226,7 +236,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
                     </div>
                     <div className={`nexus-message-reactions${message.reactions?.length ? ' has-reactions' : ''}`}>{message.reactions?.map(reaction => <button className={reaction.user_ids.includes(currentUser.id) ? 'is-reacted' : ''} key={reaction.emoji} aria-pressed={reaction.user_ids.includes(currentUser.id)} title={reaction.user_ids.includes(currentUser.id) ? 'Remove your reaction' : 'Add your reaction'} onClick={() => void api.toggleReaction(message.id, reaction.emoji).then(() => api.getMessages(activeConvId).then(setChatMessages))}><TwemojiText>{reaction.emoji}</TwemojiText> {reaction.count}</button>)}</div>
                   </div>
-                </article>;
+                </article></React.Fragment>;
               })}
               <div id="messenger-bottom-anchor" ref={messagesEndRef} />
             </div>

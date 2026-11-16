@@ -40,6 +40,9 @@
 .nexus-message-row:hover { background:color-mix(in srgb,var(--text-primary) 4%,transparent); }
 .nexus-message-row { background:transparent; }
 .messenger-chat-messages.nexus-chat-messages { gap:0!important; padding:20px!important; }
+.nexus-message-date-divider { display:flex; flex:none; align-items:center; gap:8px; margin:2px 0 14px; color:var(--text-subtle); font-size:10px; line-height:1; }
+.nexus-message-date-divider::before,.nexus-message-date-divider::after { content:""; height:1px; flex:1; background:var(--border); }
+.nexus-message-date-divider span { padding:0 2px; white-space:nowrap; }
 .nexus-message-row.nexus-chat-message { position:relative; display:flex!important; min-height:0; align-self:stretch!important; gap:11px; padding:0 34px 0 0; border-radius:5px; }
 .nexus-message-row.nexus-chat-message + .nexus-message-row.nexus-chat-message { margin-top:7px; }
 .nexus-message-row.nexus-chat-message.grouped { min-height:0; padding:0 34px 0 0; }

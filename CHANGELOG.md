@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-16
+- Added Discord-style date dividers to Messenger for messages from today and tomorrow, with older history left unchanged.
 - Restored the original text-only NEXUS wordmark and letter mark in the sidebar, removing the animated brand videos from the interface.
 - Re-exported brand animations at 1440px working resolution with higher VP9 quality. Centered both sidebar marks within their display boxes and removed overflow zoom that clipped the artwork.
 - Stabilized hand mattes in companion animations 1–3 with local dark-detail recovery and five-frame temporal smoothing. Changed the one-shot startup clip to animation 2; preserved the idle loop asset.

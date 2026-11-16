@@ -6,6 +6,8 @@ The AI Assistant settings include a browser-saved companion selector and enable 
 
 Messenger emoji picker exposes the full Twemoji catalog in a dedicated pack tab alongside its recent and category views. Picker and shortcode suggestion popups render through a document-level portal to avoid clipping and stacking-context issues.
 
+Messenger shows a centered date divider when a conversation crosses into today or tomorrow, using local dates; older history remains unchanged. Sender grouping restarts at each day boundary.
+
 Friends and Messenger share one conversation sidebar with the same search, conversation list, profile footer, and saved collapse state. The center panel changes with the active route; opening a conversation from Friends navigates to that chat in Messenger while preserving the shared sidebar. Friends, requests, and conversations render from session cache immediately and stay visible while their background refresh runs or fails.
 
 Discussion forum threads can be closed to expand the post feed and reopened by selecting a post. Thread details are cached in session storage and shown immediately on reopen while refreshing in the background.
