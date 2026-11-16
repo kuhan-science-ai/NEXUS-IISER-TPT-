@@ -19,13 +19,13 @@
 
 .nexus-reply-connector {
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   top: 13px;
   left: -36px;
   width: 31px;
   height: 7px;
-  border-bottom: 2px solid #41434a;
-  border-left: 2px solid #41434a;
+  border-bottom: 2px solid #777c85;
+  border-left: 2px solid #777c85;
   border-bottom-left-radius: 9px;
   transform: scaleY(-1);
   transform-origin: center;
@@ -33,7 +33,7 @@
 }
 
 .nexus-message-reply-preview:hover .nexus-reply-connector {
-  border-color: #41434a;
+  border-color: #777c85;
   opacity: 1;
 }
 

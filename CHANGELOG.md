@@ -3,7 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-16
-- Kept the grey L-shaped reply connector visible and unchanged when hovering over a reply preview.
+- Kept the L-shaped reply connector consistently grey with stronger contrast against the Messenger hover background.
 - Fixed the Messenger cancel-reply hit area so the full visible button responds to clicks.
 - Made the Messenger message-row hover background clearly visible while keeping the L-shaped reply connector consistently grey.
 - Fixed the Messenger cancel-reply control so it clears the reply state without submitting the form.

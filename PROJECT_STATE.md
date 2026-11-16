@@ -14,7 +14,7 @@ Messenger message rows show a clearly visible hover background, and the reply co
 
 The Messenger cancel-reply button now has an explicit 38×38 pixel hit area and a stacking order above adjacent composer elements.
 
-Reply preview connectors remain visible in their original grey on hover; hover text styling does not affect the L-shaped connector.
+Reply preview connectors use a consistent mid-grey with enough contrast to remain visible over the Messenger hover background.
 
 Friends and Messenger share one conversation sidebar with the same search, conversation list, profile footer, and saved collapse state. The center panel changes with the active route; opening a conversation from Friends navigates to that chat in Messenger while preserving the shared sidebar. Friends, requests, and conversations render from session cache immediately and stay visible while their background refresh runs or fails.
 
