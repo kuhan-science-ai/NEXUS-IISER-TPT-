@@ -10,7 +10,7 @@ Messenger shows a centered date divider when a conversation crosses into today o
 
 The Messenger cancel-reply control explicitly prevents form submission and stays above overlapping composer layers so it can be clicked reliably.
 
-Messenger message rows keep their existing background color on hover; temporary jump highlighting remains visible while hovered.
+Messenger message rows show their hover background, and the reply connector stays a consistent grey without dimming.
 
 The Messenger cancel-reply button now has an explicit 38×38 pixel hit area and a stacking order above adjacent composer elements.
 
