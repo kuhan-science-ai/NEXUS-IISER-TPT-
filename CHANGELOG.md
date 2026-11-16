@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-16
+- Made Messenger message hover backgrounds rectangular and edge-to-edge across each message line.
 - Kept the L-shaped reply connector consistently grey with stronger contrast against the Messenger hover background.
 - Fixed the Messenger cancel-reply hit area so the full visible button responds to clicks.
 - Made the Messenger message-row hover background clearly visible while keeping the L-shaped reply connector consistently grey.

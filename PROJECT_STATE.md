@@ -12,6 +12,8 @@ The Messenger cancel-reply control explicitly prevents form submission and stays
 
 Messenger message rows show a clearly visible hover background, and the reply connector stays a consistent grey without dimming.
 
+Messenger hover backgrounds now span each chat message line edge to edge with square corners; responsive gutters preserve message content alignment.
+
 The Messenger cancel-reply button now has an explicit 38×38 pixel hit area and a stacking order above adjacent composer elements.
 
 Reply preview connectors use a consistent mid-grey with enough contrast to remain visible over the Messenger hover background.

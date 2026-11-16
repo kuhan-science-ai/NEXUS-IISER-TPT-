@@ -39,13 +39,13 @@
 .nexus-message-row.mine { align-self:flex-end; flex-direction:row-reverse; }
 .nexus-message-row:hover { background:color-mix(in srgb,var(--text-primary) 4%,transparent); }
 .nexus-message-row { background:transparent; }
-.messenger-chat-messages.nexus-chat-messages { gap:0!important; padding:20px!important; }
+.messenger-chat-messages.nexus-chat-messages { --messenger-message-gutter:20px; gap:0!important; padding:20px!important; }
 .nexus-message-date-divider { display:flex; flex:none; align-items:center; gap:8px; margin:2px 0 14px; color:var(--text-subtle); font-size:10px; line-height:1; }
 .nexus-message-date-divider::before,.nexus-message-date-divider::after { content:""; height:1px; flex:1; background:var(--border); }
 .nexus-message-date-divider span { padding:0 2px; white-space:nowrap; }
-.nexus-message-row.nexus-chat-message { position:relative; display:flex!important; min-height:0; align-self:stretch!important; gap:11px; padding:0 34px 0 0; border-radius:5px; }
+.nexus-message-row.nexus-chat-message { position:relative; display:flex!important; min-height:0; align-self:stretch!important; gap:11px; margin-left:calc(-1 * var(--messenger-message-gutter, 20px)); margin-right:calc(-1 * var(--messenger-message-gutter, 20px)); padding:0 calc(34px + var(--messenger-message-gutter, 20px)) 0 var(--messenger-message-gutter, 20px); border-radius:0; }
 .nexus-message-row.nexus-chat-message + .nexus-message-row.nexus-chat-message { margin-top:7px; }
-.nexus-message-row.nexus-chat-message.grouped { min-height:0; padding:0 34px 0 0; }
+.nexus-message-row.nexus-chat-message.grouped { min-height:0; padding:0 calc(34px + var(--messenger-message-gutter, 20px)) 0 var(--messenger-message-gutter, 20px); }
 .nexus-message-row.nexus-chat-message:not(.grouped) + .nexus-message-row.nexus-chat-message:not(.grouped) { margin-top:13px; }
 .nexus-message-row.nexus-chat-message.mine { flex-direction:row; }
 .nexus-message-row.nexus-chat-message .nexus-chat-avatar-slot { display:block; width:32px; min-width:32px; height:0; flex:none; }
@@ -56,8 +56,8 @@
 .nexus-message-row.nexus-chat-message .nexus-message-main { flex:1; }
 .nexus-message-row.nexus-chat-message .nexus-message-meta { min-height:17px; align-items:flex-start; padding-top:1px; color:var(--primary); }
 .nexus-message-row.nexus-chat-message.grouped + .nexus-message-row.nexus-chat-message.grouped { margin-top:7px; }
-.nexus-message-row.nexus-chat-message.is-jump-target { border-radius:5px; background:color-mix(in srgb,var(--primary) 11%,transparent); }
-.nexus-message-row.nexus-chat-message:hover { border-radius:5px; background:color-mix(in srgb,var(--text-primary) 10%,transparent); }
+.nexus-message-row.nexus-chat-message.is-jump-target { border-radius:0; background:color-mix(in srgb,var(--primary) 11%,transparent); }
+.nexus-message-row.nexus-chat-message:hover { border-radius:0; background:color-mix(in srgb,var(--text-primary) 10%,transparent); }
 .nexus-message-row.nexus-chat-message.is-jump-target:hover { background:color-mix(in srgb,var(--primary) 11%,transparent); }
 .nexus-message-avatar { display:grid; width:30px; height:30px; flex:none; place-items:center; border-radius:50%; background:var(--bg-elevated); color:var(--primary); font-size:12px; font-weight:800; }
 .nexus-message-avatar-spacer { width:30px; height:1px; flex:none; }
@@ -124,7 +124,7 @@
 @media (max-width:1100px) {
   .messenger-discord-layout { grid-template-columns:240px minmax(0,1fr)!important; }
   .messenger-discord-layout .messenger-profile-panel { position:absolute;top:0;right:0;bottom:0;width:280px;z-index:8;box-shadow:var(--shadow-card); }
-  .messenger-chat-messages { padding:20px 18px!important; }
+  .messenger-chat-messages { --messenger-message-gutter:18px; padding:20px 18px!important; }
   .messenger-chat-composer { padding:12px!important; }
 }
 .nexus-typing-indicator { display:flex;align-items:center;gap:4px;padding:7px 20px;color:var(--text-muted,#a4a6ad);font-size:12px; }
@@ -138,7 +138,7 @@
   .messenger-chat-header { padding:0 12px!important; }
   .messenger-chat-actions { gap:2px; }
   .messenger-chat-actions button { width:32px;height:32px; }
-  .messenger-chat-messages { padding:16px 12px!important; }
+  .messenger-chat-messages { --messenger-message-gutter:12px; padding:16px 12px!important; }
   .messenger-message-row .messenger-bubble { max-width:90%!important;padding:11px 14px!important; }
   .messenger-chat-composer > div { gap:6px!important; }
 }
