@@ -48,6 +48,9 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const [error, setError] = useState('');
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [jumpFlash, setJumpFlash] = useState<{ messageId: string; key: number; cycles: number; duration: number } | null>(null);
+  const jumpSequenceRef = useRef<{ messageId: string | null; presses: number; key: number }>({ messageId: null, presses: 0, key: 0 });
+  const jumpTimeoutRef = useRef<number | null>(null);
   const [menuNotice, setMenuNotice] = useState('');
   const [typingNames, setTypingNames] = useState<Record<string, string>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -112,6 +115,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
     return () => window.clearInterval(timer);
   }, [activeConvId, loadConversations]);
   useEffect(() => () => { if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current); }, []);
+  useEffect(() => () => { if (jumpTimeoutRef.current !== null) window.clearTimeout(jumpTimeoutRef.current); }, []);
   useEffect(() => {
     const typingTimers = new Map<string, number>();
     const removeListener = wsClient.addListener(event => {
@@ -144,7 +148,22 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
     const target = document.getElementById(`message-${messageId}`);
     target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     setHighlightedMessageId(messageId);
-    window.setTimeout(() => setHighlightedMessageId(current => current === messageId ? null : current), 1600);
+    const sequence = jumpSequenceRef.current;
+    sequence.presses = sequence.messageId === messageId ? sequence.presses + 1 : 1;
+    sequence.messageId = messageId;
+    sequence.key += 1;
+    const speedTier = Math.min(sequence.presses, 4);
+    const cycles = sequence.presses === 1 ? 3 : 4;
+    const duration = [0, 460, 250, 160, 110][speedTier];
+    setJumpFlash({ messageId, key: sequence.key, cycles, duration });
+    if (jumpTimeoutRef.current !== null) window.clearTimeout(jumpTimeoutRef.current);
+    jumpTimeoutRef.current = window.setTimeout(() => {
+      if (jumpSequenceRef.current.key === sequence.key) {
+        setHighlightedMessageId(null);
+        setJumpFlash(null);
+        jumpTimeoutRef.current = null;
+      }
+    }, cycles * duration + 100);
   };
   const showMenuNotice = (text: string) => { setMenuNotice(text); window.setTimeout(() => setMenuNotice(''), 1800); };
   const copyMessageValue = async (text: string, label: string) => { await navigator.clipboard?.writeText(text); showMenuNotice(`${label} copied`); };
@@ -222,6 +241,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
                 const repliedMessage = message.reply_to_id ? chatMessages.find(item => item.id === message.reply_to_id) : undefined;
                 const repliedAuthor = repliedMessage ? (repliedMessage.sender_name || repliedMessage.sender_username || (repliedMessage.sender_id === currentUser.id ? 'You' : 'Student')) : 'Original message';
                 return <React.Fragment key={message.id}>{isNewDay && (['Today', 'Tomorrow'].includes(messageDateLabel(message.created_at)) || (previous && localMessageDay(previous.created_at) !== localMessageDay(message.created_at) && ['Today', 'Tomorrow'].includes(messageDateLabel(previous.created_at)))) && <div className="nexus-message-date-divider" role="separator"><span>{messageDateLabel(message.created_at)}</span></div>}<article id={`message-${message.id}`} className={`nexus-message-row nexus-chat-message${sameAuthor ? ' grouped' : ''}${message.reply_to_id ? ' has-reply-preview' : ''} ${mine ? 'mine' : ''}${highlightedMessageId === message.id ? ' is-jump-target' : ''}`}>
+                  {jumpFlash?.messageId === message.id && <span key={jumpFlash.key} className="nexus-message-jump-flash" style={{ '--jump-flash-duration': `${jumpFlash.duration}ms`, '--jump-flash-count': jumpFlash.cycles } as React.CSSProperties} aria-hidden="true" />}
                   <span className="nexus-chat-avatar-slot">{!sameAuthor && <ProfileAvatar className="nexus-message-avatar nexus-chat-message-avatar" user={message} label={author} />}</span>
                   <div className="nexus-message-main">
                     {message.reply_to_id && <MessageReplyPreview author={repliedAuthor} content={repliedMessage?.content || message.reply_preview || 'Original message unavailable'} user={repliedMessage} onClick={() => jumpToMessage(message.reply_to_id!)} ariaLabel={`Jump to reply from ${repliedAuthor}`} />}
