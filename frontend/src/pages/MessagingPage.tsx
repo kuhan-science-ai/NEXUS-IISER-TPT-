@@ -57,6 +57,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const [typingNames, setTypingNames] = useState<Record<string, string>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const reactionMutationRef = useRef(new Map<string, number>());
   const shouldStickToBottomRef = useRef(true);
   const pendingScrollHeightRef = useRef<number | null>(null);
   const loadingOlderRef = useRef(false);
@@ -97,6 +98,38 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
     rows.forEach(message => byId.set(message.id, message));
     return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
   });
+  const toggleReaction = async (messageId: string, emoji: string) => {
+    const mutationKey = `${messageId}:${emoji}`;
+    const mutationVersion = (reactionMutationRef.current.get(mutationKey) || 0) + 1;
+    reactionMutationRef.current.set(mutationKey, mutationVersion);
+    const applyOptimisticToggle = (messages: Message[]) => messages.map(message => {
+      if (message.id !== messageId) return message;
+      const reactions = [...(message.reactions || [])];
+      const reactionIndex = reactions.findIndex(reaction => reaction.emoji === emoji);
+      const reaction = reactionIndex >= 0 ? reactions[reactionIndex] : { emoji, count: 0, user_ids: [] };
+      const hasReacted = reaction.user_ids.includes(currentUser.id);
+      const userIds = hasReacted
+        ? reaction.user_ids.filter(userId => userId !== currentUser.id)
+        : [...reaction.user_ids, currentUser.id];
+      const nextReaction = { ...reaction, count: Math.max(0, reaction.count + (hasReacted ? -1 : 1)), user_ids: userIds };
+      if (reactionIndex >= 0) {
+        if (nextReaction.count === 0) reactions.splice(reactionIndex, 1);
+        else reactions[reactionIndex] = nextReaction;
+      } else if (nextReaction.count > 0) reactions.push(nextReaction);
+      return { ...message, reactions };
+    });
+    setChatMessages(applyOptimisticToggle);
+    try {
+      const updatedMessage = await api.toggleReaction(messageId, emoji);
+      if (reactionMutationRef.current.get(mutationKey) === mutationVersion && Array.isArray(updatedMessage?.reactions)) {
+        setChatMessages(messages => messages.map(message => message.id === messageId ? { ...message, reactions: updatedMessage.reactions } : message));
+      }
+    } catch {
+      if (reactionMutationRef.current.get(mutationKey) === mutationVersion) {
+        setChatMessages(applyOptimisticToggle);
+      }
+    }
+  };
   useEffect(() => {
     if (!activeConvId) { setTypingNames({}); return; }
     setTypingNames({});
@@ -282,15 +315,15 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   return <div className="messenger-route" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-canvas)' }}>
     <SideNav currentUser={currentUser} onLogout={onLogout} onOpenSearch={() => setSearchOpen(true)} />
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh' }}><TopHeader breadcrumb="Workspace / Messenger" currentUser={currentUser} onOpenSearch={() => setSearchOpen(true)} />
-      <div className={`messenger-discord-layout${messengerSidebarCollapsed ? ' is-dm-sidebar-collapsed' : ''}`} style={{ flex: 1, display: 'grid', gridTemplateColumns: messengerSidebarCollapsed ? (profileOpen ? '48px minmax(0, 1fr) 280px' : '48px minmax(0, 1fr)') : (profileOpen ? '272px minmax(0, 1fr) 280px' : '272px minmax(0, 1fr)'), overflow: 'hidden' }}>
+      <div className={`messenger-discord-layout${messengerSidebarCollapsed ? ' is-dm-sidebar-collapsed' : ''}`} style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateRows: 'minmax(0, 1fr)', gridTemplateColumns: messengerSidebarCollapsed ? (profileOpen ? '48px minmax(0, 1fr) 280px' : '48px minmax(0, 1fr)') : (profileOpen ? '272px minmax(0, 1fr) 280px' : '272px minmax(0, 1fr)'), overflow: 'hidden' }}>
         <SharedConversationSidebar currentUser={currentUser} section="messenger" conversations={conversations} activeConversationId={activeConvId} collapsed={messengerSidebarCollapsed} onCollapsedChange={setMessengerSidebarCollapsed} onAddConversation={() => navigate('/friends')} />
-        <section className="messenger-chat-panel" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-canvas)', height: '100%', minWidth: 0, position: 'relative' }}>
+        <section className="messenger-chat-panel" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-canvas)', height: '100%', minWidth: 0, minHeight: 0, position: 'relative' }}>
           {activeConv ? <>
             <header className="messenger-chat-header" style={{ height: 56, borderBottom: '1px solid var(--border)', padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: 'var(--bg-surface)' }}><div className="nexus-dm-heading"><ProfileAvatar className="friends-avatar" user={avatarForConversation(activeConv)} label={initials(activeConv)} /><div><strong>{displayName(activeConv)}</strong><small>{activeConv.type === 'GROUP' ? 'Group conversation' : 'Direct conversation'}</small></div></div><div className="messenger-chat-actions"><button type="button" aria-label="Start voice call" title="Voice call" onClick={() => { setCallStartError(''); void startDirectCall(activeConv.id, displayName(activeConv)).catch(cause => setCallStartError(cause instanceof Error ? cause.message : 'Could not start the call.')); }}><Phone size={17} /></button><button type="button" aria-label="Start video call" title="Video call" onClick={() => { setCallStartError(''); void startDirectCall(activeConv.id, displayName(activeConv), true).catch(cause => setCallStartError(cause instanceof Error ? cause.message : 'Could not start the call.')); }}><Video size={17} /></button><button type="button" aria-label="Clear conversation history" title="Clear conversation history" onClick={() => void clearHistory()}><Trash2 size={17} /></button><button type="button" className={`messenger-profile-toggle ${profileOpen ? 'is-open' : ''}`} aria-label="Open conversation details" onClick={() => setProfileOpen(value => !value)}><UserRound size={17} /></button></div></header>
             {callStartError && <div className="messenger-call-notice" role="status"><span>{callStartError}</span><button onClick={() => setCallStartError('')} aria-label="Dismiss"><X size={15} /></button></div>}
             
             {error && <p className="nexus-message-error" role="alert">{error}</p>}{menuNotice && <div className="nexus-chat-toast" role="status">{menuNotice}</div>}
-            <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="messenger-chat-messages nexus-chat-messages" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column' }}>
+            <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="messenger-chat-messages nexus-chat-messages" style={{ flex: '1 1 0%', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', padding: '20px', display: 'flex', flexDirection: 'column' }}>
               {loadingOlderMessages && <div className="nexus-message-history-loading" role="status">Loading earlier messages…</div>}
               {loading && <p className="friends-empty">Loading messages…</p>}
               {!loading && !chatMessages.length && <div className="nexus-dm-empty"><MessagesSquare size={30} /><strong>This is the start of your conversation.</strong><p>Send a message to get things going.</p></div>}
@@ -308,15 +341,15 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
                   <div className="nexus-message-main">
                     {message.reply_to_id && <MessageReplyPreview author={repliedAuthor} content={repliedMessage?.content || message.reply_preview || 'Original message unavailable'} user={repliedMessage} onClick={() => jumpToMessage(message.reply_to_id!)} ariaLabel={`Jump to reply from ${repliedAuthor}`} />}
                     {!sameAuthor && <div className="nexus-message-meta"><strong>{author}</strong><time>{new Date(message.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</time></div>}
-                    <div className="nexus-message-text-line"><p className={`${message.is_deleted ? 'deleted' : ''}${!message.is_deleted && isEmojiOnly(message.content) ? ' nexus-message-emoji-only' : ''}`}><TwemojiText>{message.content}</TwemojiText></p><div className="nexus-message-hover-tools"><button title="React with laughing" onClick={() => void api.toggleReaction(message.id, '😂').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>😂</TwemojiText></button><button title="React with thumbs up" onClick={() => void api.toggleReaction(message.id, '👍').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>👍</TwemojiText></button><button title="React with heart" onClick={() => void api.toggleReaction(message.id, '❤️').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>❤️</TwemojiText></button><EmojiPickerButton title="Choose reaction" ariaLabel="Choose reaction" onSelect={emoji => void api.toggleReaction(message.id, emoji).then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><SmilePlus size={15} /></EmojiPickerButton><button title="Reply" onClick={() => setReplyTo(message)}><CornerUpLeft size={15} /></button><button title="Forward"><Forward size={14} /></button><div className="nexus-message-menu"><button aria-label="More message options"><MoreHorizontal size={16} /></button><div>
-                        <div className="nexus-context-quick"><button onClick={() => void api.toggleReaction(message.id, '😂').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>😂</TwemojiText></button><button onClick={() => void api.toggleReaction(message.id, '👍').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>👍</TwemojiText></button><button onClick={() => void api.toggleReaction(message.id, '❤️').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>❤️</TwemojiText></button><button onClick={() => void api.toggleReaction(message.id, '😮').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>😮</TwemojiText></button></div>
-                        <EmojiPickerButton className="nexus-context-add-reaction" title="Choose reaction" ariaLabel="Choose reaction" onSelect={emoji => void api.toggleReaction(message.id, emoji).then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}>☻ <span>Add Reaction</span><i>›</i></EmojiPickerButton><hr />
+                    <div className="nexus-message-text-line"><p className={`${message.is_deleted ? 'deleted' : ''}${!message.is_deleted && isEmojiOnly(message.content) ? ' nexus-message-emoji-only' : ''}`}><TwemojiText>{message.content}</TwemojiText></p><div className="nexus-message-hover-tools"><button title="React with laughing" onClick={() => void toggleReaction(message.id, '😂')}><TwemojiText>😂</TwemojiText></button><button title="React with thumbs up" onClick={() => void toggleReaction(message.id, '👍')}><TwemojiText>👍</TwemojiText></button><button title="React with heart" onClick={() => void toggleReaction(message.id, '❤️')}><TwemojiText>❤️</TwemojiText></button><EmojiPickerButton title="Choose reaction" ariaLabel="Choose reaction" onSelect={emoji => void toggleReaction(message.id, emoji)}><SmilePlus size={15} /></EmojiPickerButton><button title="Reply" onClick={() => setReplyTo(message)}><CornerUpLeft size={15} /></button><button title="Forward"><Forward size={14} /></button><div className="nexus-message-menu"><button aria-label="More message options"><MoreHorizontal size={16} /></button><div>
+                        <div className="nexus-context-quick"><button onClick={() => void toggleReaction(message.id, '😂')}><TwemojiText>😂</TwemojiText></button><button onClick={() => void toggleReaction(message.id, '👍')}><TwemojiText>👍</TwemojiText></button><button onClick={() => void toggleReaction(message.id, '❤️')}><TwemojiText>❤️</TwemojiText></button><button onClick={() => void toggleReaction(message.id, '😮')}><TwemojiText>😮</TwemojiText></button></div>
+                        <EmojiPickerButton className="nexus-context-add-reaction" title="Choose reaction" ariaLabel="Choose reaction" onSelect={emoji => void toggleReaction(message.id, emoji)}>☻ <span>Add Reaction</span><i>›</i></EmojiPickerButton><hr />
                         <button onClick={() => setReplyTo(message)}>↶ <span>Reply</span></button><button onClick={() => showMenuNotice('Forward message: choose a conversation from Messenger.')}>↗ <span>Forward</span></button><button onClick={() => showMenuNotice('Message threads are not available yet.')}>▤ <span>Create Thread</span></button><hr />
                         <button onClick={() => void copyMessageValue(message.content, 'Message text')}>▢ <span>Copy Text</span></button><button onClick={() => void api.toggleMessagePin(message.id).then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}>⌖ <span>{message.is_pinned ? 'Unpin Message' : 'Pin Message'}</span></button><button onClick={() => toggleMessageBookmark(message)}>♧ <span>Bookmark Message</span></button><button onClick={() => { const minutes = Number(window.prompt('Remind me in how many minutes?', '30')); if (minutes > 0) { window.setTimeout(() => window.alert(`Reminder: ${message.content}`), minutes * 60_000); showMenuNotice(`Reminder set for ${minutes} minutes`); } }}>◷ <span>Create Reminder</span><i>›</i></button><button onClick={() => showMenuNotice('No message apps are connected.')}>✣ <span>Apps</span><i>›</i></button><button onClick={() => showMenuNotice('Conversation marked unread on this browser.')}>◉ <span>Mark Unread</span></button><button onClick={() => void copyMessageValue(`${window.location.origin}/messaging#${message.id}`, 'Message link')}>↗ <span>Copy Message Link</span></button><button onClick={() => { window.speechSynthesis?.cancel(); window.speechSynthesis?.speak(new SpeechSynthesisUtterance(message.content)); }}>◖ <span>Speak Message</span></button><hr />
                         {mine && !message.is_deleted && <button className="danger" onClick={() => void api.deleteMessage(message.id).then(() => setChatMessages(items => items.map(item => item.id === message.id ? { ...item, content: 'This message was deleted.', is_deleted: true } : item)))}>▣ <span>Delete Message</span></button>}<button className="danger" onClick={() => showMenuNotice('Report noted. Message reports are not connected to moderation yet.')}>⚑ <span>Report Message</span></button><hr /><button onClick={() => void copyMessageValue(message.id, 'Message ID')}>ID <span>Copy Message ID</span></button>
                       </div></div></div>
                     </div>
-                    <div className={`nexus-message-reactions${message.reactions?.length ? ' has-reactions' : ''}`}>{message.reactions?.map(reaction => <button className={reaction.user_ids.includes(currentUser.id) ? 'is-reacted' : ''} key={reaction.emoji} aria-pressed={reaction.user_ids.includes(currentUser.id)} title={reaction.user_ids.includes(currentUser.id) ? 'Remove your reaction' : 'Add your reaction'} onClick={() => void api.toggleReaction(message.id, reaction.emoji).then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>{reaction.emoji}</TwemojiText> {reaction.count}</button>)}</div>
+                    <div className={`nexus-message-reactions${message.reactions?.length ? ' has-reactions' : ''}`}>{message.reactions?.map(reaction => <button className={reaction.user_ids.includes(currentUser.id) ? 'is-reacted' : ''} key={reaction.emoji} aria-pressed={reaction.user_ids.includes(currentUser.id)} title={reaction.user_ids.includes(currentUser.id) ? 'Remove your reaction' : 'Add your reaction'} onClick={() => void toggleReaction(message.id, reaction.emoji)}><TwemojiText>{reaction.emoji}</TwemojiText> {reaction.count}</button>)}</div>
                   </div>
                 </article></React.Fragment>;
               })}
