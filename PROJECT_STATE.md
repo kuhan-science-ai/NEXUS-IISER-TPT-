@@ -10,6 +10,8 @@ Messenger shows a centered date divider when a conversation crosses into today o
 
 The Messenger cancel-reply control explicitly prevents form submission and stays above overlapping composer layers so it can be clicked reliably.
 
+Messenger message rows keep their existing background color on hover; temporary jump highlighting remains visible while hovered.
+
 Friends and Messenger share one conversation sidebar with the same search, conversation list, profile footer, and saved collapse state. The center panel changes with the active route; opening a conversation from Friends navigates to that chat in Messenger while preserving the shared sidebar. Friends, requests, and conversations render from session cache immediately and stay visible while their background refresh runs or fails.
 
 Discussion forum threads can be closed to expand the post feed and reopened by selecting a post. Thread details are cached in session storage and shown immediately on reopen while refreshing in the background.
