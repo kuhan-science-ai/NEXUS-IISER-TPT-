@@ -106,11 +106,11 @@
 .nexus-real-composer > div > button { display:grid; width:38px; height:38px; flex:none; place-items:center; border:0; border-radius:6px; background:var(--primary); color:#fff; cursor:pointer; }
 .nexus-real-composer > div > button:first-child { background:var(--bg-elevated); color:var(--text-muted); font-size:17px; }
 .nexus-real-composer > small { color:var(--text-subtle); font-size:9px; }
-.nexus-replying { display:flex; min-height:29px; align-items:center; justify-content:space-between; gap:8px; margin:-5px 0 0; padding:3px 4px; border:0; border-left:2px solid var(--primary); border-radius:0; background:transparent; color:var(--text-primary); font:inherit; font-size:11px; }
+.nexus-replying { position:relative; z-index:6; display:flex; min-height:29px; align-items:center; justify-content:space-between; gap:8px; margin:-5px 0 0; padding:3px 4px; border:0; border-left:2px solid var(--primary); border-radius:0; background:transparent; color:var(--text-primary); font:inherit; font-size:11px; }
 .nexus-replying > span { display:flex; align-items:center; gap:4px; min-width:0; overflow:hidden; white-space:nowrap; }
 .nexus-replying strong { color:var(--primary); font:inherit; font-weight:650; }
 .nexus-replying small { overflow:hidden; color:var(--text-subtle); text-overflow:ellipsis; white-space:nowrap; }
-.nexus-replying button { position:relative; z-index:2; display:grid; width:23px; height:23px; flex:none; place-items:center; border:1px solid transparent; border-radius:5px; background:transparent; color:var(--text-subtle); cursor:pointer; pointer-events:auto; transition:border-color .15s ease,color .15s ease,background .15s ease; }
+.nexus-replying button { position:relative; z-index:10; display:grid; box-sizing:border-box; width:38px; min-width:38px; height:38px; min-height:38px; flex:none; place-items:center; padding:0; border:1px solid transparent; border-radius:5px; background:transparent; color:var(--text-subtle); cursor:pointer; pointer-events:auto; transition:border-color .15s ease,color .15s ease,background .15s ease; }
 .nexus-replying button:hover { border-color:color-mix(in srgb,var(--primary) 65%,var(--border)); background:color-mix(in srgb,var(--primary) 10%,transparent); color:var(--primary); }
 .nexus-conversation-details { display:flex; flex-direction:column; align-items:center; gap:10px; padding:26px 16px; border-left:1px solid var(--border); background:var(--bg-navigation); }
 .nexus-details-avatar { display:grid; width:66px; height:66px; place-items:center; border-radius:50%; background:var(--bg-elevated); color:var(--primary); font-size:22px; font-weight:800; }
