@@ -8,6 +8,8 @@ Messenger emoji picker exposes the full Twemoji catalog in a dedicated pack tab 
 
 Messenger shows a centered date divider when a conversation crosses into today or tomorrow, using local dates; older history remains unchanged. Sender grouping restarts at each day boundary.
 
+Messenger conversations remain a single chronological scroll list. The latest 100 messages load first; scrolling to the top fetches earlier stored messages without a page control and preserves the current viewport. Message rows do not shrink to fit, incoming messages keep the reader's scroll position, and the session cache retains only the latest 100 loaded messages.
+
 The Messenger cancel-reply control explicitly prevents form submission and stays above overlapping composer layers so it can be clicked reliably.
 
 Messenger message rows show a clearly visible hover background, and the reply connector stays a consistent grey without dimming.

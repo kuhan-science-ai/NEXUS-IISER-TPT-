@@ -10,7 +10,7 @@
 .messenger-call-notice { position:absolute;top:64px;right:12px;z-index:6;display:flex;align-items:center;gap:12px;max-width:min(360px,calc(100% - 24px));padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg-surface);color:var(--text-muted);font-size:12px;box-shadow:var(--shadow-card); }
 .messenger-call-notice button { display:grid;width:24px;height:24px;flex:none;place-items:center;border:0;border-radius:50%;background:transparent;color:var(--text-subtle);cursor:pointer; }
 .messenger-call-notice button:hover { background:var(--bg-elevated);color:var(--text-primary); }
-.messenger-chat-messages { min-width:0;align-items:stretch;gap:0!important; }
+.messenger-chat-messages { min-width:0;min-height:0;align-items:stretch;gap:0!important; }
 .messenger-chat-messages > div { max-width:100%; }
 .messenger-chat-messages > div > div[style*="borderRadius"] { max-width:min(480px,88%)!important;overflow-wrap:anywhere; }
 .messenger-message-row { display:flex!important;width:100%!important;min-width:0!important;max-width:none!important;align-self:stretch!important;flex:0 0 auto!important;box-sizing:border-box; }
@@ -43,7 +43,8 @@
 .nexus-message-date-divider { display:flex; flex:none; align-items:center; gap:8px; margin:2px 0 14px; color:var(--text-subtle); font-size:10px; line-height:1; }
 .nexus-message-date-divider::before,.nexus-message-date-divider::after { content:""; height:1px; flex:1; background:var(--border); }
 .nexus-message-date-divider span { padding:0 2px; white-space:nowrap; }
-.nexus-message-row.nexus-chat-message { position:relative; isolation:isolate; display:flex!important; min-height:0; align-self:stretch!important; gap:11px; margin-left:calc(-1 * var(--messenger-message-gutter, 20px)); margin-right:calc(-1 * var(--messenger-message-gutter, 20px)); padding:0 calc(34px + var(--messenger-message-gutter, 20px)) 0 var(--messenger-message-gutter, 20px); border-radius:0; }
+.nexus-message-history-loading { flex:none; align-self:center; padding:4px 8px; color:var(--text-subtle); font-size:10px; }
+.nexus-message-row.nexus-chat-message { position:relative; isolation:isolate; display:flex!important; flex:0 0 auto!important; min-height:0; align-self:stretch!important; gap:11px; margin-left:calc(-1 * var(--messenger-message-gutter, 20px)); margin-right:calc(-1 * var(--messenger-message-gutter, 20px)); padding:0 calc(34px + var(--messenger-message-gutter, 20px)) 0 var(--messenger-message-gutter, 20px); border-radius:0; }
 .nexus-message-row.nexus-chat-message + .nexus-message-row.nexus-chat-message { margin-top:7px; }
 .nexus-message-row.nexus-chat-message.grouped { min-height:0; padding:0 calc(34px + var(--messenger-message-gutter, 20px)) 0 var(--messenger-message-gutter, 20px); }
 .nexus-message-row.nexus-chat-message:not(.grouped) + .nexus-message-row.nexus-chat-message:not(.grouped) { margin-top:13px; }

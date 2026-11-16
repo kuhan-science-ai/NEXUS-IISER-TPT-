@@ -2,7 +2,8 @@
 
 All notable changes to the NEXUS core architecture will be documented here.
 
-## [Unreleased] - 2026-11-16
+## [Unreleased] - 2026-11-17
+- Kept Messenger history in one scrollable conversation, automatically loading older stored messages at the top without compressing rows or moving the reader's position.
 - Restored LaTeX Studio PDF compilation in hosted builds using a lazily loaded Tectonic WebAssembly worker; exposed the compile control and routed both KaTeX and full-document sources through it.
 - Animated reply jumps with smooth background flashes: three pulses on first click, then four faster pulses on repeat clicks, capped at the third speed stage.
 - Made Messenger message hover backgrounds rectangular and edge-to-edge across each message line.

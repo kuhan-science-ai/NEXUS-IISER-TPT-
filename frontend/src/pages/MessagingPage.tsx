@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CornerUpLeft, Forward, MessagesSquare, MoreHorizontal, Phone, Rocket, SmilePlus, Trash2, UserRound, Video, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api, UserSummary } from '../services/api';
@@ -44,6 +44,8 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const [conversations, setConversations] = useState<Conversation[]>(() => readMessengerCache(`nexus-dm-conversations:${currentUser?.id}`, []));
   const [activeConvId, setActiveConvId] = useState<string | null>(() => new URLSearchParams(location.search).get('conversationId') || readMessengerCache<Conversation[]>(`nexus-dm-conversations:${currentUser?.id}`, [])[0]?.id || null);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -54,6 +56,10 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   const [menuNotice, setMenuNotice] = useState('');
   const [typingNames, setTypingNames] = useState<Record<string, string>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const pendingScrollHeightRef = useRef<number | null>(null);
+  const loadingOlderRef = useRef(false);
   const typingTimerRef = useRef<number | null>(null);
   const typingHeartbeatRef = useRef<number | null>(null);
   const typingActiveRef = useRef<string | null>(null);
@@ -64,13 +70,33 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   }, [location.search]);
   useEffect(() => { void loadConversations(); const refreshOnProfile = () => void loadConversations(); window.addEventListener('nexus-profile-updated', refreshOnProfile); return () => window.removeEventListener('nexus-profile-updated', refreshOnProfile); }, [loadConversations]);
   useEffect(() => {
-    if (!activeConvId) { setChatMessages([]); return; }
-    let alive = true; const cached = readMessengerCache<Message[]>(`nexus-dm-messages:${currentUser?.id}:${activeConvId}`, []); setChatMessages(cached); setLoading(cached.length === 0); setError('');
-    api.getMessages(activeConvId).then(rows => { if (alive) setChatMessages(rows); }).catch(() => { if (alive) { setChatMessages([]); setError('Messages could not be loaded. Check your connection and try again.'); } }).finally(() => { if (alive) setLoading(false); });
+    if (!activeConvId) { setChatMessages([]); setHasOlderMessages(false); return; }
+    let alive = true;
+    shouldStickToBottomRef.current = true;
+    pendingScrollHeightRef.current = null;
+    const cached = readMessengerCache<Message[]>(`nexus-dm-messages:${currentUser?.id}:${activeConvId}`, []);
+    setChatMessages(cached);
+    setHasOlderMessages(cached.length >= 100);
+    setLoading(cached.length === 0);
+    setError('');
+    api.getMessages(activeConvId, undefined, 100).then(rows => {
+      if (!alive) return;
+      setHasOlderMessages(rows.length === 100 || cached.length >= 100);
+      setChatMessages(current => {
+        const byId = new Map(current.map(message => [message.id, message]));
+        rows.forEach((message: Message) => byId.set(message.id, message));
+        return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
+      });
+    }).catch(() => { if (alive && !cached.length) { setChatMessages([]); setError('Messages could not be loaded. Check your connection and try again.'); } }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [activeConvId, currentUser?.id]);
   useEffect(() => { if (currentUser) sessionStorage.setItem(`nexus-dm-conversations:${currentUser.id}`, JSON.stringify(conversations)); }, [conversations, currentUser?.id]);
-  useEffect(() => { if (currentUser && activeConvId) sessionStorage.setItem(`nexus-dm-messages:${currentUser.id}:${activeConvId}`, JSON.stringify(chatMessages)); }, [chatMessages, activeConvId, currentUser?.id]);
+  useEffect(() => { if (currentUser && activeConvId) sessionStorage.setItem(`nexus-dm-messages:${currentUser.id}:${activeConvId}`, JSON.stringify(chatMessages.slice(-100))); }, [chatMessages, activeConvId, currentUser?.id]);
+  const mergeFetchedMessages = (rows: Message[]) => setChatMessages(current => {
+    const byId = new Map(current.map(message => [message.id, message]));
+    rows.forEach(message => byId.set(message.id, message));
+    return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  });
   useEffect(() => {
     if (!activeConvId) { setTypingNames({}); return; }
     setTypingNames({});
@@ -103,11 +129,7 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
     if (!activeConvId) return;
     const sync = () => {
       if (wsClient.isConnected()) return;
-      void api.getMessages(activeConvId).then(rows => setChatMessages(current => {
-        const byId = new Map(current.map(message => [message.id, message]));
-        rows.forEach((message: Message) => byId.set(message.id, message));
-        return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
-      })).catch(() => undefined);
+      void api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages).catch(() => undefined);
       void api.getTyping(activeConvId).then(rows => setTypingNames(Object.fromEntries(rows.map((row: any) => [row.user_id, row.name])))).catch(() => undefined);
       void loadConversations();
     };
@@ -119,15 +141,15 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
   useEffect(() => {
     const typingTimers = new Map<string, number>();
     const removeListener = wsClient.addListener(event => {
-    if (event.event === 'system.connected') { void loadConversations(); if (activeConvId) void api.getMessages(activeConvId).then(setChatMessages).catch(() => undefined); }
+    if (event.event === 'system.connected') { void loadConversations(); if (activeConvId) void api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages).catch(() => undefined); }
     else if (event.event === 'conversation.created' || event.event === 'friends.changed') { void loadConversations(); }
     else if (event.event === 'message.new' && event.message) {
       if (event.conversation_id === activeConvId) setChatMessages(items => items.some(item => item.id === event.message.id) ? items : [...items, event.message].sort((a, b) => a.created_at.localeCompare(b.created_at)));
       void loadConversations();
     } else if (event.event === 'message.deleted' && event.conversation_id === activeConvId) setChatMessages(items => items.map(item => item.id === event.message_id ? { ...item, is_deleted: true, content: 'This message was deleted.' } : item));
-    else if (event.event === 'conversation.cleared' && event.conversation_id === activeConvId) setChatMessages([]);
+    else if (event.event === 'conversation.cleared' && event.conversation_id === activeConvId) { setChatMessages([]); setHasOlderMessages(false); }
     else if (event.event === 'message.edited' && event.conversation_id === activeConvId && event.message) setChatMessages(items => items.map(item => item.id === event.message.id ? event.message : item));
-    else if (event.event === 'message.reaction' && event.conversation_id === activeConvId) void api.getMessages(activeConvId).then(setChatMessages).catch(() => undefined);
+    else if (event.event === 'message.reaction' && event.conversation_id === activeConvId) void api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages).catch(() => undefined);
     else if (event.event === 'typing.changed' && event.conversation_id === activeConvId) {
       const userId = event.user_id || event.name;
       const timer = typingTimers.get(userId);
@@ -143,7 +165,46 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
     });
     return () => { removeListener(); typingTimers.forEach(timer => window.clearTimeout(timer)); };
   }, [activeConvId, loadConversations]);
-  useEffect(() => { document.getElementById('messenger-bottom-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages]);
+  useLayoutEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    if (pendingScrollHeightRef.current !== null) {
+      container.scrollTop += container.scrollHeight - pendingScrollHeightRef.current;
+      pendingScrollHeightRef.current = null;
+    } else if (shouldStickToBottomRef.current) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [chatMessages, activeConvId]);
+  const loadOlderMessages = async () => {
+    if (!activeConvId || !hasOlderMessages || loadingOlderRef.current || !chatMessages.length) return;
+    const conversationId = activeConvId;
+    const firstMessageId = chatMessages[0].id;
+    loadingOlderRef.current = true;
+    setLoadingOlderMessages(true);
+    try {
+      const rows: Message[] = await api.getMessages(conversationId, firstMessageId, 100);
+      if (activeConvId !== conversationId) return;
+      if (rows.length) {
+        pendingScrollHeightRef.current = messagesContainerRef.current?.scrollHeight ?? null;
+        setChatMessages(current => {
+          const existingIds = new Set(current.map(message => message.id));
+          return [...rows.filter(message => !existingIds.has(message.id)), ...current].sort((a, b) => a.created_at.localeCompare(b.created_at));
+        });
+      }
+      setHasOlderMessages(rows.length === 100);
+    } catch {
+      setError('Earlier messages could not be loaded. Scroll up to try again.');
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlderMessages(false);
+    }
+  };
+  const handleMessagesScroll = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    shouldStickToBottomRef.current = container.scrollHeight - container.scrollTop - container.clientHeight < 72;
+    if (container.scrollTop < 96) void loadOlderMessages();
+  };
   const jumpToMessage = (messageId: string) => {
     const target = document.getElementById(`message-${messageId}`);
     target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -210,13 +271,13 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
     if (typingHeartbeatRef.current !== null) window.clearInterval(typingHeartbeatRef.current);
     typingHeartbeatRef.current = null;
     void api.setTyping(activeConvId, false).catch(() => undefined); typingActiveRef.current = null;
-    try { const sent = await api.sendMessage(activeConvId, { content, reply_to_id: replyTo?.id || null }); setChatMessages(items => items.some(item => item.id === sent.id) ? items : [...items, sent].sort((a, b) => a.created_at.localeCompare(b.created_at))); setReplyTo(null); void loadConversations(); }
+    try { const sent = await api.sendMessage(activeConvId, { content, reply_to_id: replyTo?.id || null }); shouldStickToBottomRef.current = true; setChatMessages(items => items.some(item => item.id === sent.id) ? items : [...items, sent].sort((a, b) => a.created_at.localeCompare(b.created_at))); setReplyTo(null); void loadConversations(); }
     catch { setInputText(content); setError('Message was not sent. Please try again.'); }
   };
   const clearHistory = async () => {
     if (!activeConvId || !window.confirm('Delete every message in this conversation? This permanently removes its stored history.')) return;
     try { await api.clearConversationHistory(activeConvId); setChatMessages(items => items.map(item => ({ ...item, is_deleted: true, content: 'This message was deleted.' }))); setError(''); }
-    catch { setError('Some messages could not be deleted. Reloading conversation history.'); setChatMessages(await api.getMessages(activeConvId).catch(() => [])); }
+    catch { setError('Some messages could not be deleted. Reloading conversation history.'); mergeFetchedMessages(await api.getMessages(activeConvId, undefined, 100).catch(() => [])); }
   };
   return <div className="messenger-route" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-canvas)' }}>
     <SideNav currentUser={currentUser} onLogout={onLogout} onOpenSearch={() => setSearchOpen(true)} />
@@ -229,7 +290,8 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
             {callStartError && <div className="messenger-call-notice" role="status"><span>{callStartError}</span><button onClick={() => setCallStartError('')} aria-label="Dismiss"><X size={15} /></button></div>}
             
             {error && <p className="nexus-message-error" role="alert">{error}</p>}{menuNotice && <div className="nexus-chat-toast" role="status">{menuNotice}</div>}
-            <div className="messenger-chat-messages nexus-chat-messages" style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column' }}>
+            <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="messenger-chat-messages nexus-chat-messages" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column' }}>
+              {loadingOlderMessages && <div className="nexus-message-history-loading" role="status">Loading earlier messages…</div>}
               {loading && <p className="friends-empty">Loading messages…</p>}
               {!loading && !chatMessages.length && <div className="nexus-dm-empty"><MessagesSquare size={30} /><strong>This is the start of your conversation.</strong><p>Send a message to get things going.</p></div>}
               {chatMessages.map((message, index) => {
@@ -246,15 +308,15 @@ export const MessagingPage: React.FC<MessagingPageProps> = ({ currentUser, onLog
                   <div className="nexus-message-main">
                     {message.reply_to_id && <MessageReplyPreview author={repliedAuthor} content={repliedMessage?.content || message.reply_preview || 'Original message unavailable'} user={repliedMessage} onClick={() => jumpToMessage(message.reply_to_id!)} ariaLabel={`Jump to reply from ${repliedAuthor}`} />}
                     {!sameAuthor && <div className="nexus-message-meta"><strong>{author}</strong><time>{new Date(message.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</time></div>}
-                    <div className="nexus-message-text-line"><p className={`${message.is_deleted ? 'deleted' : ''}${!message.is_deleted && isEmojiOnly(message.content) ? ' nexus-message-emoji-only' : ''}`}><TwemojiText>{message.content}</TwemojiText></p><div className="nexus-message-hover-tools"><button title="React with laughing" onClick={() => void api.toggleReaction(message.id, '😂').then(() => api.getMessages(activeConvId).then(setChatMessages))}><TwemojiText>😂</TwemojiText></button><button title="React with thumbs up" onClick={() => void api.toggleReaction(message.id, '👍').then(() => api.getMessages(activeConvId).then(setChatMessages))}><TwemojiText>👍</TwemojiText></button><button title="React with heart" onClick={() => void api.toggleReaction(message.id, '❤️').then(() => api.getMessages(activeConvId).then(setChatMessages))}><TwemojiText>❤️</TwemojiText></button><EmojiPickerButton title="Choose reaction" ariaLabel="Choose reaction" onSelect={emoji => void api.toggleReaction(message.id, emoji).then(() => api.getMessages(activeConvId).then(setChatMessages))}><SmilePlus size={15} /></EmojiPickerButton><button title="Reply" onClick={() => setReplyTo(message)}><CornerUpLeft size={15} /></button><button title="Forward"><Forward size={14} /></button><div className="nexus-message-menu"><button aria-label="More message options"><MoreHorizontal size={16} /></button><div>
-                        <div className="nexus-context-quick"><button onClick={() => void api.toggleReaction(message.id, '😂').then(() => api.getMessages(activeConvId).then(setChatMessages))}><TwemojiText>😂</TwemojiText></button><button onClick={() => void api.toggleReaction(message.id, '👍').then(() => api.getMessages(activeConvId).then(setChatMessages))}><TwemojiText>👍</TwemojiText></button><button onClick={() => void api.toggleReaction(message.id, '❤️').then(() => api.getMessages(activeConvId).then(setChatMessages))}><TwemojiText>❤️</TwemojiText></button><button onClick={() => void api.toggleReaction(message.id, '😮').then(() => api.getMessages(activeConvId).then(setChatMessages))}><TwemojiText>😮</TwemojiText></button></div>
-                        <EmojiPickerButton className="nexus-context-add-reaction" title="Choose reaction" ariaLabel="Choose reaction" onSelect={emoji => void api.toggleReaction(message.id, emoji).then(() => api.getMessages(activeConvId).then(setChatMessages))}>☻ <span>Add Reaction</span><i>›</i></EmojiPickerButton><hr />
+                    <div className="nexus-message-text-line"><p className={`${message.is_deleted ? 'deleted' : ''}${!message.is_deleted && isEmojiOnly(message.content) ? ' nexus-message-emoji-only' : ''}`}><TwemojiText>{message.content}</TwemojiText></p><div className="nexus-message-hover-tools"><button title="React with laughing" onClick={() => void api.toggleReaction(message.id, '😂').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>😂</TwemojiText></button><button title="React with thumbs up" onClick={() => void api.toggleReaction(message.id, '👍').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>👍</TwemojiText></button><button title="React with heart" onClick={() => void api.toggleReaction(message.id, '❤️').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>❤️</TwemojiText></button><EmojiPickerButton title="Choose reaction" ariaLabel="Choose reaction" onSelect={emoji => void api.toggleReaction(message.id, emoji).then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><SmilePlus size={15} /></EmojiPickerButton><button title="Reply" onClick={() => setReplyTo(message)}><CornerUpLeft size={15} /></button><button title="Forward"><Forward size={14} /></button><div className="nexus-message-menu"><button aria-label="More message options"><MoreHorizontal size={16} /></button><div>
+                        <div className="nexus-context-quick"><button onClick={() => void api.toggleReaction(message.id, '😂').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>😂</TwemojiText></button><button onClick={() => void api.toggleReaction(message.id, '👍').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>👍</TwemojiText></button><button onClick={() => void api.toggleReaction(message.id, '❤️').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>❤️</TwemojiText></button><button onClick={() => void api.toggleReaction(message.id, '😮').then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>😮</TwemojiText></button></div>
+                        <EmojiPickerButton className="nexus-context-add-reaction" title="Choose reaction" ariaLabel="Choose reaction" onSelect={emoji => void api.toggleReaction(message.id, emoji).then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}>☻ <span>Add Reaction</span><i>›</i></EmojiPickerButton><hr />
                         <button onClick={() => setReplyTo(message)}>↶ <span>Reply</span></button><button onClick={() => showMenuNotice('Forward message: choose a conversation from Messenger.')}>↗ <span>Forward</span></button><button onClick={() => showMenuNotice('Message threads are not available yet.')}>▤ <span>Create Thread</span></button><hr />
-                        <button onClick={() => void copyMessageValue(message.content, 'Message text')}>▢ <span>Copy Text</span></button><button onClick={() => void api.toggleMessagePin(message.id).then(() => api.getMessages(activeConvId).then(setChatMessages))}>⌖ <span>{message.is_pinned ? 'Unpin Message' : 'Pin Message'}</span></button><button onClick={() => toggleMessageBookmark(message)}>♧ <span>Bookmark Message</span></button><button onClick={() => { const minutes = Number(window.prompt('Remind me in how many minutes?', '30')); if (minutes > 0) { window.setTimeout(() => window.alert(`Reminder: ${message.content}`), minutes * 60_000); showMenuNotice(`Reminder set for ${minutes} minutes`); } }}>◷ <span>Create Reminder</span><i>›</i></button><button onClick={() => showMenuNotice('No message apps are connected.')}>✣ <span>Apps</span><i>›</i></button><button onClick={() => showMenuNotice('Conversation marked unread on this browser.')}>◉ <span>Mark Unread</span></button><button onClick={() => void copyMessageValue(`${window.location.origin}/messaging#${message.id}`, 'Message link')}>↗ <span>Copy Message Link</span></button><button onClick={() => { window.speechSynthesis?.cancel(); window.speechSynthesis?.speak(new SpeechSynthesisUtterance(message.content)); }}>◖ <span>Speak Message</span></button><hr />
+                        <button onClick={() => void copyMessageValue(message.content, 'Message text')}>▢ <span>Copy Text</span></button><button onClick={() => void api.toggleMessagePin(message.id).then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}>⌖ <span>{message.is_pinned ? 'Unpin Message' : 'Pin Message'}</span></button><button onClick={() => toggleMessageBookmark(message)}>♧ <span>Bookmark Message</span></button><button onClick={() => { const minutes = Number(window.prompt('Remind me in how many minutes?', '30')); if (minutes > 0) { window.setTimeout(() => window.alert(`Reminder: ${message.content}`), minutes * 60_000); showMenuNotice(`Reminder set for ${minutes} minutes`); } }}>◷ <span>Create Reminder</span><i>›</i></button><button onClick={() => showMenuNotice('No message apps are connected.')}>✣ <span>Apps</span><i>›</i></button><button onClick={() => showMenuNotice('Conversation marked unread on this browser.')}>◉ <span>Mark Unread</span></button><button onClick={() => void copyMessageValue(`${window.location.origin}/messaging#${message.id}`, 'Message link')}>↗ <span>Copy Message Link</span></button><button onClick={() => { window.speechSynthesis?.cancel(); window.speechSynthesis?.speak(new SpeechSynthesisUtterance(message.content)); }}>◖ <span>Speak Message</span></button><hr />
                         {mine && !message.is_deleted && <button className="danger" onClick={() => void api.deleteMessage(message.id).then(() => setChatMessages(items => items.map(item => item.id === message.id ? { ...item, content: 'This message was deleted.', is_deleted: true } : item)))}>▣ <span>Delete Message</span></button>}<button className="danger" onClick={() => showMenuNotice('Report noted. Message reports are not connected to moderation yet.')}>⚑ <span>Report Message</span></button><hr /><button onClick={() => void copyMessageValue(message.id, 'Message ID')}>ID <span>Copy Message ID</span></button>
                       </div></div></div>
                     </div>
-                    <div className={`nexus-message-reactions${message.reactions?.length ? ' has-reactions' : ''}`}>{message.reactions?.map(reaction => <button className={reaction.user_ids.includes(currentUser.id) ? 'is-reacted' : ''} key={reaction.emoji} aria-pressed={reaction.user_ids.includes(currentUser.id)} title={reaction.user_ids.includes(currentUser.id) ? 'Remove your reaction' : 'Add your reaction'} onClick={() => void api.toggleReaction(message.id, reaction.emoji).then(() => api.getMessages(activeConvId).then(setChatMessages))}><TwemojiText>{reaction.emoji}</TwemojiText> {reaction.count}</button>)}</div>
+                    <div className={`nexus-message-reactions${message.reactions?.length ? ' has-reactions' : ''}`}>{message.reactions?.map(reaction => <button className={reaction.user_ids.includes(currentUser.id) ? 'is-reacted' : ''} key={reaction.emoji} aria-pressed={reaction.user_ids.includes(currentUser.id)} title={reaction.user_ids.includes(currentUser.id) ? 'Remove your reaction' : 'Add your reaction'} onClick={() => void api.toggleReaction(message.id, reaction.emoji).then(() => api.getMessages(activeConvId, undefined, 100).then(mergeFetchedMessages))}><TwemojiText>{reaction.emoji}</TwemojiText> {reaction.count}</button>)}</div>
                   </div>
                 </article></React.Fragment>;
               })}

@@ -222,8 +222,10 @@ class ApiService {
   async setCampusGroupTyping(groupId: string, channelId: string, isTyping: boolean): Promise<any> { return this.request(`/groups/${groupId}/channels/${channelId}/typing`, { method: 'POST', body: JSON.stringify({ is_typing: isTyping }) }); }
   async getCampusGroupTyping(groupId: string, channelId: string): Promise<any[]> { return this.request(`/groups/${groupId}/channels/${channelId}/typing`); }
 
-  async getMessages(convId: string): Promise<any[]> {
-    return this.request(`/messages/conversations/${convId}/messages`);
+  async getMessages(convId: string, beforeId?: string, limit = 100): Promise<any[]> {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (beforeId) query.set('before_id', beforeId);
+    return this.request(`/messages/conversations/${convId}/messages?${query.toString()}`);
   }
 
   async clearConversationHistory(convId: string): Promise<{ message: string; cleared_count: number }> {
