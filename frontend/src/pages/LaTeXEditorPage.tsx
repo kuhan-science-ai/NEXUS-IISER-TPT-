@@ -6,7 +6,8 @@ import { SideNav } from '../components/SideNav';
 import { UserSummary } from '../services/api';
 import { readUserPreference, writeUserPreference } from '../services/userPreferences';
 import { api } from '../services/api';
-import { compileLatex, downloadPdf } from '../services/latex';
+import { downloadPdf } from '../services/latex';
+import { compileWithTectonic } from '../services/tectonic';
 import './LaTeXEditorPage.css';
 
 function PdfCanvasPage({ document, pageNumber, thumbnail = false, onSelect }: { document: pdfjsTypes.PDFDocumentProxy; pageNumber: number; thumbnail?: boolean; onSelect?: () => void }) {
@@ -394,19 +395,24 @@ export const LaTeXEditorPage: React.FC<LaTeXEditorPageProps> = ({ currentUser, o
     return end < 0 ? `${previous}\n${code}\n` : `${previous.slice(0, end)}\n${code}\n${previous.slice(end)}`;
   });
 
-  const compile = async () => {
+  const compile = async (): Promise<Blob | null> => {
     setCompiling(true);
     setCompileError('');
     try {
       const source = engineMode === 'katex' ? makeFastPdfSource(content) : content;
-      const blob = await compileLatex(source, documentName, documentTheme);
+      const result = await compileWithTectonic(source);
+      const blob = result.pdf;
       const nextUrl = URL.createObjectURL(blob);
       setPdfUrl(nextUrl);
       setCompiledSource(content);
       setCompiledTheme(documentTheme);
       setCompiledEngine(engineMode);
+      const errors = result.diagnostics.filter(item => item.severity === 'error');
+      if (errors.length) setCompileError(errors.slice(0, 8).map(item => `${item.file || 'document.tex'}${item.line ? `:${item.line}` : ''}: ${item.message}`).join('\n'));
+      return blob;
     } catch (error) {
       setCompileError(error instanceof Error ? error.message : 'LaTeX compilation failed.');
+      return null;
     } finally {
       setCompiling(false);
     }
@@ -417,8 +423,8 @@ export const LaTeXEditorPage: React.FC<LaTeXEditorPageProps> = ({ currentUser, o
     if (!pdfIsCurrent) await compile();
   };
   const savePdf = async () => {
-    if (!pdfIsCurrent) await compile();
-    if (pdfIsCurrent && pdfUrl) downloadPdf(await fetch(pdfUrl).then(response => response.blob()), documentName);
+    const blob = pdfIsCurrent && pdfUrl ? await fetch(pdfUrl).then(response => response.blob()) : await compile();
+    if (blob) downloadPdf(blob, documentName);
   };
   const toggleDocumentTheme = () => setDocumentTheme(theme => theme === 'light' ? 'dark' : 'light');
 
@@ -435,7 +441,7 @@ export const LaTeXEditorPage: React.FC<LaTeXEditorPageProps> = ({ currentUser, o
       {(engineMode === 'tectonic' ? FULL_SNIPPETS : FAST_SNIPPETS).map(snippet => <button type="button" className="latex-tool-button" key={snippet.label} onClick={() => insertSnippet(snippet.code)}>{snippet.label}</button>)}
       <button type="button" className="latex-tool-button" onClick={() => applyStarter(engineMode === 'tectonic' ? fullStarterId : fastStarterId)}>Reset starter</button>
       {engineMode === 'tectonic' && <button type="button" className={`latex-mode-button${seriousMode ? ' active' : ''}`} onClick={() => setSeriousMode(value => !value)}><BookOpen size={14} /> {seriousMode ? 'Exit serious mode' : 'Serious mode'}</button>}
-      {import.meta.env.DEV && engineMode === 'tectonic' && <button type="button" className="latex-primary-button" onClick={() => void compile()} disabled={compiling}>{compiling ? 'Compiling…' : 'Compile PDF'}</button>}
+      {(engineMode === 'katex' || !seriousMode) && <button type="button" className="latex-primary-button" onClick={() => void compile()} disabled={compiling}>{compiling ? 'Compiling…' : 'Compile with Tectonic'}</button>}
       {import.meta.env.DEV && <button type="button" className="latex-primary-button" onClick={() => void openPdfPreview()}><Eye size={15} /> Preview PDF</button>}
     </div>
   </div>;
@@ -447,7 +453,7 @@ export const LaTeXEditorPage: React.FC<LaTeXEditorPageProps> = ({ currentUser, o
   const inner = <main className={`latex-studio${seriousMode ? ' serious' : ''}`}>
     {toolbar}
     {engineMode === 'tectonic' && seriousMode ? <>
-      <div className="latex-serious-toolbar"><strong><WandSparkles size={15} /> Full LaTeX editor</strong><span>Live browser preview for text and KaTeX supported equations</span><div><button type="button" className="latex-tool-button" onClick={toggleDocumentTheme}>{documentTheme === 'light' ? <Moon size={14} /> : <Sun size={14} />} {documentTheme === 'light' ? 'Dark page' : 'White page'}</button>{import.meta.env.DEV && <button type="button" className="latex-primary-button" onClick={() => void compile()} disabled={compiling}>{compiling ? 'Compiling…' : 'Compile PDF'}</button>}</div></div>
+      <div className="latex-serious-toolbar"><strong><WandSparkles size={15} /> Full LaTeX editor</strong><span>Live browser preview for text and KaTeX supported equations</span><div><button type="button" className="latex-tool-button" onClick={toggleDocumentTheme}>{documentTheme === 'light' ? <Moon size={14} /> : <Sun size={14} />} {documentTheme === 'light' ? 'Dark page' : 'White page'}</button><button type="button" className="latex-primary-button" onClick={() => void compile()} disabled={compiling}>{compiling ? 'Compiling…' : 'Compile with Tectonic'}</button></div></div>
       <div className="latex-serious-workspace">{editor}<section className="latex-compiled-pane"><div className="latex-pane-heading"><span><Eye size={14} /> LIVE LATEX PREVIEW</span><small>{pdfIsCurrent ? 'PDF ready' : 'KaTeX browser render'}</small>{pdfIsCurrent && <button type="button" className="latex-pages-toggle" aria-expanded={showMainPages} onClick={() => setShowMainPages(open => !open)}>{showMainPages ? <><PanelLeftClose size={13} /> Hide pages</> : <><PanelLeftOpen size={13} /> Show pages</>}</button>}</div><div className={`latex-compiled-scroll ${documentTheme}${pdfIsCurrent ? ' pdf-mode' : ''}`}>{pdfIsCurrent ? compiledPage : <div className={`latex-document-paper ${documentTheme}`}><LatexDocument content={content} /></div>}</div></section></div>
     </> : <div className="latex-standard-workspace">{editor}<section className="latex-live-pane"><div className="latex-pane-heading"><span><Eye size={14} /> {engineMode === 'katex' ? 'LIVE KATEX PREVIEW' : 'LIVE LATEX PREVIEW'}</span><small>{engineMode === 'katex' ? 'Instant KaTeX' : pdfIsCurrent ? 'PDF ready' : 'Browser rendered'}</small>{engineMode === 'tectonic' && pdfIsCurrent && <button type="button" className="latex-pages-toggle" aria-expanded={showMainPages} onClick={() => setShowMainPages(open => !open)}>{showMainPages ? <><PanelLeftClose size={13} /> Hide pages</> : <><PanelLeftOpen size={13} /> Show pages</>}</button>}<button type="button" className="latex-theme-toggle" onClick={toggleDocumentTheme}>{documentTheme === 'light' ? <Moon size={14} /> : <Sun size={14} />} {documentTheme === 'light' ? 'Dark page' : 'White page'}</button></div><div className={`latex-live-scroll ${documentTheme}${pdfIsCurrent ? ' pdf-mode' : ''}`}>{pdfIsCurrent ? compiledPage : <div className={`latex-document-paper ${documentTheme}`}><LatexDocument content={content} /></div>}</div></section></div>}
     {compileError && <div className="latex-error-banner" role="alert">{compileError}</div>}

@@ -3,6 +3,7 @@
 All notable changes to the NEXUS core architecture will be documented here.
 
 ## [Unreleased] - 2026-11-16
+- Restored LaTeX Studio PDF compilation in hosted builds using a lazily loaded Tectonic WebAssembly worker; exposed the compile control and routed both KaTeX and full-document sources through it.
 - Animated reply jumps with smooth background flashes: three pulses on first click, then four faster pulses on repeat clicks, capped at the fourth-click speed.
 - Made Messenger message hover backgrounds rectangular and edge-to-edge across each message line.
 - Kept the L-shaped reply connector consistently grey with stronger contrast against the Messenger hover background.
